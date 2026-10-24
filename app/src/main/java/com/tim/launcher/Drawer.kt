@@ -218,7 +218,7 @@ private fun DrawerBody(
         val wide = maxWidth >= 560.dp
         val showTabs = look.tabs != TabMode.NONE
         Row(Modifier.fillMaxSize()) {
-            if (showTabs && !look.railOnRight) TabRail(tabs, tab.id, wide, ink, look.tabs == TabMode.CUSTOM) { tabId = it; query = "" }
+            if (showTabs && !look.railOnRight) TabRail(tabs, tab.id, wide, ink, look.tabs == TabMode.CUSTOM, onClose) { tabId = it; query = "" }
             Column(Modifier.weight(1f).fillMaxHeight()) {
                 if (full) {
                     // Drag the handle down (or tap it) to close
@@ -251,7 +251,7 @@ private fun DrawerBody(
                     }
                 }
             }
-            if (showTabs && look.railOnRight) TabRail(tabs, tab.id, wide, ink, look.tabs == TabMode.CUSTOM) { tabId = it; query = "" }
+            if (showTabs && look.railOnRight) TabRail(tabs, tab.id, wide, ink, look.tabs == TabMode.CUSTOM, onClose) { tabId = it; query = "" }
         }
     }
 }
@@ -266,7 +266,15 @@ private fun tabIcon(key: String): ImageVector =
  * a heading instead). With your own tabs there's a + at the end to make a new one.
  */
 @Composable
-private fun TabRail(tabs: List<TabView>, selected: String, wide: Boolean, ink: Color, canAdd: Boolean, onSelect: (String) -> Unit) {
+private fun TabRail(
+    tabs: List<TabView>,
+    selected: String,
+    wide: Boolean,
+    ink: Color,
+    canAdd: Boolean,
+    onClose: () -> Unit,
+    onSelect: (String) -> Unit,
+) {
     val context = LocalContext.current
     Column(
         Modifier
@@ -308,7 +316,10 @@ private fun TabRail(tabs: List<TabView>, selected: String, wide: Boolean, ink: C
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .clickable { SettingsActivity.open(context, route = Route.DRAWER) }
+                    .clickable {
+                        onClose()
+                        SettingsActivity.open(context, route = Route.DRAWER)
+                    }
                     .padding(horizontal = if (wide) 12.dp else 0.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = if (wide) Arrangement.Start else Arrangement.Center,

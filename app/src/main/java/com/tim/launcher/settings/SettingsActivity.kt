@@ -104,7 +104,9 @@ class SettingsActivity : ComponentActivity() {
                 Intent(context, SettingsActivity::class.java)
                     .putExtra(EXTRA_WIZARD, wizard)
                     .putExtra(EXTRA_ROUTE, route?.name)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    // Asking for a particular screen: start fresh rather than bringing back an older settings window
+                    .apply { if (route != null) addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK) },
             )
         }
     }
