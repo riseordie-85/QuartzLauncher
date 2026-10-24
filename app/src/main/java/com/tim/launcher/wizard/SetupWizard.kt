@@ -55,6 +55,7 @@ import com.tim.launcher.settings.DockLength
 import com.tim.launcher.settings.DockPosition
 import com.tim.launcher.settings.DockEdge
 import com.tim.launcher.settings.DockOutline
+import com.tim.launcher.settings.DockColorControls
 import com.tim.launcher.settings.DockStyleControls
 import com.tim.launcher.settings.DrawerOpen
 import com.tim.launcher.settings.DrawerScroll
@@ -601,9 +602,14 @@ private fun ColumnScope.StepContent(
             Spacer(Modifier.height(12.dp))
             DockSample(store, gap)
             GlassPanel {
-                SwatchRow(store[S.panelColor], PanelColors) { store.set(S.panelColor, value = it) }
-                RowDivider()
-                GlassSliders(store)
+                // Fill, gradient and pattern moved out of the dock style controls; they only matter with a background
+                if (store[S.dockBackground]) {
+                    DockColorControls(store)
+                } else {
+                    SwatchRow(store[S.panelColor], PanelColors) { store.set(S.panelColor, value = it) }
+                    RowDivider()
+                    GlassSliders(store)
+                }
             }
         }
 

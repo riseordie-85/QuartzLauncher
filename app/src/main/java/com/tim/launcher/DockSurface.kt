@@ -211,9 +211,9 @@ class DockOutlineShape(
     }
 
     override fun equals(other: Any?) = other is DockOutlineShape && other.outline == outline &&
-        other.radiusDp == radiusDp && other.edge == edge && other.flush == flush
+        other.radiusDp == radiusDp && other.edge == edge && other.flush == flush && other.slantDp == slantDp
 
-    override fun hashCode() = ((outline.hashCode() * 31 + radiusDp.hashCode()) * 31 + edge.hashCode()) * 31 + flush.hashCode()
+    override fun hashCode() = (((outline.hashCode() * 31 + radiusDp.hashCode()) * 31 + edge.hashCode()) * 31 + flush.hashCode()) * 31 + slantDp.hashCode()
 }
 
 /**

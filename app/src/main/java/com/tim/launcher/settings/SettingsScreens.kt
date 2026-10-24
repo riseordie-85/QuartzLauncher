@@ -474,6 +474,7 @@ private fun ColumnScope.DockStyleSettings(ctx: SettingsContext) {
         GlassPanel {
             DockColorControls(store)
             if (!quartzWallpaper) {
+                RowDivider()
                 SettingRow("Blur needs the Quartz wallpaper", "Glass blurs the wallpaper Quartz draws", onClick = { ctx.go(Route.WALLPAPER) })
             }
         }
