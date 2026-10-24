@@ -38,6 +38,8 @@ import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -171,8 +173,12 @@ private fun DockBar(slots: List<SlotRef>, vertical: Boolean, vm: HomeViewModel, 
     val look = LocalHomeLook.current
     val full = look.dockLength == DockLength.FULL
     val button = look.button
-    val filled = slots.filter { vm.keyAt(it) != null }
-    val dropSpot = if (drag.active) slots.firstOrNull { vm.keyAt(it) == null } else null
+    SideEffect { drag.dockVertical = vertical }
+    // While dragging, the icon being moved keeps its spot (so its drag carries on), and there's an empty spot at
+    // the end to drop into unless the icons have already made room
+    val filled = slots.filter { drag.shown(vm, it) != null || it == drag.source }
+    val makingRoom = drag.plan?.let { p -> slots.any { it.area == p.area } } == true
+    val dropSpot = if (drag.active && !makingRoom) slots.firstOrNull { drag.shown(vm, it) == null && it != drag.source } else null
     val refs = if (dropSpot != null) filled + dropSpot else filled
     val count = refs.size + if (button != null) 1 else 0
     if (count == 0) return
@@ -201,7 +207,9 @@ private fun DockBar(slots: List<SlotRef>, vertical: Boolean, vm: HomeViewModel, 
             ) {
                 if (button == ButtonEnd.START) Box(Modifier.width(cellW), contentAlignment = Alignment.Center) { DrawerButton() }
                 refs.forEach { ref ->
-                    Cell(ref, vm.keyAt(ref), iconSize, look.labelsDock, vm, drag, Modifier.width(cellW).height(cellH))
+                    key(ref) {
+                        Cell(ref, drag.shown(vm, ref), iconSize, look.labelsDock, vm, drag, Modifier.width(cellW).height(cellH))
+                    }
                 }
                 if (button == ButtonEnd.END) Box(Modifier.width(cellW), contentAlignment = Alignment.Center) { DrawerButton() }
             }
@@ -236,7 +244,9 @@ private fun DockBar(slots: List<SlotRef>, vertical: Boolean, vm: HomeViewModel, 
             ) {
                 if (button == ButtonEnd.START) Box(Modifier.height(cellH), contentAlignment = Alignment.Center) { DrawerButton() }
                 refs.forEach { ref ->
-                    Cell(ref, vm.keyAt(ref), iconSize, false, vm, drag, Modifier.width(cellW).height(cellH))
+                    key(ref) {
+                        Cell(ref, drag.shown(vm, ref), iconSize, false, vm, drag, Modifier.width(cellW).height(cellH))
+                    }
                 }
                 if (button == ButtonEnd.END) Box(Modifier.height(cellH), contentAlignment = Alignment.Center) { DrawerButton() }
             }
@@ -273,6 +283,7 @@ private fun DrawerButton() {
  */
 @Composable
 private fun SinglePages(screen: ScreenState, vm: HomeViewModel, drag: DragController) {
+    SideEffect { drag.reflow = false }
     val landscapeScreen = screen.widthDp > screen.heightDp
     val landscapeGrid = vm.cols > vm.rows
     val flip = vm.cols != vm.rows && landscapeScreen != landscapeGrid
@@ -286,7 +297,7 @@ private fun SinglePages(screen: ScreenState, vm: HomeViewModel, drag: DragContro
         drag = drag,
         modifier = Modifier.fillMaxSize(),
     ) { page ->
-        GridArea(Area.COVER, page * vm.perPage, vm.cover, cols, rows, vm, drag, Modifier.fillMaxSize())
+        GridArea(Area.COVER, page * vm.perPage, drag.shownList(vm, Area.COVER), cols, rows, vm, drag, Modifier.fillMaxSize())
     }
 }
 
@@ -296,6 +307,7 @@ private fun SinglePages(screen: ScreenState, vm: HomeViewModel, drag: DragContro
  */
 @Composable
 private fun StripPages(screen: ScreenState, vm: HomeViewModel, drag: DragController, halfWidth: Dp) {
+    SideEffect { drag.reflow = false }
     val lastFirst = maxOf(0, vm.pages - 2)
     HomePager(
         count = vm.pages,
@@ -312,7 +324,7 @@ private fun StripPages(screen: ScreenState, vm: HomeViewModel, drag: DragControl
     ) { page ->
         Column(Modifier.fillMaxSize()) {
             Caption(if (page == vm.currentPage) "Page ${page + 1} · cover" else "Page ${page + 1}")
-            GridArea(Area.COVER, page * vm.perPage, vm.cover, vm.cols, vm.rows, vm, drag, Modifier.weight(1f).fillMaxWidth())
+            GridArea(Area.COVER, page * vm.perPage, drag.shownList(vm, Area.COVER), vm.cols, vm.rows, vm, drag, Modifier.weight(1f).fillMaxWidth())
         }
     }
 }
@@ -323,6 +335,7 @@ private fun StripPages(screen: ScreenState, vm: HomeViewModel, drag: DragControl
  */
 @Composable
 private fun ReflowPages(screen: ScreenState, vm: HomeViewModel, drag: DragController, gridCols: Int? = null, gridRows: Int? = null) {
+    SideEffect { drag.reflow = true }
     HomePager(
         count = vm.pages,
         page = vm.currentPage,
@@ -333,7 +346,8 @@ private fun ReflowPages(screen: ScreenState, vm: HomeViewModel, drag: DragContro
     ) { page ->
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val base = page * vm.perPage
-            val refs = (0 until vm.perPage).map { SlotRef(Area.COVER, base + it) }.filter { vm.keyAt(it) != null }
+            // Reflowed pages don't slide icons over while dragging (they'd reshuffle under your finger); the drop does
+            val refs = (0 until vm.perPage).map { SlotRef(Area.COVER, base + it) }.filter { vm.keyAt(it) != null || it == drag.source }
             val cols = gridCols ?: maxOf(vm.cols, (maxWidth / REFLOW_CELL).toInt())
             val rows = gridRows ?: maxOf((vm.perPage + cols - 1) / cols, maxOf(1, (maxHeight / REFLOW_CELL).toInt()))
             RefGrid(refs, cols.coerceAtLeast(1), rows.coerceAtLeast(1), vm, drag, Modifier.fillMaxSize())

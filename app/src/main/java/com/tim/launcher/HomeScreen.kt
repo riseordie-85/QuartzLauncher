@@ -43,6 +43,11 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -132,9 +137,13 @@ import androidx.compose.material3.TextButton
 import com.tim.launcher.settings.FolderIcon
 
 
+/** Where the dragged icon is over another one: its middle (to make a folder), or the side before or after it. */
+enum class DropZone { CENTER, BEFORE, AFTER }
+
 /**
  * Tracks the app or folder being dragged (from a home slot, the drawer, or out of a folder) and where every slot
- * sits on screen. Holding it over another icon for a moment arms [folderTarget]: dropping then makes a folder.
+ * sits on screen. Holding it over the middle of another icon for a moment arms [folderTarget]: dropping then makes
+ * a folder. Pausing anywhere else shows [plan]: the icons slide over to make room, and dropping keeps them there.
  */
 class DragController {
     var source by mutableStateOf<SlotRef?>(null)
@@ -155,6 +164,68 @@ class DragController {
 
     /** The icon held over long enough that dropping makes (or adds to) a folder. */
     var folderTarget by mutableStateOf<SlotRef?>(null)
+
+    /** The icons slid over to make room where the dragged icon would land (shown live while dragging). */
+    var plan by mutableStateOf<DropPlan?>(null)
+
+    /** True while the pages are shown reflowed (unfolded upright). Icons don't slide there; the drop still works. */
+    var reflow = false
+
+    /** True when the dock runs down the side of the screen, so "before" and "after" are above and below. */
+    var dockVertical = false
+
+    /** The slot each icon was last drawn in, so an icon that moves to a new slot can glide over from there. */
+    val lastSlot = HashMap<String, SlotRef>()
+
+    /** When the last drag ended; icons still glide for a moment after (dropping, or springing back). */
+    var endedAt = 0L
+        private set
+
+    /** What a slot shows right now: the slid-over contents while a plan is showing, otherwise the saved layout. */
+    fun shown(vm: HomeViewModel, ref: SlotRef): String? {
+        val p = plan
+        return if (p != null && !reflow && p.area == ref.area && ref.index in p.items.indices) p.items[ref.index] else vm.keyAt(ref)
+    }
+
+    /** The whole page or dock list as it shows right now. */
+    fun shownList(vm: HomeViewModel, area: Area): List<String?> {
+        val p = plan
+        return if (p != null && !reflow && p.area == area) p.items else vm.list(area)
+    }
+
+    /** The slot where the dragged icon would land; it's drawn empty. */
+    fun isGap(ref: SlotRef): Boolean = plan?.let { !reflow && it.area == ref.area && it.at == ref.index } == true
+
+    fun zone(ref: SlotRef): DropZone {
+        val b = bounds[ref] ?: return DropZone.CENTER
+        if (b.width <= 0f || b.height <= 0f) return DropZone.CENTER
+        val fx = (pointer.x - b.left) / b.width
+        val fy = (pointer.y - b.top) / b.height
+        val dock = ref.area == Area.DOCK_COVER || ref.area == Area.DOCK_EXTRA
+        val along = if (dock && dockVertical) fy else fx
+        val across = if (dock && dockVertical) fx else fy
+        return when {
+            along in 0.28f..0.72f && across in 0.15f..0.8f -> DropZone.CENTER
+            along < 0.5f -> DropZone.BEFORE
+            else -> DropZone.AFTER
+        }
+    }
+
+    /** What dropping on [ref] would do. Null when nothing should happen (an app back onto its own folder). */
+    fun planFor(vm: HomeViewModel, ref: SlotRef, zone: DropZone): DropPlan? {
+        val carried = key ?: return null
+        val folder = fromFolder
+        if (folder != null && shown(vm, ref) == FOLDER_PREFIX + folder) return null
+        if (ref.area != Area.DOCK_COVER && ref.area != Area.DOCK_EXTRA) return vm.planGrid(carried, source, ref)
+        // The dock is packed, so count the icons drawn before the drop point (not the gap or the icon being moved)
+        val drawn = bounds.keys.filter { it.area == ref.area }.sortedBy { it.index }
+        val gap = plan?.takeIf { !reflow && it.area == ref.area }?.at
+        val skip: (SlotRef) -> Boolean = if (gap != null) { r -> r.index == gap } else { r -> r == source }
+        val idx = drawn.indexOf(ref).coerceAtLeast(0)
+        val dropPoint = idx + if (zone == DropZone.AFTER) 1 else 0
+        val position = drawn.take(dropPoint).count { !skip(it) && shown(vm, it) != null }
+        return vm.planDock(carried, source, ref.area, position)
+    }
 
     val bounds = HashMap<SlotRef, Rect>()
 
@@ -200,6 +271,7 @@ class DragController {
         val to = hover
         val folder = fromFolder
         val armed = folderTarget
+        val showing = plan?.takeIf { !reflow }
         when {
             carried == null -> Unit
             overRemove -> when {
@@ -207,11 +279,12 @@ class DragController {
                 folder != null -> vm.takeOutOfFolder(folder, carried)
                 else -> Unit
             }
-            to == null -> Unit
-            armed != null && armed == to -> vm.makeFolder(to, carried, from, folder)
-            fromDrawer -> vm.place(carried, to)
-            folder != null -> vm.placeFromFolder(folder, carried, to)
-            from != null && from != to -> vm.move(from, to)
+            armed != null && armed == to ->
+                if (showing != null) vm.folderAfterPlan(showing, to, carried, from, folder)
+                else vm.makeFolder(to, carried, from, folder)
+            to != null -> planFor(vm, to, zone(to))?.let { vm.dropInto(it, carried, from, folder) }
+            // Let go just off the icons (between cells, past the dock's end): keep what's showing
+            showing != null -> vm.dropInto(showing, carried, from, folder)
         }
         clear()
     }
@@ -219,6 +292,8 @@ class DragController {
     fun cancel() = clear()
 
     private fun clear() {
+        if (key != null) endedAt = SystemClock.uptimeMillis()
+        plan = null
         source = null
         key = null
         fromDrawer = false
@@ -372,19 +447,30 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         overviewOpen = false
     }
 
-    // Hold a dragged icon over another for a moment to make a folder
+    // Hold a dragged icon over the middle of another for a moment to make a folder. Pause anywhere else and the
+    // icons slide over to make room for it.
     val haptics = LocalHapticFeedback.current
-    val hoverRef by remember { derivedStateOf { drag.hover } }
-    LaunchedEffect(hoverRef, drag.key) {
+    val hoverAt by remember { derivedStateOf { drag.hover?.let { it to drag.zone(it) } } }
+    val overRemove by remember { derivedStateOf { drag.overRemove } }
+    LaunchedEffect(hoverAt, drag.key, overRemove) {
         drag.folderTarget = null
-        val target = hoverRef ?: return@LaunchedEffect
         val carried = drag.key ?: return@LaunchedEffect
-        val existing = vm.keyAt(target) ?: return@LaunchedEffect
-        if (isFolderKey(carried) || target == drag.source || existing == carried) return@LaunchedEffect
-        if (vm.folderFor(existing)?.id == drag.fromFolder && drag.fromFolder != null) return@LaunchedEffect
-        delay(550)
-        drag.folderTarget = target
-        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        if (overRemove) {
+            drag.plan = null
+            return@LaunchedEffect
+        }
+        val (target, zone) = hoverAt ?: return@LaunchedEffect
+        val existing = drag.shown(vm, target)
+        val canFolder = existing != null && existing != carried && !isFolderKey(carried) && target != drag.source &&
+            !drag.isGap(target) && !(drag.fromFolder != null && vm.folderFor(existing)?.id == drag.fromFolder)
+        if (zone == DropZone.CENTER && canFolder) {
+            delay(550)
+            drag.folderTarget = target
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        } else if (!drag.reflow) {
+            delay(180)
+            drag.plan = drag.planFor(vm, target, zone)
+        }
     }
 
     // Log every posture change and time how long the new layout took to reach the screen.
@@ -723,12 +809,35 @@ internal fun Cell(
         onDispose { drag.bounds.remove(ref) }
     }
 
-    val gestures = if (key == null || (app == null && folder == null)) Modifier else Modifier
-        .pointerInput(ref, key) {
+    // Slide in from wherever this icon was last drawn, when the icons make room for a drag (or spring back after)
+    val glide = remember(ref) { Animatable(Offset.Zero, Offset.VectorConverter) }
+    val fromSlot = remember(ref, key) { key?.let { drag.lastSlot[it] } }
+    LaunchedEffect(ref, key) {
+        val here = drag.bounds[ref]?.topLeft
+        val from = fromSlot?.takeIf { it != ref }?.let { drag.bounds[it]?.topLeft }
+        val recent = drag.active || SystemClock.uptimeMillis() - drag.endedAt < 600
+        if (from != null && here != null && from != here && recent) {
+            glide.snapTo(from - here)
+            glide.animateTo(Offset.Zero, spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow))
+        } else {
+            glide.snapTo(Offset.Zero)
+        }
+    }
+    SideEffect {
+        if (key != null) drag.lastSlot[key] = ref
+    }
+
+    // The icon being dragged keeps its gesture even when the icons sliding over put something else in its slot
+    val held = drag.source == ref && drag.key != null
+    val gestureKey = if (held) drag.key else key
+    val gestureApp = gestureKey?.let { vm.apps[it] }
+    val gestureFolder = vm.folderFor(gestureKey)
+    val gestures = if (gestureKey == null || (gestureApp == null && gestureFolder == null)) Modifier else Modifier
+        .pointerInput(ref, gestureKey) {
             detectTapGestures(
                 onTap = {
-                    if (folder != null) look.openFolder(folder.id, ref)
-                    else if (app != null) vm.launch(app, drag.bounds[ref]?.toAndroidRect())
+                    if (gestureFolder != null) look.openFolder(gestureFolder.id, ref)
+                    else if (gestureApp != null) vm.launch(gestureApp, drag.bounds[ref]?.toAndroidRect())
                 },
                 onLongPress = { }, // long press belongs to dragging
             )
@@ -740,7 +849,7 @@ internal fun Cell(
                     val origin = drag.bounds[ref]?.topLeft ?: Offset.Zero
                     // bounds are measured outside the 2.dp padding; `local` is inside it
                     val pad = 2.dp.toPx()
-                    drag.start(ref, key, origin + Offset(pad, pad) + local)
+                    drag.start(ref, gestureKey, origin + Offset(pad, pad) + local)
                 },
                 onDrag = { change, amount ->
                     change.consume()
@@ -751,7 +860,7 @@ internal fun Cell(
             )
         }
 
-    val hovered by remember(ref) { derivedStateOf { drag.hover == ref && drag.source != ref } }
+    val hovered by remember(ref) { derivedStateOf { drag.hover == ref && drag.source != ref && drag.plan == null } }
     val folderArmed = drag.folderTarget == ref
     Box(
         modifier
@@ -775,11 +884,13 @@ internal fun Cell(
                 size = iconSize,
                 showLabel = showLabel,
                 modifier = Modifier
-                    .alpha(if (drag.source == ref) 0f else 1f)
+                    .alpha(if (drag.active && key == drag.key && (drag.source == ref || drag.isGap(ref))) 0f else 1f)
                     .graphicsLayer {
                         val s = if (folderArmed) 1.12f else 1f
                         scaleX = s
                         scaleY = s
+                        translationX = glide.value.x
+                        translationY = glide.value.y
                     },
             )
         }

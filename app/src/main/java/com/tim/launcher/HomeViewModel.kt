@@ -1,5 +1,6 @@
 package com.tim.launcher
 
+import kotlin.math.abs
 import android.app.Application
 import android.content.ComponentName
 import android.content.pm.ApplicationInfo
@@ -52,6 +53,12 @@ fun isFolderKey(key: String?) = key != null && key.startsWith(FOLDER_PREFIX)
 enum class Area { COVER, EXTRA, DOCK_COVER, DOCK_EXTRA }
 
 data class SlotRef(val area: Area, val index: Int)
+
+/**
+ * What dropping an icon would do to one page or dock: its new contents with the icon at [at], the icons beside it
+ * slid over to make room, and [overflow], an icon pushed off because there was no room left.
+ */
+data class DropPlan(val area: Area, val items: List<String?>, val at: Int, val overflow: String?)
 
 class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -454,6 +461,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun save() {
         fun join(list: List<String?>) = list.joinToString("|") { it ?: "" }
+        // Docks show their icons packed together, so keep them stored that way too: no gaps, same order
+        listOf(dockCover, dockExtra).forEach { dock ->
+            val packed = dock.filterNotNull()
+            dock.indices.forEach { i -> val k = packed.getOrNull(i); if (dock[i] != k) dock[i] = k }
+        }
         prefs.edit()
             .putBoolean(Prefs.LAYOUT_READY, true)
             .putString(Prefs.L_COVER, join(cover))
@@ -508,6 +520,91 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+
+    /**
+     * Dropping [key] on a home page slot. If the slot is taken, the icons between it and the nearest empty slot on
+     * that page slide over one place to make room. On a full page everything from the slot on slides along and the
+     * last icon moves to another page.
+     */
+    fun planGrid(key: String, source: SlotRef?, target: SlotRef): DropPlan? {
+        val items = list(target.area).toMutableList()
+        val t = target.index
+        if (t !in items.indices) return null
+        if (source != null && source.area == target.area && items.getOrNull(source.index) == key) items[source.index] = null
+        var overflow: String? = null
+        if (items[t] != null) {
+            val range = screenRange(target).second.filter { it in items.indices }
+            val empty = range.filter { items[it] == null }.minWithOrNull(compareBy({ abs(it - t) }, { if (it > t) 0 else 1 }))
+            when {
+                empty == null -> {
+                    val last = range.last()
+                    overflow = items[last]
+                    for (i in last downTo t + 1) items[i] = items[i - 1]
+                }
+                empty > t -> for (i in empty downTo t + 1) items[i] = items[i - 1]
+                else -> for (i in empty until t) items[i] = items[i + 1]
+            }
+        }
+        items[t] = key
+        return DropPlan(target.area, items, t, overflow)
+    }
+
+    /**
+     * Dropping [key] into a dock so it lands at [position] in the dock's order (0 = first). The dock's icons stay
+     * packed together; if it's full, its last icon moves off to a page.
+     */
+    fun planDock(key: String, source: SlotRef?, area: Area, position: Int): DropPlan? {
+        val slots = list(area)
+        if (slots.isEmpty()) return null
+        val items = slots.mapIndexedNotNull { i, k -> k.takeUnless { source != null && source.area == area && i == source.index } }
+            .toMutableList<String?>()
+        var at = position.coerceIn(0, items.size)
+        items.add(at, key)
+        var overflow: String? = null
+        if (items.size > slots.size) {
+            // Full: the last icon (or the one before it, if the new icon went last) moves off
+            val out = if (at == items.lastIndex) at - 1 else items.lastIndex
+            if (out < 0) return null
+            overflow = items.removeAt(out)
+            if (out < at) at--
+        }
+        return DropPlan(area, items + List(slots.size - items.size) { null }, at, overflow)
+    }
+
+    /** Writes a plan's contents into its page or dock. False if the layout changed size since it was planned. */
+    private fun writePlan(plan: DropPlan, gap: String?): Boolean {
+        val slots = list(plan.area)
+        if (plan.items.size != slots.size) return false
+        plan.items.forEachIndexed { i, k -> if (slots[i] != k) slots[i] = k }
+        slots[plan.at] = gap
+        return true
+    }
+
+    /** Drops [key] as planned: it leaves where it came from, and an icon pushed off the page finds a new spot. */
+    fun dropInto(plan: DropPlan, key: String, source: SlotRef?, fromFolder: String?) {
+        if (!writePlan(plan, gap = null)) return
+        list(plan.area)[plan.at] = key
+        if (source != null && source.area != plan.area && list(source.area).getOrNull(source.index) == key) {
+            list(source.area)[source.index] = null
+        }
+        if (fromFolder != null) takeOutOfFolder(fromFolder, key, save = false)
+        plan.overflow?.let { pushed ->
+            if (!putInFirstEmpty(pushed, screenRange(SlotRef(plan.area, plan.at)))) {
+                Diag.log("No empty slot for ${apps[pushed]?.label ?: pushed}; it was removed from home")
+            }
+        }
+        save()
+        if (fromFolder != null) saveFolders()
+    }
+
+    /**
+     * Making a folder while the icons are slid over: keep them where they are now (the icon pushed off, if any,
+     * goes back into the gap) and drop [key] onto [target].
+     */
+    fun folderAfterPlan(plan: DropPlan, target: SlotRef, key: String, source: SlotRef?, fromFolder: String?) {
+        if (!writePlan(plan, gap = plan.overflow)) return
+        makeFolder(target, key, source?.takeIf { it.area != plan.area }, fromFolder)
+    }
 
     fun move(from: SlotRef, to: SlotRef) {
         val a = list(from.area)
