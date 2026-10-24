@@ -464,7 +464,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         }
         val (target, zone) = hoverAt ?: return@LaunchedEffect
         val existing = drag.shown(vm, target)
-        val canFolder = existing != null && existing != carried && !isFolderKey(carried) && target != drag.source &&
+        val canFolder = existing != null && existing != carried && !isFolderKey(carried) &&
             !drag.isGap(target) && !(drag.fromFolder != null && vm.folderFor(existing)?.id == drag.fromFolder)
         if (zone == DropZone.CENTER && canFolder) {
             delay(550)
