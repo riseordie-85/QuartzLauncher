@@ -552,6 +552,7 @@ private fun DrawerItem(
 ) {
     val haptics = LocalHapticFeedback.current
     val itemBounds = remember { arrayOf(Rect.Zero) }
+    var lifted by remember { mutableStateOf(false) }
     AppIcon(
         app = app,
         size = 52.dp,
@@ -569,25 +570,51 @@ private fun DrawerItem(
                 )
             }
             .pointerInput(app.key) {
+                // Long-press lifts the app; it only leaves the drawer once the finger actually moves.
+                // A long-press without moving (e.g. touching to stop a fast scroll) does nothing.
+                val carryAfter = 24.dp.toPx()
+                var startAt = Offset.Zero
+                var travel = Offset.Zero
+                var carrying = false
                 detectDragGesturesAfterLongPress(
                     onDragStart = { local ->
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onPickUp()
-                        drag.startFromDrawer(app, itemBounds[0].topLeft + local)
+                        lifted = true
+                        startAt = itemBounds[0].topLeft + local
+                        travel = Offset.Zero
+                        carrying = false
                     },
                     onDrag = { change, amount ->
                         change.consume()
-                        drag.moveBy(amount)
+                        travel += amount
+                        if (carrying) {
+                            drag.moveBy(amount)
+                        } else if (travel.getDistance() > carryAfter) {
+                            carrying = true
+                            onPickUp()
+                            drag.startFromDrawer(app, startAt + travel)
+                        }
                     },
                     onDragEnd = {
-                        drag.drop(vm)
-                        onClose()
+                        lifted = false
+                        if (carrying) {
+                            drag.drop(vm)
+                            onClose()
+                        }
                     },
                     onDragCancel = {
-                        drag.cancel()
-                        onClose()
+                        lifted = false
+                        if (carrying) {
+                            drag.cancel()
+                            onClose()
+                        }
                     },
                 )
+            }
+            .graphicsLayer {
+                val scale = if (lifted) 1.08f else 1f
+                scaleX = scale
+                scaleY = scale
             }
             .padding(vertical = 10.dp),
     )

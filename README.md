@@ -16,7 +16,7 @@ A bare-bones test launcher. It isn't pretty on purpose: its only job is to prove
 
 Open the folder in Android Studio, let Gradle sync, and run on a device. Same Gradle, Kotlin, and Compose versions as Quartz Gallery.
 
-For speed testing (scrolling, animations), use the **release** variant: Build > Select Build Variant > release. Debug builds of Compose are noticeably slower. Both variants are signed with the debug key, so they install over each other.
+For speed testing (scrolling, animations), use the **release** variant: View > Tool Windows > Build Variants, then set **:app** to **release** (sync Gradle first if only debug shows). Debug builds of Compose are noticeably slower. Both variants are signed with the debug key, so they install over each other.
 
 ## Test checklist
 
