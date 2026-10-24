@@ -587,12 +587,14 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         if (source != null && source.area != plan.area && list(source.area).getOrNull(source.index) == key) {
             list(source.area)[source.index] = null
         }
-        if (fromFolder != null) takeOutOfFolder(fromFolder, key, save = false)
+        // The pushed-off icon finds its spot first: it may be the folder the app came out of, which has to be on
+        // the screen for a folder left with one app to turn back into that app
         plan.overflow?.let { pushed ->
             if (!putInFirstEmpty(pushed, screenRange(SlotRef(plan.area, plan.at)))) {
                 Diag.log("No empty slot for ${apps[pushed]?.label ?: pushed}; it was removed from home")
             }
         }
+        if (fromFolder != null) takeOutOfFolder(fromFolder, key, save = false)
         save()
         if (fromFolder != null) saveFolders()
     }
@@ -602,6 +604,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
      * goes back into the gap) and drop [key] onto [target].
      */
     fun folderAfterPlan(plan: DropPlan, target: SlotRef, key: String, source: SlotRef?, fromFolder: String?) {
+        // The icons made room on another page or dock than the folder: they go back, nothing lands in that gap
+        if (screenRange(target) != screenRange(SlotRef(plan.area, plan.at))) {
+            makeFolder(target, key, source, fromFolder)
+            return
+        }
         if (!writePlan(plan, gap = plan.overflow)) return
         makeFolder(target, key, source?.takeIf { it.area != plan.area }, fromFolder)
     }

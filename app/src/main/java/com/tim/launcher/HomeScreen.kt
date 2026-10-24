@@ -220,7 +220,8 @@ class DragController {
         // The dock is packed, so count the icons drawn before the drop point (not the gap or the icon being moved)
         val drawn = bounds.keys.filter { it.area == ref.area }.sortedBy { it.index }
         val gap = plan?.takeIf { !reflow && it.area == ref.area }?.at
-        val skip: (SlotRef) -> Boolean = if (gap != null) { r -> r.index == gap } else { r -> r == source }
+        val from = source
+        val skip: (SlotRef) -> Boolean = { r -> if (gap != null) r.index == gap else r == from }
         val idx = drawn.indexOf(ref).coerceAtLeast(0)
         val dropPoint = idx + if (zone == DropZone.AFTER) 1 else 0
         val position = drawn.take(dropPoint).count { !skip(it) && shown(vm, it) != null }
@@ -272,6 +273,8 @@ class DragController {
         val folder = fromFolder
         val armed = folderTarget
         val showing = plan?.takeIf { !reflow }
+        // The dropped icon appears where you let go, so it shouldn't glide over from the slot it was picked up from
+        if (carried != null) lastSlot.remove(carried)
         when {
             carried == null -> Unit
             overRemove -> when {
@@ -279,7 +282,7 @@ class DragController {
                 folder != null -> vm.takeOutOfFolder(folder, carried)
                 else -> Unit
             }
-            armed != null && armed == to ->
+            armed != null && to != null && armed == to ->
                 if (showing != null) vm.folderAfterPlan(showing, to, carried, from, folder)
                 else vm.makeFolder(to, carried, from, folder)
             to != null -> planFor(vm, to, zone(to))?.let { vm.dropInto(it, carried, from, folder) }
@@ -815,7 +818,8 @@ internal fun Cell(
     LaunchedEffect(ref, key) {
         val here = drag.bounds[ref]?.topLeft
         val from = fromSlot?.takeIf { it != ref }?.let { drag.bounds[it]?.topLeft }
-        val recent = drag.active || SystemClock.uptimeMillis() - drag.endedAt < 600
+        // Not the icon being carried: it's hidden in its gap and shows up there when you let go
+        val recent = key != drag.key && (drag.active || SystemClock.uptimeMillis() - drag.endedAt < 600)
         if (from != null && here != null && from != here && recent) {
             glide.snapTo(from - here)
             glide.animateTo(Offset.Zero, spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow))
@@ -842,7 +846,7 @@ internal fun Cell(
                 onLongPress = { }, // long press belongs to dragging
             )
         }
-        .pointerInput(ref, key) {
+        .pointerInput(ref, gestureKey) {
             detectDragGesturesAfterLongPress(
                 onDragStart = { local ->
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
