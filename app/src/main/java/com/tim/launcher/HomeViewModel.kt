@@ -214,7 +214,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         Diag.log("Cover layout lands on the ${if (left) "left" else "right"} half")
     }
 
-    fun setWallpaperMode(mode: String) {
+    fun chooseWallpaperMode(mode: String) {
         wallpaperMode = mode
         prefs.edit().putString(Prefs.WP_MODE, mode).apply()
         Diag.log("Wallpaper mode: $mode")
