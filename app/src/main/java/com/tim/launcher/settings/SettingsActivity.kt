@@ -45,7 +45,7 @@ class SettingsActivity : ComponentActivity() {
         }
 
         val start = if (intent.getBooleanExtra(EXTRA_WIZARD, false)) Route.WIZARD else Route.MAIN
-        val store = SettingsStore.get(this)
+        val store = SettingsStore.get(this).also { it.migrateDockShape() }
         val type = detectDeviceType(this)
 
         setContent {

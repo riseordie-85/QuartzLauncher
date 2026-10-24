@@ -37,7 +37,7 @@ import com.tim.launcher.settings.DeviceType
 import com.tim.launcher.settings.DockAlign
 import com.tim.launcher.settings.DockLength
 import com.tim.launcher.settings.DockPosition
-import com.tim.launcher.settings.DockShape
+import com.tim.launcher.settings.dockPositionOn
 import com.tim.launcher.settings.DrawerOpen
 import com.tim.launcher.settings.IconShape
 import com.tim.launcher.settings.S
@@ -66,7 +66,8 @@ data class PreviewLook(
     val screens: List<ScreenLook>,
     val panelColor: Int,
     val opacity: Float,
-    val shape: DockShape,
+    val background: Boolean,
+    val floating: Boolean,
     val radius: Int,
     val iconShape: IconShape,
 )
@@ -80,7 +81,7 @@ fun previewLook(store: SettingsStore, type: DeviceType): PreviewLook {
         else -> store[S.drawerButtonEnd]
     }
     fun look(scope: Scope, label: String, aspect: Float): ScreenLook {
-        val dock = store[S.dockPosition, scope]
+        val dock = store.dockPositionOn(scope)
         var cols = store[S.gridCols, scope]
         var rows = store[S.gridRows, scope]
         var dockIcons = store[S.dockIcons, scope]
@@ -116,7 +117,8 @@ fun previewLook(store: SettingsStore, type: DeviceType): PreviewLook {
         screens = screens,
         panelColor = store[S.panelColor],
         opacity = store[S.panelOpacity],
-        shape = store[S.dockShape],
+        background = store[S.dockBackground],
+        floating = store[S.dockFloating],
         radius = store[S.dockRadius],
         iconShape = store[S.iconShape],
     )
@@ -232,24 +234,26 @@ private fun DrawScope.drawScreen(screen: ScreenLook, look: PreviewLook) {
     val fitLength = (total.coerceAtMost(maxIcons) * slot + t * 0.3f)
     val full = screen.dockLength == DockLength.FULL
 
+    // A flush dock touches the screen edge (and spans it, when full)
+    val e = if (look.floating || !look.background) m else 0f
     val rect = if (horizontal) {
-        val len = if (full) w - 2 * m else fitLength.coerceAtMost(w - 2 * m)
+        val len = if (full) w - 2 * e else fitLength.coerceAtMost(w - 2 * m)
         val left = (w - len) / 2f
-        val top = if (dock == DockPosition.BOTTOM) h - m - t else m
+        val top = if (dock == DockPosition.BOTTOM) h - e - t else e
         Rect(left, top, left + len, top + t)
     } else {
-        val len = if (full) h - 2 * m else fitLength.coerceAtMost(h - 2 * m)
+        val len = if (full) h - 2 * e else fitLength.coerceAtMost(h - 2 * m)
         val top = when (screen.dockAlign) {
-            DockAlign.START -> m
+            DockAlign.START -> e
             DockAlign.CENTER -> (h - len) / 2f
-            DockAlign.END -> h - m - len
+            DockAlign.END -> h - e - len
         }
-        val left = if (dock == DockPosition.LEFT) m else w - m - t
+        val left = if (dock == DockPosition.LEFT) e else w - e - t
         Rect(left, top, left + t, top + len)
     }
 
-    if (look.shape != DockShape.NONE) {
-        val radius = if (look.shape == DockShape.SQUARE) 0f else (look.radius / 40f).coerceIn(0f, 1f) * t / 2f
+    if (look.background) {
+        val radius = (look.radius / 40f).coerceIn(0f, 1f) * t / 2f
         drawRoundRect(
             Color(look.panelColor).copy(alpha = look.opacity.coerceIn(0.05f, 1f)),
             rect.topLeft,

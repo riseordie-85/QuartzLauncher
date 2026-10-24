@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -113,45 +115,118 @@ fun HomeLayout(screen: ScreenState, vm: HomeViewModel, drag: DragController, sho
 
 // ---- Frame and dock ----
 
-/** Places the content and the dock according to the dock's position for this screen. */
+/**
+ * Places the content and the dock according to the dock's position for this screen. A floating dock keeps a margin
+ * like everything else; a flush one runs to the screen edge (under the navigation or status bar) and keeps its
+ * icons clear of the bar instead.
+ */
 @Composable
 private fun HomeFrame(dock: List<SlotRef>, vm: HomeViewModel, drag: DragController, content: @Composable ColumnScope.() -> Unit) {
     val look = LocalHomeLook.current
+    val flush = look.dock.background && !look.dock.floating
+    val pad = SIDE_PAD_DP.dp
+    val bars = WindowInsets.systemBars
+    val handle = look.swapHandle
+    when (val edge = look.dockPosition) {
+        DockPosition.BOTTOM -> Column(Modifier.fillMaxSize()) {
+            Column(
+                Modifier.weight(1f).fillMaxWidth()
+                    .windowInsetsPadding(bars.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                    .padding(horizontal = pad),
+                content = content,
+            )
+            if (handle) SwapHandle(vertical = false)
+            DockBar(
+                dock, vertical = false, vm, drag, edge,
+                outer = if (flush) Modifier else Modifier
+                    .windowInsetsPadding(bars.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+                    .padding(horizontal = pad).padding(top = if (handle) 0.dp else 6.dp, bottom = 10.dp),
+                inner = if (flush) Modifier.windowInsetsPadding(bars.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)) else Modifier,
+            )
+        }
+        DockPosition.TOP -> Column(Modifier.fillMaxSize()) {
+            DockBar(
+                dock, vertical = false, vm, drag, edge,
+                outer = if (flush) Modifier else Modifier
+                    .windowInsetsPadding(bars.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                    .padding(horizontal = pad).padding(top = 6.dp, bottom = if (handle) 0.dp else 6.dp),
+                inner = if (flush) Modifier.windowInsetsPadding(bars.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)) else Modifier,
+            )
+            if (handle) SwapHandle(vertical = false)
+            Column(
+                Modifier.weight(1f).fillMaxWidth()
+                    .windowInsetsPadding(bars.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+                    .padding(horizontal = pad),
+                content = content,
+            )
+        }
+        DockPosition.LEFT -> Row(Modifier.fillMaxSize()) {
+            DockBar(
+                dock, vertical = true, vm, drag, edge,
+                outer = if (flush) Modifier else Modifier
+                    .windowInsetsPadding(bars.only(WindowInsetsSides.Vertical + WindowInsetsSides.Left))
+                    .padding(start = pad).padding(vertical = 8.dp),
+                inner = if (flush) Modifier.windowInsetsPadding(bars.only(WindowInsetsSides.Vertical + WindowInsetsSides.Left)) else Modifier,
+            )
+            if (handle) SwapHandle(vertical = true) else Spacer(Modifier.width(8.dp))
+            Column(
+                Modifier.weight(1f).fillMaxHeight()
+                    .windowInsetsPadding(bars.only(WindowInsetsSides.Vertical + WindowInsetsSides.Right))
+                    .padding(end = pad),
+                content = content,
+            )
+        }
+        DockPosition.RIGHT -> Row(Modifier.fillMaxSize()) {
+            Column(
+                Modifier.weight(1f).fillMaxHeight()
+                    .windowInsetsPadding(bars.only(WindowInsetsSides.Vertical + WindowInsetsSides.Left))
+                    .padding(start = pad),
+                content = content,
+            )
+            if (handle) SwapHandle(vertical = true) else Spacer(Modifier.width(8.dp))
+            DockBar(
+                dock, vertical = true, vm, drag, edge,
+                outer = if (flush) Modifier else Modifier
+                    .windowInsetsPadding(bars.only(WindowInsetsSides.Vertical + WindowInsetsSides.Right))
+                    .padding(end = pad).padding(vertical = 8.dp),
+                inner = if (flush) Modifier.windowInsetsPadding(bars.only(WindowInsetsSides.Vertical + WindowInsetsSides.Right)) else Modifier,
+            )
+        }
+        DockPosition.NONE -> Column(Modifier.fillMaxSize().windowInsetsPadding(bars).padding(horizontal = pad)) {
+            Column(Modifier.weight(1f).fillMaxWidth(), content = content)
+            // No dock: the apps button (if you use one) sits on the home screen
+            if (look.button != null) {
+                Box(
+                    Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                    contentAlignment = if (look.button == ButtonEnd.START) Alignment.CenterStart else Alignment.CenterEnd,
+                ) { DrawerButton() }
+            }
+        }
+    }
+}
+
+/** The swap handle: a small pill on the dock's inner edge. Tap it to move the dock to the opposite side. */
+@Composable
+private fun SwapHandle(vertical: Boolean) {
+    val look = LocalHomeLook.current
+    val ink = LocalLabelColor.current
     Box(
-        Modifier
-            .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.systemBars)
-            .padding(horizontal = SIDE_PAD_DP.dp),
+        (if (vertical) Modifier.fillMaxHeight().width(20.dp) else Modifier.fillMaxWidth().height(20.dp)),
+        contentAlignment = Alignment.Center,
     ) {
-        when (look.dockPosition) {
-            DockPosition.BOTTOM -> Column(Modifier.fillMaxSize()) {
-                Column(Modifier.weight(1f).fillMaxWidth(), content = content)
-                DockBar(dock, vertical = false, vm, drag, Modifier.padding(top = 6.dp, bottom = 10.dp))
-            }
-            DockPosition.TOP -> Column(Modifier.fillMaxSize()) {
-                DockBar(dock, vertical = false, vm, drag, Modifier.padding(top = 6.dp, bottom = 6.dp))
-                Column(Modifier.weight(1f).fillMaxWidth(), content = content)
-            }
-            DockPosition.LEFT -> Row(Modifier.fillMaxSize()) {
-                DockBar(dock, vertical = true, vm, drag, Modifier.padding(vertical = 8.dp))
-                Spacer(Modifier.width(8.dp))
-                Column(Modifier.weight(1f).fillMaxHeight(), content = content)
-            }
-            DockPosition.RIGHT -> Row(Modifier.fillMaxSize()) {
-                Column(Modifier.weight(1f).fillMaxHeight(), content = content)
-                Spacer(Modifier.width(8.dp))
-                DockBar(dock, vertical = true, vm, drag, Modifier.padding(vertical = 8.dp))
-            }
-            DockPosition.NONE -> Column(Modifier.fillMaxSize()) {
-                Column(Modifier.weight(1f).fillMaxWidth(), content = content)
-                // No dock: the apps button (if you use one) sits on the home screen
-                if (look.button != null) {
-                    Box(
-                        Modifier.fillMaxWidth().padding(vertical = 10.dp),
-                        contentAlignment = if (look.button == ButtonEnd.START) Alignment.CenterStart else Alignment.CenterEnd,
-                    ) { DrawerButton() }
-                }
-            }
+        Box(
+            Modifier
+                .size(if (vertical) 24.dp else 56.dp, if (vertical) 56.dp else 24.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .clickable { look.swapDock() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                Modifier
+                    .size(if (vertical) 5.dp else 40.dp, if (vertical) 40.dp else 5.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(ink.copy(alpha = 0.55f)),
+            )
         }
     }
 }
@@ -170,7 +245,16 @@ private fun unfoldedDock(vm: HomeViewModel): List<SlotRef> =
  * If the icons don't fit, the dock scrolls. The apps button sits at the chosen end.
  */
 @Composable
-private fun DockBar(slots: List<SlotRef>, vertical: Boolean, vm: HomeViewModel, drag: DragController, modifier: Modifier) {
+private fun DockBar(
+    slots: List<SlotRef>,
+    vertical: Boolean,
+    vm: HomeViewModel,
+    drag: DragController,
+    edge: DockPosition,
+    outer: Modifier,
+    inner: Modifier,
+) {
+    val modifier = outer
     val look = LocalHomeLook.current
     val full = look.dockLength == DockLength.FULL
     val button = look.button
@@ -183,7 +267,8 @@ private fun DockBar(slots: List<SlotRef>, vertical: Boolean, vm: HomeViewModel, 
     val refs = if (dropSpot != null) filled + dropSpot else filled
     val count = refs.size + if (button != null) 1 else 0
     if (count == 0) return
-    val background = if (look.dockBackground) Modifier.glass(look.dockShape, look.panel) else Modifier
+    val style = look.dock
+    val background = Modifier.dockSurface(style, look.panel, edge, look.onPanel).then(inner)
 
     CompositionLocalProvider(LocalLabelColor provides look.onPanel) {
 
@@ -197,7 +282,12 @@ private fun DockBar(slots: List<SlotRef>, vertical: Boolean, vm: HomeViewModel, 
                 (if (full || scrolls) Modifier.fillMaxWidth() else Modifier)
                     .then(background)
                     .then(if (scrolls) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
-                    .padding(horizontal = 8.dp),
+                    .padding(horizontal = 8.dp + style.endRoom)
+                    .padding(vertical = style.padding.dp)
+                    .padding(
+                        top = if (edge == DockPosition.BOTTOM) style.waveRoom else 0.dp,
+                        bottom = if (edge == DockPosition.TOP) style.waveRoom else 0.dp,
+                    ),
                 horizontalArrangement = when {
                     !full || scrolls -> Arrangement.Start
                     look.dockIconAlign == DockAlign.START -> Arrangement.Start
@@ -231,10 +321,15 @@ private fun DockBar(slots: List<SlotRef>, vertical: Boolean, vm: HomeViewModel, 
             val cellW = 72.dp
             Column(
                 (if (full || scrolls) Modifier.fillMaxHeight() else Modifier)
-                    .width(cellW)
                     .then(background)
+                    .width(cellW)
                     .then(if (scrolls) Modifier.verticalScroll(rememberScrollState()) else Modifier)
-                    .padding(vertical = 8.dp),
+                    .padding(vertical = 8.dp + style.endRoom)
+                    .padding(horizontal = style.padding.dp)
+                    .padding(
+                        start = if (edge == DockPosition.RIGHT) style.waveRoom else 0.dp,
+                        end = if (edge == DockPosition.LEFT) style.waveRoom else 0.dp,
+                    ),
                 verticalArrangement = when {
                     !full || scrolls -> Arrangement.Top
                     look.dockIconAlign == DockAlign.START -> Arrangement.Top

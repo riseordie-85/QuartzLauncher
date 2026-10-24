@@ -41,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import com.tim.launcher.wallpaper.WallCache
+import com.tim.launcher.wallpaper.PatternStyle
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.runtime.getValue
@@ -397,28 +398,73 @@ fun DockSettings(ctx: SettingsContext) {
             SettingRow("Swap handle", "A small handle that flips the dock to the other side. Stays where you leave it.") {
                 Toggle(store[S.swapHandle]) { store.set(S.swapHandle, value = it) }
             }
+            if (store[S.dockSwapped]) {
+                RowDivider()
+                SettingRow("Dock is swapped", "It's on the opposite side from the position above. Tap to put it back.", onClick = {
+                    store.set(S.dockSwapped, value = false)
+                })
+            }
         }
 
         SectionLabel("Style")
         GlassPanel {
             DockSample(store, Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp))
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-                Text("Background", color = Q.Text, fontSize = 16.sp, modifier = Modifier.padding(bottom = 10.dp))
-                Segmented(store[S.dockShape], DockShape.entries, { if (it == DockShape.NONE) "None" else it.label }) {
-                    store.set(S.dockShape, value = it)
-                }
-            }
-            if (store[S.dockShape] == DockShape.ROUNDED) {
-                RowDivider()
-                val r = store[S.dockRadius]
-                SliderRow("Roundness", r.toFloat(), 4f..40f, "$r") { store.set(S.dockRadius, value = it.roundToInt()) }
+            SettingRow("Background") { Toggle(store[S.dockBackground]) { store.set(S.dockBackground, value = it) } }
+            if (store[S.dockBackground]) {
+                DockStyleControls(store)
             }
             RowDivider()
             SettingRow("App names") { Toggle(store[S.labelsDock]) { store.set(S.labelsDock, value = it) } }
             RowDivider()
-            SettingRow("Color and glass", "Shared with the app drawer", onClick = { ctx.go(Route.APPEARANCE) })
+            SettingRow("Color and glass", "Shared with the app drawer and folders", onClick = { ctx.go(Route.APPEARANCE) })
         }
     }
+}
+
+/** Shape, floating, fill, pattern, edge and padding. Shared by settings and setup. */
+@Composable
+fun DockStyleControls(store: SettingsStore) {
+    var openColor by remember { mutableStateOf(false) }
+    RowDivider()
+    SettingRow("Shape") {
+        Dropdown(store[S.dockOutline], DockOutline.entries, { it.label }) { store.set(S.dockOutline, value = it) }
+    }
+    if (store[S.dockOutline] != DockOutline.FADE) {
+        val r = store[S.dockRadius]
+        SliderRow("Roundness", r.toFloat(), 0f..40f, if (r == 0) "Square" else "$r") { store.set(S.dockRadius, value = it.roundToInt()) }
+    }
+    RowDivider()
+    SettingRow(
+        "Floating",
+        if (store[S.dockFloating]) "Sits a little in from the edge" else "Runs to the screen edge, like a taskbar",
+    ) { Toggle(store[S.dockFloating]) { store.set(S.dockFloating, value = it) } }
+    RowDivider()
+    Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+        Text("Fill", color = Q.Text, fontSize = 16.sp, modifier = Modifier.padding(bottom = 10.dp))
+        Segmented(store[S.dockFill], DockFill.entries, { if (it == DockFill.GLASS) "Glass color" else it.label }) {
+            store.set(S.dockFill, value = it)
+        }
+    }
+    if (store[S.dockFill] == DockFill.GRADIENT) {
+        ColorEditor("Gradient to", store[S.dockColor2], openColor, { openColor = !openColor }) { store.set(S.dockColor2, value = it) }
+    }
+    SettingRow("Pattern", "Lines up with the same pattern on the wallpaper") {
+        Dropdown(store[S.dockPattern], PatternStyle.entries, { if (it.faceted) "◆ ${it.label}" else it.label }) {
+            store.set(S.dockPattern, value = it)
+        }
+    }
+    if (store[S.dockPattern] != PatternStyle.NONE) {
+        val p = store[S.dockPatternStrength]
+        SliderRow("Pattern strength", p, 0.05f..0.6f, "${(p * 100).roundToInt()}%") { store.set(S.dockPatternStrength, value = it) }
+    }
+    if (store[S.dockOutline] != DockOutline.FADE) {
+        RowDivider()
+        SettingRow("Edge", "Soft and bright light catch the glass like a lit rim") {
+            Dropdown(store[S.dockEdge], DockEdge.entries, { it.label }) { store.set(S.dockEdge, value = it) }
+        }
+    }
+    val pad = store[S.dockPadding]
+    SliderRow("Padding", pad.toFloat(), 0f..16f, if (pad == 0) "None" else "$pad") { store.set(S.dockPadding, value = it.roundToInt()) }
 }
 
 // ---- App drawer ----

@@ -152,6 +152,16 @@ object WallRenderer {
         if (c.kind == WallKind.TEST) drawTestInfo(canvas, w, h, frame)
     }
 
+    /**
+     * Just a pattern, in [style], over whatever is already on [canvas] (the dock uses this). [w]×[h] is the screen,
+     * so the pattern's size and placement match the wallpaper's; [clip] is the part to draw.
+     */
+    @Synchronized
+    fun drawPatternOnly(canvas: Canvas, w: Float, h: Float, clip: Rect, style: PatternStyle, strength: Float) {
+        val c = WallConfig(pattern = style, patternStrength = strength, patternSize = 0.3f, patternColor = Color.WHITE)
+        if (style.faceted) Facets.draw(canvas, w, h, clip, c) else drawPattern(canvas, w, h, c)
+    }
+
     /** A small copy of a screen's wallpaper ([scale] of full size), for glass, previews and colors. */
     fun renderSmall(w: Int, h: Int, scale: Float, frame: Frame, image: (String) -> Bitmap?): Bitmap {
         val bw = max(1, (w * scale).toInt())

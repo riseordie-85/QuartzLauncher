@@ -25,35 +25,40 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import com.tim.launcher.Prefs
-import com.tim.launcher.settings.DockShape
+import com.tim.launcher.DockStyle
+import com.tim.launcher.Ink
+import com.tim.launcher.dockSurface
+import com.tim.launcher.settings.DockPosition
 import com.tim.launcher.settings.S
 import com.tim.launcher.settings.SettingsStore
 
 /**
- * A life-size sample dock over a wallpaper strip, drawn from the current settings, so shape, roundness, color and
- * see-through changes show up the moment a slider moves. Uses the apps from your real dock when it can.
+ * A life-size sample dock over a wallpaper strip, drawn from the current settings with the real dock's drawing
+ * code, so shape, roundness, color, edge light and see-through changes show up the moment a slider moves. Uses the
+ * apps from your real dock when it can.
  */
 @Composable
 fun DockSample(store: SettingsStore, modifier: Modifier = Modifier) {
     val icons = rememberDockIcons()
-    val shape = store[S.dockShape]
-    val corner = if (shape == DockShape.SQUARE) 0.dp else store[S.dockRadius].dp
+    val style = DockStyle.of(store)
     val panel = Color(store[S.panelColor]).copy(alpha = store[S.panelOpacity].coerceIn(0.05f, 1f))
+    val ink = Ink.on(Ink.brightness(panel, 0.35f))
     Box(
         modifier
             .fillMaxWidth()
             .height(112.dp)
             .clip(RoundedCornerShape(18.dp))
             .background(Brush.linearGradient(listOf(Color(0xFF3B2A7A), Color(0xFF244F9E), Color(0xFF14808A), Color(0xFF4E9F3D))))
-            .padding(14.dp),
+            .padding(if (style.floating || !style.background) 14.dp else 0.dp),
         contentAlignment = Alignment.BottomCenter,
     ) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(corner))
-                .background(if (shape == DockShape.NONE) Color.Transparent else panel)
-                .padding(vertical = 10.dp),
+                .dockSurface(style, panel, DockPosition.BOTTOM, ink)
+                .padding(horizontal = style.endRoom)
+                .padding(top = style.waveRoom)
+                .padding(vertical = 10.dp + style.padding.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {

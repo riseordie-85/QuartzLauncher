@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import androidx.compose.runtime.mutableStateMapOf
 import com.tim.launcher.Prefs
+import com.tim.launcher.wallpaper.PatternStyle
 import org.json.JSONObject
 
 /**
@@ -85,7 +86,13 @@ class Setting<T>(val id: String, val default: T, val codec: Codec<T>, val perScr
 enum class DockPosition(val label: String) { BOTTOM("Bottom"), RIGHT("Right"), TOP("Top"), LEFT("Left"), NONE("No dock") }
 enum class DockLength(val label: String) { FULL("Full width or height"), FIT("Fit to icons") }
 enum class DockAlign(val label: String) { START("Start"), CENTER("Center"), END("End") }
+/** Phase 3's dock shape. Only read once, to carry old choices over to [S.dockBackground] and [S.dockRadius]. */
 enum class DockShape(val label: String) { SQUARE("Square"), ROUNDED("Rounded"), NONE("No background") }
+enum class DockOutline(val label: String) {
+    STRAIGHT("Straight"), SLANTED("Slanted"), POINTED("Pointed"), WAVE("Wave"), FADE("Fade"),
+}
+enum class DockFill(val label: String) { GLASS("Glass"), GRADIENT("Gradient") }
+enum class DockEdge(val label: String) { NONE("None"), HAIRLINE("Hairline"), SOFT("Soft light"), BRIGHT("Bright light") }
 enum class CoverSide(val label: String) { LEFT("Left half"), RIGHT("Right half") }
 enum class PageMode(val label: String) { STRIP("Side by side"), PAIRED("Paired (old)") }
 enum class DrawerOpen(val label: String) { SWIPE("Swipe"), BUTTON("Button"), BOTH("Swipe and button") }
@@ -158,8 +165,23 @@ object S {
     /** 0 means unlimited (the dock scrolls). */
     val dockIcons = Setting("dock.icons", 5, IntCodec, perScreen = true)
     val dockShape = Setting("dock.shape", DockShape.ROUNDED, EnumCodec(DockShape.entries.toTypedArray()))
+    /** 0 is square. Phase 3 started at 4. */
     val dockRadius = Setting("dock.radius", 28, IntCodec)
+    val dockBackground = Setting("dock.background", true, BoolCodec)
+    val dockOutline = Setting("dock.outline", DockOutline.STRAIGHT, EnumCodec(DockOutline.entries.toTypedArray()))
+    /** Off: the dock sits flush against the screen edge, like a taskbar. */
+    val dockFloating = Setting("dock.floating", true, BoolCodec)
+    val dockFill = Setting("dock.fill", DockFill.GLASS, EnumCodec(DockFill.entries.toTypedArray()))
+    /** The gradient's second color (the first is the shared glass color). */
+    val dockColor2 = Setting("dock.color2", 0xFF2546A8.toInt(), IntCodec)
+    val dockPattern = Setting("dock.pattern", PatternStyle.NONE, EnumCodec(PatternStyle.entries.toTypedArray()))
+    val dockPatternStrength = Setting("dock.patternStrength", 0.3f, FloatCodec)
+    val dockEdge = Setting("dock.edge", DockEdge.SOFT, EnumCodec(DockEdge.entries.toTypedArray()))
+    /** Extra room around the icons, in dp. */
+    val dockPadding = Setting("dock.padding", 0, IntCodec)
     val swapHandle = Setting("dock.swapHandle", false, BoolCodec)
+    /** Flipped by the swap handle or gesture: left ↔ right, top ↔ bottom, on every screen. */
+    val dockSwapped = Setting("dock.swapped", false, BoolCodec)
     val labelsDock = Setting("dock.labels", false, BoolCodec)
 
     // App drawer
@@ -347,6 +369,30 @@ class SettingsStore private constructor(context: Context) {
  * the extra icons are added after your folded ones. Until it's set on its own, unfolded doubles a top or bottom
  * dock (twice the width) and matches a side dock.
  */
+/**
+ * Carries phase 3's dock shape over to the new settings once: "No background" turns the background off and
+ * "Square" sets roundness to 0.
+ */
+fun SettingsStore.migrateDockShape() {
+    if (owner(S.dockShape, Scope.GLOBAL) == null || owner(S.dockBackground, Scope.GLOBAL) != null) return
+    val old = this[S.dockShape]
+    set(S.dockBackground, value = old != DockShape.NONE)
+    if (old == DockShape.SQUARE) set(S.dockRadius, value = 0)
+}
+
+/** Where the dock really is on [scope]: its position, flipped if the dock has been swapped. */
+fun SettingsStore.dockPositionOn(scope: Scope): DockPosition {
+    val p = this[S.dockPosition, scope]
+    if (!this[S.dockSwapped]) return p
+    return when (p) {
+        DockPosition.BOTTOM -> DockPosition.TOP
+        DockPosition.TOP -> DockPosition.BOTTOM
+        DockPosition.LEFT -> DockPosition.RIGHT
+        DockPosition.RIGHT -> DockPosition.LEFT
+        DockPosition.NONE -> DockPosition.NONE
+    }
+}
+
 fun SettingsStore.dockCounts(type: DeviceType): Pair<Int, Int> {
     val folded = this[S.dockIcons, type.primary]
     if (type != DeviceType.FOLDABLE) return folded to folded

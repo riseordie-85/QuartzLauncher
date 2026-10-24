@@ -53,7 +53,9 @@ import com.tim.launcher.settings.CoverSide
 import com.tim.launcher.settings.DeviceType
 import com.tim.launcher.settings.DockLength
 import com.tim.launcher.settings.DockPosition
-import com.tim.launcher.settings.DockShape
+import com.tim.launcher.settings.DockEdge
+import com.tim.launcher.settings.DockOutline
+import com.tim.launcher.settings.DockStyleControls
 import com.tim.launcher.settings.DrawerOpen
 import com.tim.launcher.settings.DrawerScroll
 import com.tim.launcher.settings.DrawerView
@@ -560,16 +562,10 @@ private fun ColumnScope.StepContent(
 
         Step.DOCK_STYLE -> {
             DockSample(store, gap)
-            val shape = store[S.dockShape]
-            ChoiceCard("Square", null, shape == DockShape.SQUARE, gap) { store.set(S.dockShape, value = DockShape.SQUARE) }
-            ChoiceCard("Rounded", null, shape == DockShape.ROUNDED, gap) { store.set(S.dockShape, value = DockShape.ROUNDED) }
-            if (shape == DockShape.ROUNDED) {
-                GlassPanel(gap) {
-                    val r = store[S.dockRadius]
-                    SliderRow("How rounded", r.toFloat(), 4f..40f, "$r") { store.set(S.dockRadius, value = it.roundToInt()) }
-                }
-            }
-            ChoiceCard("No background", "Icons float on the wallpaper", shape == DockShape.NONE, gap) { store.set(S.dockShape, value = DockShape.NONE) }
+            val on = store[S.dockBackground]
+            ChoiceCard("Glass", "A frosted panel behind your dock icons", on, gap) { store.set(S.dockBackground, value = true) }
+            ChoiceCard("No background", "Icons float on the wallpaper", !on, gap) { store.set(S.dockBackground, value = false) }
+            if (on) GlassPanel(gap) { DockStyleControls(store) }
         }
 
         Step.WALLPAPER -> {
@@ -684,6 +680,10 @@ private fun applyRecommended(store: SettingsStore, type: DeviceType) {
 }
 
 private fun applyDefaultForm(store: SettingsStore) {
-    store.set(S.dockShape, value = DockShape.ROUNDED)
+    store.set(S.dockBackground, value = true)
+    store.set(S.dockOutline, value = DockOutline.STRAIGHT)
+    store.set(S.dockRadius, value = 28)
+    store.set(S.dockFloating, value = true)
+    store.set(S.dockEdge, value = DockEdge.SOFT)
     store.set(S.panelBlur, value = 0.6f)
 }

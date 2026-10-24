@@ -120,6 +120,8 @@ import com.tim.launcher.settings.ButtonEnd
 import com.tim.launcher.settings.ButtonIcon
 import com.tim.launcher.settings.CoverSide
 import com.tim.launcher.settings.DockShape
+import com.tim.launcher.settings.dockPositionOn
+import com.tim.launcher.settings.migrateDockShape
 import com.tim.launcher.settings.DrawerOpen
 import com.tim.launcher.settings.GestureAction
 import com.tim.launcher.settings.GestureSlot
@@ -316,7 +318,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
     val screen = rememberScreenState(activity)
     val prefs = remember { Prefs.get(activity) }
     val drag = remember { DragController() }
-    val store = remember { SettingsStore.get(activity) }
+    val store = remember { SettingsStore.get(activity).also { it.migrateDockShape() } }
     var drawerOpen by remember { mutableStateOf(false) }
     var panelOpen by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
@@ -387,7 +389,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             GestureAction.NOTIFICATIONS -> expandNotifications(activity)
             GestureAction.SETTINGS -> SettingsActivity.open(activity)
             GestureAction.LOCK -> if (!LockService.lock()) lockPrompt = true
-            GestureAction.SWAP_DOCK -> Diag.log("Swap dock side arrives with dock layouts")
+            GestureAction.SWAP_DOCK -> store.set(S.dockSwapped, value = !store[S.dockSwapped])
             GestureAction.OVERVIEW -> overviewOpen = true
         }
     }
@@ -414,14 +416,15 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
     val homeLabels = if (quartzWallpaper && wallBrightness > 0.62f) Ink.Dark else Ink.Light
     val look = HomeLook(
         panel = panel,
-        dockShape = if (store[S.dockShape] == DockShape.SQUARE) RoundedCornerShape(0.dp) else RoundedCornerShape(store[S.dockRadius].dp),
-        dockBackground = store[S.dockShape] != DockShape.NONE,
+        dock = DockStyle.of(store),
+        swapHandle = store[S.swapHandle] && store.dockPositionOn(scope) != DockPosition.NONE,
+        swapDock = { store.set(S.dockSwapped, value = !store[S.dockSwapped]) },
         labelsHome = store[S.labelsHome, scope],
         labelsDock = store[S.labelsDock],
         labelsDrawer = store[S.labelsDrawer],
         iconScale = store[S.iconSize, scope],
         drawerBg = drawerBg,
-        onPanel = if (store[S.dockShape] == DockShape.NONE) homeLabels else Ink.on(Ink.brightness(panel, wallBrightness)),
+        onPanel = if (!store[S.dockBackground]) homeLabels else Ink.on(Ink.brightness(panel, wallBrightness)),
         onDrawer = Ink.on(Ink.brightness(drawerBg, if (glass != null) wallBrightness else 0.3f)),
         onHome = homeLabels,
         button = if (store[S.drawerOpen] == DrawerOpen.SWIPE) null else store[S.drawerButtonEnd],
@@ -430,7 +433,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         carryOver = store[S.carryOver],
         innerCols = store[S.gridCols, Scope.INNER],
         innerRows = store[S.gridRows, Scope.INNER],
-        dockPosition = store[S.dockPosition, scope],
+        dockPosition = store.dockPositionOn(scope),
         dockLength = store[S.dockLength, scope],
         dockAlign = store[S.dockAlign, scope],
         dockIconAlign = store[S.dockIconAlign, scope],
@@ -806,8 +809,9 @@ private fun expandNotifications(context: Context) {
 /** Settings-driven look of the home screen, shared down the tree. */
 data class HomeLook(
     val panel: Color = Color.White.copy(alpha = 0.14f),
-    val dockShape: Shape = RoundedCornerShape(28.dp),
-    val dockBackground: Boolean = true,
+    val dock: DockStyle = DockStyle(),
+    val swapHandle: Boolean = false,
+    val swapDock: () -> Unit = {},
     val labelsHome: Boolean = true,
     val labelsDock: Boolean = false,
     val labelsDrawer: Boolean = true,
