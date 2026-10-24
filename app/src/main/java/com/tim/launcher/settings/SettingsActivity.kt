@@ -28,7 +28,7 @@ import com.tim.launcher.ui.Q
 import com.tim.launcher.ui.QuartzTheme
 import com.tim.launcher.wizard.SetupWizard
 
-enum class Route { MAIN, HOME, DOCK, DRAWER, APPEARANCE, WALLPAPER, GESTURES, PRIVACY, ABOUT, WIZARD }
+enum class Route { MAIN, HOME, DOCK, DRAWER, DRAWER_TAB, APPEARANCE, WALLPAPER, GESTURES, PRIVACY, ABOUT, WIZARD }
 
 /** Quartz settings and the setup wizard, shown as a frosted sheet over the wallpaper. */
 class SettingsActivity : ComponentActivity() {
@@ -44,7 +44,10 @@ class SettingsActivity : ComponentActivity() {
             window.setBackgroundBlurRadius((48 * resources.displayMetrics.density).toInt())
         }
 
-        val start = if (intent.getBooleanExtra(EXTRA_WIZARD, false)) Route.WIZARD else Route.MAIN
+        val start = when {
+            intent.getBooleanExtra(EXTRA_WIZARD, false) -> Route.WIZARD
+            else -> Route.entries.firstOrNull { it.name == intent.getStringExtra(EXTRA_ROUTE) } ?: Route.MAIN
+        }
         val store = SettingsStore.get(this).also { it.migrateDockShape() }
         val type = detectDeviceType(this)
 
@@ -76,6 +79,7 @@ class SettingsActivity : ComponentActivity() {
                             Route.HOME -> HomeSettings(ctx)
                             Route.DOCK -> DockSettings(ctx)
                             Route.DRAWER -> DrawerSettings(ctx)
+                            Route.DRAWER_TAB -> TabEditor(ctx)
                             Route.APPEARANCE -> AppearanceSettings(ctx)
                             Route.WALLPAPER -> WallpaperSettings(ctx)
                             Route.GESTURES -> GestureSettings(ctx)
@@ -93,11 +97,13 @@ class SettingsActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_WIZARD = "wizard"
+        const val EXTRA_ROUTE = "route"
 
-        fun open(context: Context, wizard: Boolean = false) {
+        fun open(context: Context, wizard: Boolean = false, route: Route? = null) {
             context.startActivity(
                 Intent(context, SettingsActivity::class.java)
                     .putExtra(EXTRA_WIZARD, wizard)
+                    .putExtra(EXTRA_ROUTE, route?.name)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
         }

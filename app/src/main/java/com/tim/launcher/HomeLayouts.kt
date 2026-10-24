@@ -40,6 +40,8 @@ import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.key
 import androidx.compose.runtime.SideEffect
@@ -273,7 +275,7 @@ private fun DockBar(
     CompositionLocalProvider(LocalLabelColor provides look.onPanel) {
 
     if (!vertical) {
-        BoxWithConstraints(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        BoxWithConstraints(modifier.fillMaxWidth().onGloballyPositioned { look.onDockBounds(it.boundsInRoot()) }, contentAlignment = Alignment.Center) {
             val cellW = 72.dp
             val iconSize = 56.dp
             val cellH = iconSize + if (look.labelsDock) 36.dp else 20.dp
@@ -311,7 +313,7 @@ private fun DockBar(
         }
     } else {
         BoxWithConstraints(
-            modifier.fillMaxHeight(),
+            modifier.fillMaxHeight().onGloballyPositioned { look.onDockBounds(it.boundsInRoot()) },
             contentAlignment = when {
                 full -> Alignment.Center
                 look.dockAlign == DockAlign.START -> Alignment.TopCenter

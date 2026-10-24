@@ -623,8 +623,18 @@ fun DrawerSettings(ctx: SettingsContext) {
             }
         }
 
-        SectionLabel("Apps")
+        SectionLabel("Look")
         GlassPanel {
+            SettingRow("Style", link = ctx.link(S.drawerStyle)) {
+                Dropdown(store[S.drawerStyle, scope], DrawerStyle.entries, { it.label }) { store.set(S.drawerStyle, scope, it) }
+            }
+            if (store[S.drawerStyle, scope] != DrawerStyle.FULL) {
+                val size = store[S.drawerSize, scope]
+                SliderRow("Size", size, 0.4f..1f, "${(size * 100).roundToInt()}%", link = ctx.link(S.drawerSize)) {
+                    store.set(S.drawerSize, scope, it)
+                }
+            }
+            RowDivider()
             Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
                 Text("Show apps as", color = Q.Text, fontSize = 16.sp, modifier = Modifier.padding(bottom = 10.dp))
                 Segmented(store[S.drawerView], DrawerView.entries, { it.label }) { store.set(S.drawerView, value = it) }
@@ -635,25 +645,43 @@ fun DrawerSettings(ctx: SettingsContext) {
                     Dropdown(store[S.drawerScroll], DrawerScroll.entries, { it.label }) { store.set(S.drawerScroll, value = it) }
                 }
                 RowDivider()
-                val doubled = scope == Scope.INNER && store.isLinked(S.drawerCols, Scope.INNER)
-                val cols = store[S.drawerCols, scope]
-                SettingRow("Columns", if (doubled) "Doubled when unfolded (${cols * 2})" else null, link = ctx.link(S.drawerCols)) {
-                    Stepper(cols, 3..8) { store.set(S.drawerCols, scope, it) }
+                SettingRow("Fit columns to the space", "As many as fit beside the tabs and dock") {
+                    Toggle(store[S.drawerColsAuto]) { store.set(S.drawerColsAuto, value = it) }
                 }
+                if (!store[S.drawerColsAuto]) {
+                    val doubled = scope == Scope.INNER && store.isLinked(S.drawerCols, Scope.INNER)
+                    val cols = store[S.drawerCols, scope]
+                    SettingRow("Columns", if (doubled) "Doubled when unfolded (${cols * 2})" else null, link = ctx.link(S.drawerCols)) {
+                        Stepper(cols, 3..8) { store.set(S.drawerCols, scope, it) }
+                    }
+                }
+                RowDivider()
+                SettingRow("App names") { Toggle(store[S.labelsDrawer]) { store.set(S.labelsDrawer, value = it) } }
             }
             RowDivider()
-            SettingRow("Style", link = ctx.link(S.drawerStyle)) {
-                Dropdown(store[S.drawerStyle, scope], DrawerStyle.entries, { it.label }) { store.set(S.drawerStyle, scope, it) }
+            SettingRow("Keep the dock showing", "The drawer opens above it, so your dock apps stay one tap away") {
+                Toggle(!store[S.drawerHideDock]) { store.set(S.drawerHideDock, value = !it) }
             }
-            RowDivider()
-            SettingRow("Sort") {
-                Dropdown(store[S.drawerSort], DrawerSort.entries, { it.label }) { store.set(S.drawerSort, value = it) }
-            }
-            RowDivider()
-            SettingRow("App names") { Toggle(store[S.labelsDrawer]) { store.set(S.labelsDrawer, value = it) } }
-            RowDivider()
-            SettingRow("Custom tabs", "Your own groups, with on-device suggestions (phase 6)", enabled = false)
         }
+
+        SectionLabel("Order")
+        GlassPanel {
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+                Segmented(
+                    store[S.drawerSort].takeIf { it != DrawerSort.CUSTOM } ?: DrawerSort.ALPHA,
+                    listOf(DrawerSort.ALPHA, DrawerSort.INSTALLED),
+                    { it.label },
+                ) { store.set(S.drawerSort, value = it) }
+            }
+            SettingRow(
+                "Headings",
+                if (store[S.drawerSort] == DrawerSort.INSTALLED) "The month each app was installed" else "A letter before each group",
+            ) { Toggle(store[S.drawerDividers]) { store.set(S.drawerDividers, value = it) } }
+        }
+
+        DrawerTabsSection(ctx)
+
+        DrawerSearchSection(ctx)
     }
 
     conflict?.let { (slot, action) ->
@@ -843,6 +871,11 @@ fun PrivacySettings(ctx: SettingsContext) {
             SettingRow("Notification access", "For badges. Not used yet") { StatusText("Not used") }
             RowDivider()
             SettingRow("Location", "Weather can use a typed city instead") { StatusText("Not asked") }
+            RowDivider()
+            SettingRow(
+                "Contacts",
+                "Only if you turn on contacts in search. Read on this phone when you search; never sent anywhere.",
+            ) { StatusText(if (com.tim.launcher.SearchSources.canReadContacts(context)) "Allowed" else "Not asked") }
             RowDivider()
             SettingRow(
                 "Accessibility (Quartz Lock)",

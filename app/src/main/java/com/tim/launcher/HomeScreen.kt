@@ -320,6 +320,10 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
     val drag = remember { DragController() }
     val store = remember { SettingsStore.get(activity).also { it.migrateDockShape() } }
     var drawerOpen by remember { mutableStateOf(false) }
+    // Opened by the Search gesture: the drawer starts with the keyboard up
+    var drawerSearch by remember { mutableStateOf(false) }
+    // Where the dock is on screen, so an open drawer can leave it visible
+    var dockRect by remember { mutableStateOf(Rect.Zero) }
     var panelOpen by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var openFolder by remember { mutableStateOf<Pair<String, SlotRef>?>(null) }
@@ -385,7 +389,14 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
     fun run(action: GestureAction) {
         when (action) {
             GestureAction.NONE -> Unit
-            GestureAction.APP_DRAWER, GestureAction.SEARCH -> drawerOpen = true
+            GestureAction.APP_DRAWER -> {
+                drawerSearch = false
+                drawerOpen = true
+            }
+            GestureAction.SEARCH -> {
+                drawerSearch = true
+                drawerOpen = true
+            }
             GestureAction.NOTIFICATIONS -> expandNotifications(activity)
             GestureAction.SETTINGS -> SettingsActivity.open(activity)
             GestureAction.LOCK -> if (!LockService.lock()) lockPrompt = true
@@ -429,7 +440,11 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         onHome = homeLabels,
         button = if (store[S.drawerOpen] == DrawerOpen.SWIPE) null else store[S.drawerButtonEnd],
         buttonIcon = store[S.drawerButtonIcon],
-        openDrawer = { drawerOpen = true },
+        openDrawer = {
+            drawerSearch = false
+            drawerOpen = true
+        },
+        onDockBounds = { dockRect = it },
         carryOver = store[S.carryOver],
         innerCols = store[S.gridCols, Scope.INNER],
         innerRows = store[S.gridRows, Scope.INNER],
@@ -609,7 +624,48 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             enter = slideInVertically { it / 3 } + fadeIn(),
             exit = slideOutVertically { it / 3 } + fadeOut(),
         ) {
-            AppDrawer(vm, drag, drawerCols.coerceAtLeast(1), onClose = { drawerOpen = false })
+            // The drawer leaves the dock showing (unless you'd rather hide it), so it only covers the rest
+            val density = LocalDensity.current
+            val position = look.dockPosition
+            val keepDock = !store[S.drawerHideDock] && position != DockPosition.NONE && dockRect != Rect.Zero
+            val gap = with(density) {
+                when {
+                    !keepDock -> PaddingValues(0.dp)
+                    position == DockPosition.BOTTOM -> PaddingValues(bottom = (screen.heightPx - dockRect.top).coerceAtLeast(0f).toDp())
+                    position == DockPosition.TOP -> PaddingValues(top = dockRect.bottom.coerceAtLeast(0f).toDp())
+                    position == DockPosition.LEFT -> PaddingValues(start = dockRect.right.coerceAtLeast(0f).toDp())
+                    else -> PaddingValues(end = (screen.widthPx - dockRect.left).coerceAtLeast(0f).toDp())
+                }
+            }
+            // Only the screen edges the drawer touches need room for the status and navigation bars
+            val edges = if (!keepDock) {
+                WindowInsetsSides.Horizontal + WindowInsetsSides.Vertical
+            } else {
+                when (position) {
+                    DockPosition.BOTTOM -> WindowInsetsSides.Horizontal + WindowInsetsSides.Top
+                    DockPosition.TOP -> WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom
+                    DockPosition.LEFT -> WindowInsetsSides.Vertical + WindowInsetsSides.Right
+                    else -> WindowInsetsSides.Vertical + WindowInsetsSides.Left
+                }
+            }
+            val drawerLook = DrawerLook(
+                style = store[S.drawerStyle, scope],
+                size = store[S.drawerSize, scope],
+                view = store[S.drawerView],
+                scroll = store[S.drawerScroll],
+                cols = if (store[S.drawerColsAuto]) 0 else drawerCols.coerceAtLeast(1),
+                labels = store[S.labelsDrawer],
+                sort = store[S.drawerSort],
+                dividers = store[S.drawerDividers],
+                tabs = store[S.drawerTabMode],
+                searchSettings = store[S.searchSettings],
+                searchContacts = store[S.searchContacts],
+                railOnRight = position == DockPosition.LEFT,
+                edges = edges,
+            )
+            Box(Modifier.fillMaxSize().padding(gap)) {
+                AppDrawer(vm, drag, drawerLook, startWithSearch = drawerSearch, onClose = { drawerOpen = false })
+            }
         }
 
         openFolder?.let { (id, ref) ->
@@ -812,6 +868,8 @@ data class HomeLook(
     val dock: DockStyle = DockStyle(),
     val swapHandle: Boolean = false,
     val swapDock: () -> Unit = {},
+    /** Where the dock sits on screen, reported by the dock itself. */
+    val onDockBounds: (Rect) -> Unit = {},
     val labelsHome: Boolean = true,
     val labelsDock: Boolean = false,
     val labelsDrawer: Boolean = true,
@@ -988,137 +1046,5 @@ internal fun HintLine() {
         textAlign = TextAlign.Center,
         style = labelStyle(LocalLabelColor.current),
         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-    )
-}
-
-@Composable
-private fun AppDrawer(vm: HomeViewModel, drag: DragController, cols: Int, onClose: () -> Unit) {
-    // Once an app is picked up, the drawer stays invisible until it closes (no flash on drop)
-    var carried by remember { mutableStateOf(false) }
-    val onDrawer = LocalHomeLook.current.onDrawer
-    CompositionLocalProvider(LocalLabelColor provides onDrawer) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .graphicsLayer { alpha = if (carried || drag.fromDrawer) 0f else 1f }
-            .glass(RectangleShape, LocalHomeLook.current.drawerBg)
-            // Keep long-presses inside the drawer from opening the test panel underneath
-            .pointerInput(Unit) { detectTapGestures { } }
-            .windowInsetsPadding(WindowInsets.systemBars),
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(44.dp)
-                .pointerInput(Unit) {
-                    detectVerticalDragGestures { _, dy -> if (dy > 12f) onClose() }
-                }
-                .clickable { onClose() },
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                Modifier
-                    .width(40.dp)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(onDrawer.copy(alpha = 0.5f)),
-            )
-        }
-        Text(
-            "Apps · ${vm.sortedApps.size}   (long-press and drag to place on home)",
-            color = onDrawer.copy(alpha = 0.8f),
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-        )
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(cols),
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            items(vm.sortedApps, key = { it.key }) { app ->
-                DrawerItem(app, vm, drag, onPickUp = { carried = true }, onClose = onClose)
-            }
-        }
-    }
-    }
-}
-
-@Composable
-private fun DrawerItem(
-    app: AppEntry,
-    vm: HomeViewModel,
-    drag: DragController,
-    onPickUp: () -> Unit,
-    onClose: () -> Unit,
-) {
-    val haptics = LocalHapticFeedback.current
-    val itemBounds = remember { arrayOf(Rect.Zero) }
-    var lifted by remember { mutableStateOf(false) }
-    AppIcon(
-        app = app,
-        size = 52.dp,
-        showLabel = LocalHomeLook.current.labelsDrawer,
-        modifier = Modifier
-            .onGloballyPositioned { itemBounds[0] = it.boundsInRoot() }
-            .clip(RoundedCornerShape(16.dp))
-            .pointerInput(app.key) {
-                detectTapGestures(
-                    onTap = {
-                        vm.launch(app, itemBounds[0].toAndroidRect())
-                        onClose()
-                    },
-                    onLongPress = { }, // long press picks the app up instead
-                )
-            }
-            .pointerInput(app.key) {
-                // Long-press lifts the app; it only leaves the drawer once the finger actually moves.
-                // A long-press without moving (e.g. touching to stop a fast scroll) does nothing.
-                val carryAfter = 24.dp.toPx()
-                var startAt = Offset.Zero
-                var travel = Offset.Zero
-                var carrying = false
-                detectDragGesturesAfterLongPress(
-                    onDragStart = { local ->
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        lifted = true
-                        startAt = itemBounds[0].topLeft + local
-                        travel = Offset.Zero
-                        carrying = false
-                    },
-                    onDrag = { change, amount ->
-                        change.consume()
-                        travel += amount
-                        if (carrying) {
-                            drag.moveBy(amount)
-                        } else if (travel.getDistance() > carryAfter) {
-                            carrying = true
-                            onPickUp()
-                            drag.startFromDrawer(app.key, startAt + travel)
-                        }
-                    },
-                    onDragEnd = {
-                        lifted = false
-                        if (carrying) {
-                            drag.drop(vm)
-                            onClose()
-                        }
-                    },
-                    onDragCancel = {
-                        lifted = false
-                        if (carrying) {
-                            drag.cancel()
-                            onClose()
-                        }
-                    },
-                )
-            }
-            .graphicsLayer {
-                val scale = if (lifted) 1.08f else 1f
-                scaleX = scale
-                scaleY = scale
-            }
-            .padding(vertical = 10.dp),
     )
 }

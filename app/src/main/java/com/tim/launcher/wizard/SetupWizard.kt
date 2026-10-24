@@ -67,6 +67,8 @@ import com.tim.launcher.settings.IconShape
 import com.tim.launcher.settings.IconStyle
 import com.tim.launcher.settings.Profile
 import com.tim.launcher.settings.S
+import com.tim.launcher.settings.TabMode
+import com.tim.launcher.settings.DrawerStyle
 import com.tim.launcher.settings.applyPreset
 import com.tim.launcher.wallpaper.WallStore
 import com.tim.launcher.wallpaper.WallSlot
@@ -123,6 +125,7 @@ private enum class Step(val title: String, val preview: Boolean = true) {
     DRAWER_BUTTON("Where should the apps button go?"),
     DRAWER_VIEW("How should your apps appear?"),
     DRAWER_ICONS("How should the app list scroll?"),
+    DRAWER_STYLE("How should your app drawer open up?"),
     FUNCTION_DONE("You've finished the basics", preview = false),
     DOCK_STYLE("Let's start with the dock"),
     WALLPAPER("Pick a wallpaper", preview = false),
@@ -168,6 +171,7 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
             if (store[S.drawerOpen] != DrawerOpen.SWIPE) add(Step.DRAWER_BUTTON)
             add(Step.DRAWER_VIEW)
             if (store[S.drawerView] == DrawerView.ICONS) add(Step.DRAWER_ICONS)
+            add(Step.DRAWER_STYLE)
             add(Step.FUNCTION_DONE)
             if (customize == true) {
                 add(Step.DOCK_STYLE)
@@ -549,11 +553,38 @@ private fun ColumnScope.StepContent(
         Step.DRAWER_ICONS -> {
             Segmented(store[S.drawerScroll], DrawerScroll.entries, { it.label }, gap) { store.set(S.drawerScroll, value = it) }
             GlassPanel {
-                val cols = store[S.drawerCols, primary]
-                SettingRow("Columns", if (foldable) "Doubled when unfolded (${cols * 2})" else null) {
-                    Stepper(cols, 3..8) { store.set(S.drawerCols, primary, it) }
+                SettingRow("Fit columns to the space", "As many as fit beside the tabs and dock") {
+                    Toggle(store[S.drawerColsAuto]) { store.set(S.drawerColsAuto, value = it) }
+                }
+                if (!store[S.drawerColsAuto]) {
+                    RowDivider()
+                    val cols = store[S.drawerCols, primary]
+                    SettingRow("Columns", if (foldable) "Doubled when unfolded (${cols * 2})" else null) {
+                        Stepper(cols, 3..8) { store.set(S.drawerCols, primary, it) }
+                    }
                 }
             }
+        }
+
+        Step.DRAWER_STYLE -> {
+            val style = store[S.drawerStyle, primary]
+            fun pick(s: DrawerStyle) {
+                store.linkAll(S.drawerStyle, type.screens)
+                store.set(S.drawerStyle, primary, s)
+            }
+            ChoiceCard("Full screen", "Covers the home screen, with your dock still showing", style == DrawerStyle.FULL, gap) { pick(DrawerStyle.FULL) }
+            ChoiceCard("Floating box", "A rounded panel in the middle", style == DrawerStyle.FLOATING, gap) { pick(DrawerStyle.FLOATING) }
+            ChoiceCard("Side list", "A tall panel down one side", style == DrawerStyle.SIDE, gap) { pick(DrawerStyle.SIDE) }
+            ChoiceCard("Bottom popup", "Rises from the bottom, like a Start menu", style == DrawerStyle.BOTTOM, gap) { pick(DrawerStyle.BOTTOM) }
+            Text("Tabs", color = Q.Text, fontSize = 16.sp, modifier = Modifier.padding(top = 12.dp, bottom = 10.dp))
+            Segmented(store[S.drawerTabMode], TabMode.entries, { it.label }, gap) { store.set(S.drawerTabMode, value = it) }
+            BodyText(
+                when (store[S.drawerTabMode]) {
+                    TabMode.NONE -> "One list of all your apps."
+                    TabMode.CUSTOM -> "Make your tabs in Settings › App drawer. Quartz suggests apps for each one; you approve them."
+                    TabMode.AUTO -> "Tabs from the categories apps give themselves: Games, Social, Music and so on."
+                },
+            )
         }
 
         Step.FUNCTION_DONE -> {

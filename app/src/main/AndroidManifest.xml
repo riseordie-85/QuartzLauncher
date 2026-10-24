@@ -6,6 +6,9 @@
     <!-- Lets "swipe down" open the notification shade -->
     <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
 
+    <!-- Only used if you turn on contacts in search (off by default; Android asks first). Read on the phone, never sent anywhere. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
     <uses-feature
         android:name="android.software.live_wallpaper"
         android:required="false" />

@@ -67,6 +67,7 @@ object Prefs {
     const val L_DOCK_COVER = "layout_dock_cover"
     const val L_DOCK_EXTRA = "layout_dock_extra"
     const val L_FOLDERS = "layout_folders"
+    const val DRAWER_TABS = "drawer_tabs"   // your custom drawer tabs, as JSON
 
     fun get(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)

@@ -32,8 +32,10 @@ data class AppEntry(
     val label: String,
     val icon: ImageBitmap,
     val component: ComponentName,
-    /** Android's app category (games, social, ...), used only to suggest folder names. */
+    /** Android's app category (games, social, ...), for folder names, automatic tabs and tab suggestions. */
     val category: Int = ApplicationInfo.CATEGORY_UNDEFINED,
+    /** When it was installed (ms), for "newest first" in the drawer. */
+    val installed: Long = 0L,
 )
 
 /** A folder on the home screen or dock. It sits in a slot as "folder:<id>". */
@@ -223,6 +225,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                         icon = info.getIcon(density).toBitmap(ICON_PX, ICON_PX).asImageBitmap(),
                         component = info.componentName,
                         category = info.applicationInfo.category,
+                        installed = info.firstInstallTime,
                     )
                 }.getOrNull()
             }

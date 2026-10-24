@@ -101,7 +101,8 @@ enum class ButtonIcon(val label: String) { QUARTZ("Quartz Q"), GRID("Grid"), DOT
 enum class DrawerView(val label: String) { ICONS("Icons"), LIST("List") }
 enum class DrawerScroll(val label: String) { VERTICAL("Vertical (infinite)"), HORIZONTAL("Horizontal (paged)") }
 enum class DrawerStyle(val label: String) { FULL("Full screen"), FLOATING("Floating box"), SIDE("Side list"), BOTTOM("Bottom popup") }
-enum class DrawerSort(val label: String) { ALPHA("Alphabetical"), INSTALLED("Install date"), CUSTOM("Custom order") }
+enum class DrawerSort(val label: String) { ALPHA("A to Z"), INSTALLED("Newest first"), CUSTOM("Custom order") }
+enum class TabMode(val label: String) { NONE("No tabs"), CUSTOM("My tabs"), AUTO("Automatic") }
 enum class IconShape(val label: String) {
     SYSTEM("App's own shape"), CIRCLE("Circle"), SQUIRCLE("Squircle"), ROUNDED("Rounded square"), SQUARE("Square"),
 }
@@ -196,6 +197,17 @@ object S {
     val drawerStyle = Setting("drawer.style", DrawerStyle.FULL, EnumCodec(DrawerStyle.entries.toTypedArray()), perScreen = true)
     val drawerSort = Setting("drawer.sort", DrawerSort.ALPHA, EnumCodec(DrawerSort.entries.toTypedArray()))
     val drawerTabs = Setting("drawer.tabs", false, BoolCodec)
+    val drawerTabMode = Setting("drawer.tabMode", TabMode.NONE, EnumCodec(TabMode.entries.toTypedArray()))
+    /** Columns fit the space on their own; off uses [drawerCols]. */
+    val drawerColsAuto = Setting("drawer.colsAuto", true, BoolCodec)
+    /** How much of the screen a floating, side or bottom drawer takes, 0.4–1. */
+    val drawerSize = Setting("drawer.size", 0.8f, FloatCodec, perScreen = true)
+    /** Letter (A to Z) or month (newest first) headings between apps. */
+    val drawerDividers = Setting("drawer.dividers", false, BoolCodec)
+    /** Off: the dock stays on screen while the drawer is open. */
+    val drawerHideDock = Setting("drawer.hideDock", false, BoolCodec)
+    val searchSettings = Setting("search.settings", true, BoolCodec)
+    val searchContacts = Setting("search.contacts", false, BoolCodec)
     val labelsDrawer = Setting("drawer.labels", true, BoolCodec)
 
     // Appearance
@@ -234,6 +246,7 @@ object S {
     /** Every per-screen setting, for counting what's synced vs split. */
     val perScreenSettings: List<Setting<*>> = listOf(
         gridCols, gridRows, labelsHome, iconSize, dockPosition, dockLength, dockAlign, dockIconAlign, dockIcons, drawerCols, drawerStyle,
+        drawerSize,
     )
 }
 
