@@ -250,7 +250,6 @@ object WallRenderer {
         val y0 = floor(clip.top / cell).toInt() - 1
         val y1 = ceil(clip.bottom / cell).toInt() + 1
         when (c.pattern) {
-            else -> Unit
             PatternStyle.DOTS -> {
                 pat.style = Paint.Style.FILL
                 for (r in y0..y1) for (col in x0..x1) {
@@ -299,6 +298,8 @@ object WallRenderer {
                     canvas.drawPath(path, pat)
                 }
             }
+            // None, and the faceted ones (drawn by Facets)
+            else -> Unit
         }
     }
 

@@ -1,6 +1,7 @@
 package com.tim.launcher.wallpaper
 
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
 import kotlin.math.PI
@@ -32,7 +33,8 @@ internal object Facets {
     private var maxAlpha = 0f
     private var seed = 0
 
-    private val paint = Paint().apply { isDither = true }
+    // White, so the facet colors come through unchanged even where the paint color is mixed in with them
+    private val paint = Paint().apply { isDither = true; color = Color.WHITE }
     private val sparkle = Paint(Paint.ANTI_ALIAS_FLAG)
 
     /** Draws [style] over a [w]×[h] virtual canvas, only where [clip] is on screen. */
