@@ -1,6 +1,8 @@
 package com.tim.launcher
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -116,7 +118,8 @@ fun PageOverview(vm: HomeViewModel, onAddPage: () -> Unit, onPagesChanged: () ->
                             dragging > target && page in target until dragging -> stepPx
                             else -> 0f
                         }
-                        val animatedShift by animateFloatAsState(shift, label = "shift")
+                        // Snap (not animate) back when the drag ends: the pages have just been reordered under these slots
+                        val animatedShift by animateFloatAsState(shift, if (dragging < 0) snap() else spring(), label = "shift")
                         PageCard(
                             vm = vm,
                             page = page,
@@ -132,7 +135,7 @@ fun PageOverview(vm: HomeViewModel, onAddPage: () -> Unit, onPagesChanged: () ->
                                     scaleX = s
                                     scaleY = s
                                 }
-                                .pointerInput(page, vm.pages) {
+                                .pointerInput(page, vm.pages, stepPx) {
                                     detectDragGesturesAfterLongPress(
                                         onDragStart = {
                                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)

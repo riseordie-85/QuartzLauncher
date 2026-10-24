@@ -357,7 +357,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
 
     LaunchedEffect(homeTick) {
         // Pressing Home while already home, with nothing open, returns to your home page
-        if (homeTick > 0 && !drawerOpen && !panelOpen && !menuOpen) vm.goHome()
+        if (homeTick > 0 && !drawerOpen && !panelOpen && !menuOpen && !overviewOpen) vm.goHome()
         drawerOpen = false
         panelOpen = false
         menuOpen = false
@@ -414,7 +414,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
                     onDragStart = { travel = 0f },
                     onDragEnd = {
                         val threshold = 80.dp.toPx()
-                        if (!drag.active && !drawerOpen && openFolder == null && SystemClock.uptimeMillis() > multiTouchUntil) {
+                        if (!drag.active && !drawerOpen && openFolder == null && !overviewOpen && SystemClock.uptimeMillis() > multiTouchUntil) {
                             if (travel < -threshold) run(store[S.gesture(GestureSlot.SWIPE_UP)])
                             if (travel > threshold) run(store[S.gesture(GestureSlot.SWIPE_DOWN)])
                         }

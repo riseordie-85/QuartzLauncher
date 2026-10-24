@@ -345,6 +345,14 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         saveFolders()
     }
 
+    /** New order for a folder's apps, after dragging them around inside it. Ignored if the apps don't match. */
+    fun reorderFolder(folderId: String, items: List<String>) {
+        val folder = folders[folderId] ?: return
+        if (items == folder.items || items.size != folder.items.size || items.toSet() != folder.items.toSet()) return
+        folders[folderId] = folder.copy(items = items)
+        saveFolders()
+    }
+
     fun setFolderBadge(folderId: String, badge: String) {
         val folder = folders[folderId] ?: return
         folders[folderId] = folder.copy(badge = badge)

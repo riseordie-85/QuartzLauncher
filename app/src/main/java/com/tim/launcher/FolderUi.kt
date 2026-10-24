@@ -51,6 +51,17 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.runtime.key
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -189,6 +200,8 @@ fun FolderOverlay(
     val look = LocalHomeLook.current
     var carried by remember { mutableStateOf(false) }
     val margin = 12.dp
+    val reorder = remember(folder.id) { FolderReorder(folder.items) }
+    LaunchedEffect(folder.items) { if (reorder.moving == null) reorder.order = folder.items }
 
     Box(
         Modifier
@@ -205,9 +218,9 @@ fun FolderOverlay(
                     .background(look.drawerBg)
                     .pointerInput(Unit) { detectTapGestures { } } // taps inside don't close it
                 when {
-                    style == FolderOpen.ROW -> FolderRow(folder, vm, drag, rowDirection, panelMods, { carried = true }, onClose)
+                    style == FolderOpen.ROW -> FolderRow(folder, vm, drag, reorder, rowDirection, panelMods, { carried = true }, onClose)
                     else -> FolderPanel(
-                        folder, vm, drag,
+                        folder, vm, drag, reorder,
                         full = style == FolderOpen.FULL,
                         view = view,
                         columns = columns,
@@ -263,6 +276,7 @@ private fun FolderPanel(
     folder: Folder,
     vm: HomeViewModel,
     drag: DragController,
+    reorder: FolderReorder,
     full: Boolean,
     view: FolderView,
     columns: Int,
@@ -281,20 +295,20 @@ private fun FolderPanel(
         FolderHeader(folder, vm, onClose)
         Spacer(Modifier.height(12.dp))
         Column(
-            Modifier.verticalScroll(rememberScrollState()),
+            Modifier
+                .onGloballyPositioned { reorder.area = it.boundsInRoot() }
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (view == FolderView.GRID) {
-                folder.items.chunked(cols).forEach { row ->
-                    Row {
-                        row.forEach { key ->
-                            FolderItem(folder.id, key, vm, drag, Modifier.width(cell).height(cell + 8.dp), list = false, onPickUp, onClose)
-                        }
+                FolderGrid(cols, cell, cell + 8.dp) {
+                    reorder.order.forEach { k ->
+                        key(k) { FolderItem(folder.id, k, vm, drag, reorder, Modifier, list = false, onPickUp, onClose) }
                     }
                 }
             } else {
-                folder.items.forEach { key ->
-                    FolderItem(folder.id, key, vm, drag, Modifier.fillMaxWidth().height(56.dp), list = true, onPickUp, onClose)
+                reorder.order.forEach { k ->
+                    key(k) { FolderItem(folder.id, k, vm, drag, reorder, Modifier.fillMaxWidth().height(56.dp), list = true, onPickUp, onClose) }
                 }
             }
         }
@@ -307,6 +321,7 @@ private fun FolderRow(
     folder: Folder,
     vm: HomeViewModel,
     drag: DragController,
+    reorder: FolderReorder,
     direction: RowDirection,
     modifier: Modifier,
     onPickUp: () -> Unit,
@@ -314,13 +329,104 @@ private fun FolderRow(
 ) {
     val cell = 72.dp
     if (direction == RowDirection.HORIZONTAL) {
-        Row(modifier.horizontalScroll(rememberScrollState()).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            folder.items.forEach { key -> FolderItem(folder.id, key, vm, drag, Modifier.size(cell), list = false, onPickUp, onClose, labels = false) }
+        Row(
+            modifier.onGloballyPositioned { reorder.area = it.boundsInRoot() }.horizontalScroll(rememberScrollState()).padding(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            reorder.order.forEach { k ->
+                key(k) { FolderItem(folder.id, k, vm, drag, reorder, Modifier.size(cell), list = false, onPickUp, onClose, labels = false) }
+            }
+            FolderRowOptions(folder, vm, onClose)
         }
     } else {
-        Column(modifier.verticalScroll(rememberScrollState()).padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            folder.items.forEach { key -> FolderItem(folder.id, key, vm, drag, Modifier.size(cell), list = false, onPickUp, onClose, labels = false) }
+        Column(
+            modifier.onGloballyPositioned { reorder.area = it.boundsInRoot() }.verticalScroll(rememberScrollState()).padding(6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            reorder.order.forEach { k ->
+                key(k) { FolderItem(folder.id, k, vm, drag, reorder, Modifier.size(cell), list = false, onPickUp, onClose, labels = false) }
+            }
+            FolderRowOptions(folder, vm, onClose)
         }
+    }
+}
+
+/**
+ * The expanding row has no room for a header, so its last spot is a small options button: Rename and Badge open a
+ * dialog, Remove folder puts the apps back on the screen.
+ */
+@Composable
+private fun FolderRowOptions(folder: Folder, vm: HomeViewModel, onClose: () -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf(false) }
+    var badges by remember { mutableStateOf(false) }
+    Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.size(40.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.12f)).clickable { menu = true },
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Rounded.MoreHoriz, contentDescription = "Folder options", tint = Color.White) }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; renaming = true })
+            DropdownMenuItem(text = { Text("Badge") }, onClick = { menu = false; badges = true })
+            DropdownMenuItem(text = { Text("Remove folder", color = Q.Danger) }, onClick = {
+                menu = false
+                vm.dissolveFolder(folder.id)
+                onClose()
+            })
+        }
+    }
+
+    if (renaming) {
+        var text by remember { mutableStateOf(TextFieldValue(folder.name, TextRange(0, folder.name.length))) }
+        val focus = remember { FocusRequester() }
+        LaunchedEffect(Unit) { focus.requestFocus() }
+        val done = {
+            vm.renameFolder(folder.id, text.text)
+            renaming = false
+        }
+        AlertDialog(
+            onDismissRequest = { renaming = false },
+            title = { Text("Rename folder") },
+            text = {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = if (it.text.length <= 30) it else it.copy(text = it.text.take(30)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { done() }),
+                    modifier = Modifier.focusRequester(focus),
+                )
+            },
+            confirmButton = { TextButton(onClick = { done() }) { Text("Save") } },
+            dismissButton = { TextButton(onClick = { renaming = false }) { Text("Cancel") } },
+        )
+    }
+
+    if (badges) {
+        AlertDialog(
+            onDismissRequest = { badges = false },
+            title = { Text("Folder badge") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FolderBadges.chunked(4).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            row.forEach { (name, icon) ->
+                                val on = name == folder.badge
+                                Box(
+                                    Modifier
+                                        .size(44.dp)
+                                        .clip(CircleShape)
+                                        .background(if (on) Q.Accent else Color.White.copy(alpha = 0.12f))
+                                        .clickable { vm.setFolderBadge(folder.id, name) },
+                                    contentAlignment = Alignment.Center,
+                                ) { Icon(icon, contentDescription = name, tint = Color.White, modifier = Modifier.size(22.dp)) }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { badges = false }) { Text("Done") } },
+        )
     }
 }
 
@@ -402,12 +508,43 @@ private fun FolderHeader(folder: Folder, vm: HomeViewModel, onClose: () -> Unit)
     }
 }
 
+/**
+ * Moving apps around inside an open folder. Drag an app over another to swap places; drag it past the edge of the
+ * folder and it's handed off to the home screen, where you can drop it anywhere.
+ */
+class FolderReorder(initial: List<String>) {
+    var order by mutableStateOf(initial)
+    var moving by mutableStateOf<String?>(null)
+    var pointer = Offset.Zero
+    var handedOff = false
+    /** The app we last swapped with. Skipped until the pointer leaves it, so stale bounds can't swap it straight back. */
+    var lastOver: String? = null
+    /** The apps area of the open folder, in screen coordinates. */
+    var area: Rect = Rect.Zero
+    val itemBounds = HashMap<String, Rect>()
+}
+
+/** A grid where every app is a direct child, so an app keeps its identity (and its drag) as it moves between rows. */
+@Composable
+private fun FolderGrid(cols: Int, cellW: Dp, cellH: Dp, content: @Composable () -> Unit) {
+    Layout(content) { measurables, _ ->
+        val w = cellW.roundToPx()
+        val h = cellH.roundToPx()
+        val placeables = measurables.map { it.measure(Constraints.fixed(w, h)) }
+        val rows = ((placeables.size + cols - 1) / cols).coerceAtLeast(1)
+        layout(w * cols, h * rows) {
+            placeables.forEachIndexed { i, p -> p.place((i % cols) * w, (i / cols) * h) }
+        }
+    }
+}
+
 @Composable
 private fun FolderItem(
     folderId: String,
     key: String,
     vm: HomeViewModel,
     drag: DragController,
+    reorder: FolderReorder,
     modifier: Modifier,
     list: Boolean,
     onPickUp: () -> Unit,
@@ -417,9 +554,22 @@ private fun FolderItem(
     val app = vm.apps[key] ?: return
     val haptics = LocalHapticFeedback.current
     val bounds = remember { arrayOf(Rect.Zero) }
+    DisposableEffect(key) {
+        onDispose { reorder.itemBounds.remove(key) }
+    }
+    val lifted = reorder.moving == key
     Box(
         modifier
-            .onGloballyPositioned { bounds[0] = it.boundsInRoot() }
+            .onGloballyPositioned {
+                bounds[0] = it.boundsInRoot()
+                reorder.itemBounds[key] = bounds[0]
+            }
+            .graphicsLayer {
+                val s = if (lifted) 1.12f else 1f
+                scaleX = s
+                scaleY = s
+                alpha = if (lifted) 0.85f else 1f
+            }
             .clip(RoundedCornerShape(14.dp))
             .pointerInput(key) {
                 detectTapGestures(
@@ -434,20 +584,55 @@ private fun FolderItem(
                 detectDragGesturesAfterLongPress(
                     onDragStart = { local ->
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onPickUp()
-                        drag.startFromFolder(folderId, key, bounds[0].topLeft + local)
+                        reorder.moving = key
+                        reorder.handedOff = false
+                        reorder.lastOver = null
+                        reorder.pointer = bounds[0].topLeft + local
                     },
                     onDrag = { change, amount ->
                         change.consume()
-                        drag.moveBy(amount)
+                        if (reorder.handedOff) {
+                            drag.moveBy(amount)
+                        } else {
+                            reorder.pointer += amount
+                            if (reorder.area != Rect.Zero && !reorder.area.contains(reorder.pointer)) {
+                                // Out of the folder: keep the new order, then carry the app to the home screen
+                                vm.reorderFolder(folderId, reorder.order)
+                                reorder.handedOff = true
+                                onPickUp()
+                                drag.startFromFolder(folderId, key, reorder.pointer)
+                            } else {
+                                val over = reorder.itemBounds.entries
+                                    .firstOrNull { it.key != key && it.value.contains(reorder.pointer) }?.key
+                                if (over != reorder.lastOver) reorder.lastOver = null
+                                if (over != null && over != reorder.lastOver) {
+                                    reorder.lastOver = over
+                                    val next = reorder.order.toMutableList()
+                                    val to = next.indexOf(over)
+                                    next.remove(key)
+                                    next.add(to, key)
+                                    reorder.order = next
+                                }
+                            }
+                        }
                     },
                     onDragEnd = {
-                        drag.drop(vm)
-                        onClose()
+                        if (reorder.handedOff) {
+                            drag.drop(vm)
+                            onClose()
+                        } else {
+                            vm.reorderFolder(folderId, reorder.order)
+                        }
+                        reorder.moving = null
                     },
                     onDragCancel = {
-                        drag.cancel()
-                        onClose()
+                        if (reorder.handedOff) {
+                            drag.cancel()
+                            onClose()
+                        } else {
+                            vm.reorderFolder(folderId, reorder.order)
+                        }
+                        reorder.moving = null
                     },
                 )
             },
