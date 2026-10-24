@@ -211,7 +211,7 @@ private fun SwapHandle(vertical: Boolean) {
     val look = LocalHomeLook.current
     val ink = LocalLabelColor.current
     Box(
-        (if (vertical) Modifier.fillMaxHeight().width(20.dp) else Modifier.fillMaxWidth().height(20.dp)),
+        (if (vertical) Modifier.fillMaxHeight().width(24.dp) else Modifier.fillMaxWidth().height(24.dp)),
         contentAlignment = Alignment.Center,
     ) {
         Box(

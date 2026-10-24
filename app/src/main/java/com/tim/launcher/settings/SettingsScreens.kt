@@ -448,7 +448,7 @@ fun DockStyleControls(store: SettingsStore) {
     if (store[S.dockFill] == DockFill.GRADIENT) {
         ColorEditor("Gradient to", store[S.dockColor2], openColor, { openColor = !openColor }) { store.set(S.dockColor2, value = it) }
     }
-    SettingRow("Pattern", "Lines up with the same pattern on the wallpaper") {
+    SettingRow("Pattern", "Cut into the dock's glass") {
         Dropdown(store[S.dockPattern], PatternStyle.entries, { if (it.faceted) "◆ ${it.label}" else it.label }) {
             store.set(S.dockPattern, value = it)
         }

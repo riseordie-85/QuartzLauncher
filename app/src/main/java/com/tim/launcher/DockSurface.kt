@@ -277,16 +277,16 @@ fun Modifier.dockSurface(style: DockStyle, tint: Color, edge: DockPosition, ink:
                     // On light glass a faint dark line keeps the edge visible under the white rim
                     if (lightGlass) drawOutline(outline, Color.Black.copy(alpha = 0.10f), style = Stroke(px * 2f))
                     fun w(a: Float) = Color.White.copy(alpha = (a * k).coerceIn(0f, 1f))
-                    // Brightest at the top left, a second glint at the bottom right, dimmer between
-                    val rim = Brush.sweepGradient(
-                        0f to w(0.30f),
-                        0.125f to w(0.62f),
-                        0.25f to w(0.18f),
-                        0.5f to w(0.30f),
-                        0.625f to w(0.95f),
-                        0.75f to w(0.55f),
-                        1f to w(0.30f),
-                        center = Offset(size.width / 2f, size.height / 2f),
+                    // Brightest around the top-left corner, a second glint at the bottom right, dimmer between. Runs
+                    // corner to corner, so a long dock gets its light on the curved ends rather than mid-edge.
+                    val rim = Brush.linearGradient(
+                        0f to w(0.95f),
+                        0.3f to w(0.32f),
+                        0.5f to w(0.15f),
+                        0.75f to w(0.30f),
+                        1f to w(0.75f),
+                        start = Offset.Zero,
+                        end = Offset(size.width, size.height),
                     )
                     drawOutline(outline, rim, style = Stroke(px * if (bright) 3.2f else 2.4f))
                     if (bright) {
