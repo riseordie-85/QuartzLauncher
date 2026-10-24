@@ -351,6 +351,35 @@ fun <T> Segmented(selected: T, options: List<T>, label: (T) -> String, modifier:
     }
 }
 
+/** Big tabs across the top of a screen, for switching between its main sections. */
+@Composable
+fun <T> Tabs(selected: T, options: List<T>, label: (T) -> String, modifier: Modifier = Modifier, onSelect: (T) -> Unit) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(CircleShape)
+            .background(Q.Glass)
+            .border(1.dp, Q.Edge, CircleShape)
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        options.forEach { option ->
+            val on = option == selected
+            Box(
+                Modifier
+                    .weight(1f)
+                    .clip(CircleShape)
+                    .background(if (on) Q.Accent else Color.Transparent)
+                    .clickable { onSelect(option) }
+                    .padding(vertical = 13.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(label(option), color = Q.Text, fontSize = 16.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium)
+            }
+        }
+    }
+}
+
 /** A large tappable choice card, used by the setup wizard. */
 @Composable
 fun ChoiceCard(title: String, subtitle: String? = null, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {

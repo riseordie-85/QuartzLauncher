@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -46,17 +46,19 @@ fun DockSample(store: SettingsStore, modifier: Modifier = Modifier) {
     Box(
         modifier
             .fillMaxWidth()
-            .height(112.dp)
+            .heightIn(min = 112.dp)
             .clip(RoundedCornerShape(18.dp))
             .background(Brush.linearGradient(listOf(Color(0xFF3B2A7A), Color(0xFF244F9E), Color(0xFF14808A), Color(0xFF4E9F3D))))
             .padding(if (style.floating || !style.background) 14.dp else 0.dp),
         contentAlignment = Alignment.BottomCenter,
     ) {
+        // Same depth rule as the real dock: icons plus padding, so the slant cuts back by the same amount
+        val depth = 46.dp + 20.dp + style.padding.dp * 2 + style.waveRoom
         Row(
             Modifier
                 .fillMaxWidth()
-                .dockSurface(style, panel, DockPosition.BOTTOM, ink)
-                .padding(horizontal = style.endRoom)
+                .dockSurface(style, panel, DockPosition.BOTTOM, ink, style.slant(depth))
+                .padding(horizontal = style.endRoom(depth))
                 .padding(top = style.waveRoom)
                 .padding(vertical = 10.dp + style.padding.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,

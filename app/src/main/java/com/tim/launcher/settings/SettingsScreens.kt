@@ -68,6 +68,7 @@ import com.tim.launcher.ui.RowDivider
 import com.tim.launcher.ui.ScreenTitle
 import com.tim.launcher.ui.SectionLabel
 import com.tim.launcher.ui.Segmented
+import com.tim.launcher.ui.Tabs
 import com.tim.launcher.ui.SettingRow
 import com.tim.launcher.ui.SliderRow
 import com.tim.launcher.ui.Stepper
@@ -79,7 +80,13 @@ import kotlin.math.roundToInt
 // ---- Shared pieces ----
 
 @Composable
-internal fun ScreenScaffold(ctx: SettingsContext, showBack: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
+internal fun ScreenScaffold(
+    ctx: SettingsContext,
+    showBack: Boolean = true,
+    /** Stays put at the top while the rest scrolls (a preview, tabs). */
+    pinned: (@Composable ColumnScope.() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     Column(
         Modifier
             .fillMaxSize()
@@ -93,6 +100,11 @@ internal fun ScreenScaffold(ctx: SettingsContext, showBack: Boolean = true, cont
                 ) {
                     Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = Q.Text)
                 }
+            }
+        }
+        if (pinned != null) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(Modifier.widthIn(max = 720.dp).fillMaxWidth(), content = pinned)
             }
         }
         Column(
@@ -326,10 +338,28 @@ fun DockSettings(ctx: SettingsContext) {
     val store = ctx.store
     val scope = ctx.editing
     val position = store[S.dockPosition, scope]
-    ScreenScaffold(ctx) {
-        ScreenTitle("Dock")
-        ScreenPicker(ctx)
-
+    var tab by remember { mutableStateOf(DockTab.last) }
+    ScreenScaffold(
+        ctx,
+        pinned = {
+            ScreenTitle("Dock")
+            Tabs(tab, DockTab.entries, { it.label }, Modifier.padding(top = 14.dp)) {
+                tab = it
+                DockTab.last = it
+            }
+            // The preview stays in view while you scroll through the settings below it
+            if (tab == DockTab.PLACEMENT) {
+                ScreenPicker(ctx)
+            } else {
+                DockSample(store, Modifier.padding(top = 14.dp))
+            }
+            Spacer(Modifier.height(4.dp))
+        },
+    ) {
+        if (tab == DockTab.STYLE) {
+            DockStyleSettings(ctx)
+            return@ScreenScaffold
+        }
         SectionLabel("Placement")
         GlassPanel {
             SettingRow("Position", link = ctx.link(S.dockPosition)) {
@@ -406,25 +436,60 @@ fun DockSettings(ctx: SettingsContext) {
             }
         }
 
-        SectionLabel("Style")
-        GlassPanel {
-            DockSample(store, Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp))
-            SettingRow("Background") { Toggle(store[S.dockBackground]) { store.set(S.dockBackground, value = it) } }
-            if (store[S.dockBackground]) {
-                DockStyleControls(store)
-            }
-            RowDivider()
-            SettingRow("App names") { Toggle(store[S.labelsDock]) { store.set(S.labelsDock, value = it) } }
-            RowDivider()
-            SettingRow("Color and glass", "Shared with the app drawer and folders", onClick = { ctx.go(Route.APPEARANCE) })
-        }
     }
 }
 
-/** Shape, floating, fill, pattern, edge and padding. Shared by settings and setup. */
+/** The dock screen's two tabs. Remembered while Quartz is open, so Appearance can send you straight to Style. */
+enum class DockTab(val label: String) {
+    PLACEMENT("Placement"), STYLE("Style");
+
+    companion object {
+        var last = PLACEMENT
+    }
+}
+
+/** The Style tab: shape, then color and glass (shared with the app drawer and folders). */
 @Composable
-fun DockStyleControls(store: SettingsStore) {
-    var openColor by remember { mutableStateOf(false) }
+private fun ColumnScope.DockStyleSettings(ctx: SettingsContext) {
+    val store = ctx.store
+    val context = LocalContext.current
+    var quartzWallpaper by remember { mutableStateOf(WallCache.isActive(context)) }
+    LifecycleResumeEffect(Unit) {
+        quartzWallpaper = WallCache.isActive(context)
+        onPauseOrDispose { }
+    }
+    val position = store.dockPositionOn(ctx.editing)
+    val vertical = position == DockPosition.LEFT || position == DockPosition.RIGHT
+
+    SectionLabel("Shape")
+    GlassPanel {
+        SettingRow("Background") { Toggle(store[S.dockBackground]) { store.set(S.dockBackground, value = it) } }
+        if (store[S.dockBackground]) DockStyleControls(store, vertical)
+        RowDivider()
+        SettingRow("App names") { Toggle(store[S.labelsDock]) { store.set(S.labelsDock, value = it) } }
+    }
+
+    if (store[S.dockBackground]) {
+        SectionLabel("Color and glass")
+        GlassPanel {
+            DockColorControls(store)
+            if (!quartzWallpaper) {
+                SettingRow("Blur needs the Quartz wallpaper", "Glass blurs the wallpaper Quartz draws", onClick = { ctx.go(Route.WALLPAPER) })
+            }
+        }
+        Text(
+            "The color, see-through and blur are shared with the app drawer and folders, so they all match.",
+            color = Q.TextFaint,
+            fontSize = 12.sp,
+            lineHeight = 17.sp,
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp),
+        )
+    }
+}
+
+/** Shape, roundness, floating, edge and padding. Shared by settings and setup. */
+@Composable
+fun DockStyleControls(store: SettingsStore, vertical: Boolean = false) {
     RowDivider()
     SettingRow("Shape") {
         Dropdown(store[S.dockOutline], DockOutline.entries, { it.label }) { store.set(S.dockOutline, value = it) }
@@ -438,16 +503,44 @@ fun DockStyleControls(store: SettingsStore) {
         "Floating",
         if (store[S.dockFloating]) "Sits a little in from the edge" else "Runs to the screen edge, like a taskbar",
     ) { Toggle(store[S.dockFloating]) { store.set(S.dockFloating, value = it) } }
+    if (store[S.dockOutline] != DockOutline.FADE) {
+        RowDivider()
+        SettingRow("Edge", "Soft and bright light catch the glass like a lit rim") {
+            Dropdown(store[S.dockEdge], DockEdge.entries, { it.label }) { store.set(S.dockEdge, value = it) }
+        }
+    }
     RowDivider()
+    val across = store[S.dockPadding]
+    SliderRow(if (vertical) "Padding left and right" else "Padding above and below", across.toFloat(), 0f..16f, if (across == 0) "None" else "$across") {
+        store.set(S.dockPadding, value = it.roundToInt())
+    }
+    val ends = store[S.dockPaddingEnds]
+    SliderRow(if (vertical) "Padding top and bottom" else "Padding left and right", ends.toFloat(), 0f..32f, if (ends == 0) "None" else "$ends") {
+        store.set(S.dockPaddingEnds, value = it.roundToInt())
+    }
+}
+
+/** Color (start of the gradient too), fill, pattern, see-through and blur. Shared by settings and setup. */
+@Composable
+fun DockColorControls(store: SettingsStore) {
+    var open by remember { mutableStateOf<String?>(null) }
+    fun toggle(id: String) { open = if (open == id) null else id }
+    val gradient = store[S.dockFill] == DockFill.GRADIENT
     Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
         Text("Fill", color = Q.Text, fontSize = 16.sp, modifier = Modifier.padding(bottom = 10.dp))
-        Segmented(store[S.dockFill], DockFill.entries, { if (it == DockFill.GLASS) "Glass color" else it.label }) {
+        Segmented(store[S.dockFill], DockFill.entries, { if (it == DockFill.GLASS) "One color" else it.label }) {
             store.set(S.dockFill, value = it)
         }
     }
-    if (store[S.dockFill] == DockFill.GRADIENT) {
-        ColorEditor("Gradient to", store[S.dockColor2], openColor, { openColor = !openColor }) { store.set(S.dockColor2, value = it) }
+    RowDivider()
+    ColorEditor(if (gradient) "Gradient from" else "Color", store[S.panelColor], open == "from", { toggle("from") }) {
+        store.set(S.panelColor, value = it)
     }
+    if (gradient) {
+        ColorEditor("Gradient to", store[S.dockColor2], open == "to", { toggle("to") }) { store.set(S.dockColor2, value = it) }
+    }
+    GlassSliders(store)
+    RowDivider()
     SettingRow("Pattern", "Cut into the dock's glass") {
         Dropdown(store[S.dockPattern], PatternStyle.entries, { if (it.faceted) "◆ ${it.label}" else it.label }) {
             store.set(S.dockPattern, value = it)
@@ -457,14 +550,6 @@ fun DockStyleControls(store: SettingsStore) {
         val p = store[S.dockPatternStrength]
         SliderRow("Pattern strength", p, 0.05f..0.6f, "${(p * 100).roundToInt()}%") { store.set(S.dockPatternStrength, value = it) }
     }
-    if (store[S.dockOutline] != DockOutline.FADE) {
-        RowDivider()
-        SettingRow("Edge", "Soft and bright light catch the glass like a lit rim") {
-            Dropdown(store[S.dockEdge], DockEdge.entries, { it.label }) { store.set(S.dockEdge, value = it) }
-        }
-    }
-    val pad = store[S.dockPadding]
-    SliderRow("Padding", pad.toFloat(), 0f..16f, if (pad == 0) "None" else "$pad") { store.set(S.dockPadding, value = it.roundToInt()) }
 }
 
 // ---- App drawer ----
@@ -598,20 +683,16 @@ fun AppearanceSettings(ctx: SettingsContext) {
         onPauseOrDispose { }
     }
     ScreenScaffold(ctx) {
-        ScreenTitle("Appearance", "Dock and app drawer share one glass style")
+        ScreenTitle("Appearance", "Icons, badges and the clock")
         Box(Modifier.fillMaxWidth().padding(top = 16.dp)) {
             DevicePreview(previewLook(store, ctx.type), height = 130.dp)
         }
 
         SectionLabel("Glass")
         GlassPanel {
-            DockSample(store, Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp))
-            Text("Color", color = Q.Text, fontSize = 16.sp, modifier = Modifier.padding(start = 20.dp, top = 14.dp))
-            SwatchRow(store[S.panelColor], PanelColors) { store.set(S.panelColor, value = it) }
-            RowDivider()
-            GlassSliders(store)
-            if (!quartzWallpaper) {
-                SettingRow("Blur needs the Quartz wallpaper", "Glass blurs the wallpaper Quartz draws", onClick = { ctx.go(Route.WALLPAPER) })
+            NavRow("Color and glass", "Now in Dock › Style, next to the dock preview") {
+                DockTab.last = DockTab.STYLE
+                ctx.go(Route.DOCK)
             }
         }
 

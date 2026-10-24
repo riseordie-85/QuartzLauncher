@@ -33,6 +33,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.tim.launcher.settings.DockEdge
@@ -62,11 +63,24 @@ data class DockStyle(
     val pattern: PatternStyle = PatternStyle.NONE,
     val patternStrength: Float = 0.3f,
     val edge: DockEdge = DockEdge.SOFT,
-    /** Extra room around the icons, in dp. */
+    /** Extra room across the dock (above and below a bottom dock's icons), in dp. */
     val padding: Int = 0,
+    /** Extra room at the dock's two ends, in dp. */
+    val paddingEnds: Int = 0,
 ) {
-    /** A slanted or pointed dock is narrower at its ends, so the end icons need room. */
-    val endRoom get() = if (background && (outline == DockOutline.SLANTED || outline == DockOutline.POINTED)) 26.dp else 0.dp
+    /**
+     * How far a slanted or pointed dock's inner edge is cut back at each end, for a dock whose icons and padding
+     * are [contentThick] deep.
+     */
+    fun slant(contentThick: Dp): Dp = when {
+        !background -> 0.dp
+        outline == DockOutline.SLANTED -> contentThick * 0.5f
+        outline == DockOutline.POINTED -> contentThick * 0.42f
+        else -> 0.dp
+    }
+
+    /** Room at each end: the cut-back (so the end icons never hang over the slant) plus your end padding. */
+    fun endRoom(contentThick: Dp): Dp = slant(contentThick) + paddingEnds.dp
 
     /** A wavy inner edge needs a little room so it doesn't run through the icons. */
     val waveRoom get() = if (background && outline == DockOutline.WAVE) 8.dp else 0.dp
@@ -83,6 +97,7 @@ data class DockStyle(
             patternStrength = store[S.dockPatternStrength],
             edge = store[S.dockEdge],
             padding = store[S.dockPadding],
+            paddingEnds = store[S.dockPaddingEnds],
         )
     }
 }
@@ -96,6 +111,8 @@ class DockOutlineShape(
     private val radiusDp: Float,
     private val edge: DockPosition,
     private val flush: Boolean,
+    /** How far a slanted or pointed dock is cut back at each end. */
+    private val slantDp: Float = 0f,
 ) : Shape {
 
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
@@ -128,7 +145,7 @@ class DockOutlineShape(
                 Outline.Rounded(rr)
             }
             DockOutline.SLANTED -> {
-                val s = min(thick * 0.55f, length / 4f)
+                val s = min(with(density) { slantDp.dp.toPx() }, length / 4f)
                 Outline.Generic(
                     rounded(
                         listOf(at(s, 0f), at(length - s, 0f), at(length, thick), at(0f, thick)),
@@ -137,7 +154,7 @@ class DockOutlineShape(
                 )
             }
             DockOutline.POINTED -> {
-                val p = min(thick * 0.45f, length / 4f)
+                val p = min(with(density) { slantDp.dp.toPx() }, length / 4f)
                 val h = r * 0.5f
                 // Flush, the two corners on the screen edge stay square
                 val (points, radii) = if (flush) {
@@ -205,13 +222,13 @@ class DockOutlineShape(
  * rim of light brightest at the top left, like light catching the edge of glass. [ink] is the text color on the
  * dock, which says whether the glass is light or dark.
  */
-fun Modifier.dockSurface(style: DockStyle, tint: Color, edge: DockPosition, ink: Color): Modifier = composed {
+fun Modifier.dockSurface(style: DockStyle, tint: Color, edge: DockPosition, ink: Color, slant: Dp = 0.dp): Modifier = composed {
     val glass = LocalGlass.current
     val image = remember(glass) { glass?.bitmap?.asImageBitmap() }
     var origin by remember { mutableStateOf(Offset.Zero) }
     val view = LocalView.current
-    val shape = remember(style.outline, style.radius, edge, style.floating) {
-        DockOutlineShape(style.outline, style.radius.toFloat(), edge, flush = !style.floating)
+    val shape = remember(style.outline, style.radius, edge, style.floating, slant) {
+        DockOutlineShape(style.outline, style.radius.toFloat(), edge, flush = !style.floating, slantDp = slant.value)
     }
     val fade = style.outline == DockOutline.FADE
     if (!style.background) this else this

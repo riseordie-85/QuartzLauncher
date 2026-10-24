@@ -269,22 +269,24 @@ private fun DockBar(
     // An empty dock still keeps its room from the screen edge (the content no longer has insets on that side)
     if (count == 0) { Spacer(modifier.then(inner)); return }
     val style = look.dock
-    val background = Modifier.dockSurface(style, look.panel, edge, look.onPanel).then(inner)
 
     CompositionLocalProvider(LocalLabelColor provides look.onPanel) {
 
     if (!vertical) {
         BoxWithConstraints(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             val cellW = 72.dp
-            // The padding at the ends counts too, or a slanted dock squeezes its last icons instead of scrolling
-            val scrolls = cellW * count + (8.dp + style.endRoom) * 2 > maxWidth
             val iconSize = 56.dp
             val cellH = iconSize + if (look.labelsDock) 36.dp else 20.dp
+            val depth = cellH + style.padding.dp * 2 + style.waveRoom
+            val ends = 8.dp + style.endRoom(depth)
+            // The padding at the ends counts too, or a slanted dock squeezes its last icons instead of scrolling
+            val scrolls = cellW * count + ends * 2 > maxWidth
+            val background = Modifier.dockSurface(style, look.panel, edge, look.onPanel, style.slant(depth)).then(inner)
             Row(
                 (if (full || scrolls) Modifier.fillMaxWidth() else Modifier)
                     .then(background)
                     .then(if (scrolls) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
-                    .padding(horizontal = 8.dp + style.endRoom)
+                    .padding(horizontal = ends)
                     .padding(vertical = style.padding.dp)
                     .padding(
                         top = if (edge == DockPosition.BOTTOM) style.waveRoom else 0.dp,
@@ -318,16 +320,19 @@ private fun DockBar(
             },
         ) {
             val cellH = 80.dp
-            val scrolls = cellH * count + (8.dp + style.endRoom) * 2 > maxHeight
             val iconSize = 52.dp
             val cellW = 72.dp
+            val depth = cellW + style.padding.dp * 2 + style.waveRoom
+            val ends = 8.dp + style.endRoom(depth)
+            val scrolls = cellH * count + ends * 2 > maxHeight
+            val background = Modifier.dockSurface(style, look.panel, edge, look.onPanel, style.slant(depth)).then(inner)
             Column(
                 (if (full || scrolls) Modifier.fillMaxHeight() else Modifier)
                     .then(background)
                     // Padding and wave room widen the dock rather than squeezing the icons
                     .width(cellW + style.padding.dp * 2 + style.waveRoom)
                     .then(if (scrolls) Modifier.verticalScroll(rememberScrollState()) else Modifier)
-                    .padding(vertical = 8.dp + style.endRoom)
+                    .padding(vertical = ends)
                     .padding(horizontal = style.padding.dp)
                     .padding(
                         start = if (edge == DockPosition.RIGHT) style.waveRoom else 0.dp,

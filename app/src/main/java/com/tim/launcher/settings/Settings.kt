@@ -177,8 +177,10 @@ object S {
     val dockPattern = Setting("dock.pattern", PatternStyle.NONE, EnumCodec(PatternStyle.entries.toTypedArray()))
     val dockPatternStrength = Setting("dock.patternStrength", 0.3f, FloatCodec)
     val dockEdge = Setting("dock.edge", DockEdge.SOFT, EnumCodec(DockEdge.entries.toTypedArray()))
-    /** Extra room around the icons, in dp. */
+    /** Extra room across the dock (above and below the icons on a bottom dock), in dp. */
     val dockPadding = Setting("dock.padding", 0, IntCodec)
+    /** Extra room at the dock's two ends, in dp. */
+    val dockPaddingEnds = Setting("dock.paddingEnds", 0, IntCodec)
     val swapHandle = Setting("dock.swapHandle", false, BoolCodec)
     /** Flipped by the swap handle or gesture: left ↔ right, top ↔ bottom, on every screen. */
     val dockSwapped = Setting("dock.swapped", false, BoolCodec)
