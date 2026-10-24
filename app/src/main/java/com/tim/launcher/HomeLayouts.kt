@@ -152,31 +152,43 @@ private fun unfoldedDock(vm: HomeViewModel): List<SlotRef> =
     coverDock(vm) + vm.dockExtra.indices.map { SlotRef(Area.DOCK_EXTRA, it) }
 
 /**
- * The dock. "Full" spans the edge; "fit" is only as long as its icons (side docks sit at the top, middle or
- * bottom). If the icons don't fit, the dock scrolls. The apps button sits at the chosen end.
+ * The dock. It only holds the icons you've put in it, so it shrinks when it isn't full; while you drag an icon,
+ * one empty spot appears at the end to drop into.
+ *  - Full: spans the edge, with the icons at the start, middle or end.
+ *  - Fit: only as long as its icons, icons centered. A fit side dock sits at the top, middle or bottom.
+ * If the icons don't fit, the dock scrolls. The apps button sits at the chosen end.
  */
 @Composable
-private fun DockBar(refs: List<SlotRef>, vertical: Boolean, vm: HomeViewModel, drag: DragController, modifier: Modifier) {
+private fun DockBar(slots: List<SlotRef>, vertical: Boolean, vm: HomeViewModel, drag: DragController, modifier: Modifier) {
     val look = LocalHomeLook.current
     val full = look.dockLength == DockLength.FULL
     val button = look.button
-    val count = (refs.size + if (button != null) 1 else 0).coerceAtLeast(1)
+    val filled = slots.filter { vm.keyAt(it) != null }
+    val dropSpot = if (drag.active) slots.firstOrNull { vm.keyAt(it) == null } else null
+    val refs = if (dropSpot != null) filled + dropSpot else filled
+    val count = refs.size + if (button != null) 1 else 0
+    if (count == 0) return
     val background = Modifier
         .clip(look.dockShape)
         .background(if (look.dockBackground) look.panel else Color.Transparent)
 
     if (!vertical) {
         BoxWithConstraints(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            val cellW = if (full) (maxWidth / count).coerceIn(56.dp, 88.dp) else 64.dp
+            val cellW = 72.dp
             val scrolls = cellW * count > maxWidth
-            val iconSize = minOf(cellW * 0.7f, 56.dp)
+            val iconSize = 56.dp
             val cellH = iconSize + if (look.labelsDock) 36.dp else 20.dp
             Row(
-                (if (full || scrolls) Modifier.fillMaxWidth() else Modifier.widthIn(max = maxWidth))
+                (if (full || scrolls) Modifier.fillMaxWidth() else Modifier)
                     .then(background)
                     .then(if (scrolls) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
-                    .padding(horizontal = if (full) 0.dp else 6.dp),
-                horizontalArrangement = if (full && !scrolls) Arrangement.SpaceEvenly else Arrangement.Start,
+                    .padding(horizontal = 8.dp),
+                horizontalArrangement = when {
+                    !full || scrolls -> Arrangement.Start
+                    look.dockIconAlign == DockAlign.START -> Arrangement.Start
+                    look.dockIconAlign == DockAlign.CENTER -> Arrangement.Center
+                    else -> Arrangement.End
+                },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (button == ButtonEnd.START) Box(Modifier.width(cellW), contentAlignment = Alignment.Center) { DrawerButton() }
@@ -196,17 +208,22 @@ private fun DockBar(refs: List<SlotRef>, vertical: Boolean, vm: HomeViewModel, d
                 else -> Alignment.BottomCenter
             },
         ) {
-            val cellH = if (full) (maxHeight / count).coerceIn(64.dp, 96.dp) else 76.dp
+            val cellH = 80.dp
             val scrolls = cellH * count > maxHeight
             val iconSize = 52.dp
             val cellW = 72.dp
             Column(
-                (if (full || scrolls) Modifier.fillMaxHeight() else Modifier.heightIn(max = maxHeight))
+                (if (full || scrolls) Modifier.fillMaxHeight() else Modifier)
                     .width(cellW)
                     .then(background)
                     .then(if (scrolls) Modifier.verticalScroll(rememberScrollState()) else Modifier)
-                    .padding(vertical = if (full) 0.dp else 6.dp),
-                verticalArrangement = if (full && !scrolls) Arrangement.SpaceEvenly else Arrangement.Top,
+                    .padding(vertical = 8.dp),
+                verticalArrangement = when {
+                    !full || scrolls -> Arrangement.Top
+                    look.dockIconAlign == DockAlign.START -> Arrangement.Top
+                    look.dockIconAlign == DockAlign.CENTER -> Arrangement.Center
+                    else -> Arrangement.Bottom
+                },
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 if (button == ButtonEnd.START) Box(Modifier.height(cellH), contentAlignment = Alignment.Center) { DrawerButton() }

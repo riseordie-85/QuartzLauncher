@@ -271,6 +271,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         dockPosition = store[S.dockPosition, scope],
         dockLength = store[S.dockLength, scope],
         dockAlign = store[S.dockAlign, scope],
+        dockIconAlign = store[S.dockIconAlign, scope],
     )
     val deviceType = when {
         screen.foldable -> DeviceType.FOLDABLE
@@ -522,6 +523,7 @@ data class HomeLook(
     val dockPosition: DockPosition = DockPosition.BOTTOM,
     val dockLength: DockLength = DockLength.FULL,
     val dockAlign: DockAlign = DockAlign.END,
+    val dockIconAlign: DockAlign = DockAlign.CENTER,
 )
 
 val LocalHomeLook = compositionLocalOf { HomeLook() }

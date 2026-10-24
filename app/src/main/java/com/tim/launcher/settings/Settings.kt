@@ -138,7 +138,10 @@ object S {
     // Dock
     val dockPosition = Setting("dock.position", DockPosition.BOTTOM, EnumCodec(DockPosition.entries.toTypedArray()), perScreen = true)
     val dockLength = Setting("dock.length", DockLength.FULL, EnumCodec(DockLength.entries.toTypedArray()), perScreen = true)
+    /** Where a "fit" side dock sits along its edge. */
     val dockAlign = Setting("dock.align", DockAlign.END, EnumCodec(DockAlign.entries.toTypedArray()), perScreen = true)
+    /** Where the icons sit inside a full-length dock. (A fit dock always centers its icons.) */
+    val dockIconAlign = Setting("dock.iconAlign", DockAlign.CENTER, EnumCodec(DockAlign.entries.toTypedArray()), perScreen = true)
     /** 0 means unlimited (the dock scrolls). */
     val dockIcons = Setting("dock.icons", 5, IntCodec, perScreen = true)
     val dockShape = Setting("dock.shape", DockShape.ROUNDED, EnumCodec(DockShape.entries.toTypedArray()))
@@ -192,7 +195,7 @@ object S {
 
     /** Every per-screen setting, for counting what's synced vs split. */
     val perScreenSettings: List<Setting<*>> = listOf(
-        gridCols, gridRows, labelsHome, iconSize, dockPosition, dockLength, dockAlign, dockIcons, drawerCols, drawerStyle,
+        gridCols, gridRows, labelsHome, iconSize, dockPosition, dockLength, dockAlign, dockIconAlign, dockIcons, drawerCols, drawerStyle,
     )
 }
 

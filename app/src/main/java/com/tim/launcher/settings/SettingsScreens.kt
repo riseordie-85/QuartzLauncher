@@ -305,6 +305,18 @@ fun DockSettings(ctx: SettingsContext) {
                     }
                 }
                 val vertical = position == DockPosition.LEFT || position == DockPosition.RIGHT
+                if (store[S.dockLength, scope] == DockLength.FULL) {
+                    RowDivider()
+                    SettingRow("Icons sit at the", link = ctx.link(S.dockIconAlign)) {
+                        Dropdown(store[S.dockIconAlign, scope], DockAlign.entries, {
+                            when (it) {
+                                DockAlign.START -> if (vertical) "Top" else "Left"
+                                DockAlign.CENTER -> if (vertical) "Middle" else "Center"
+                                DockAlign.END -> if (vertical) "Bottom" else "Right"
+                            }
+                        }) { store.set(S.dockIconAlign, scope, it) }
+                    }
+                }
                 if (vertical && store[S.dockLength, scope] == DockLength.FIT) {
                     RowDivider()
                     SettingRow("Sits at the", "Bottom keeps it near your thumb", link = ctx.link(S.dockAlign)) {
