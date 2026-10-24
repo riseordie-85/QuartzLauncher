@@ -381,6 +381,8 @@ private fun ColumnScope.StepContent(
                 ChoiceCard(p.label, null, current == p, gap) {
                     store.linkAll(S.dockPosition, type.screens)
                     store.set(S.dockPosition, primary, p)
+                    // The side you pick here is where it goes, even if it had been swapped
+                    store.set(S.dockSwapped, value = false)
                 }
             }
         }
@@ -667,6 +669,7 @@ private fun GridSteppers(cols: Int, rows: Int, maxCols: Int = 8, onCols: (Int) -
 private fun applyRecommended(store: SettingsStore, type: DeviceType) {
     store.linkAll(S.dockPosition, type.screens)
     store.set(S.dockPosition, type.primary, DockPosition.BOTTOM)
+    store.set(S.dockSwapped, value = false)
     store.set(S.dockLength, type.primary, DockLength.FULL)
     store.set(S.carryOver, value = true)
     store.set(S.coverSide, value = CoverSide.RIGHT)

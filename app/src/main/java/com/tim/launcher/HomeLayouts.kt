@@ -266,7 +266,8 @@ private fun DockBar(
     val dropSpot = if (drag.active && !makingRoom) slots.firstOrNull { drag.shown(vm, it) == null && it != drag.source } else null
     val refs = if (dropSpot != null) filled + dropSpot else filled
     val count = refs.size + if (button != null) 1 else 0
-    if (count == 0) return
+    // An empty dock still keeps its room from the screen edge (the content no longer has insets on that side)
+    if (count == 0) { Spacer(modifier.then(inner)); return }
     val style = look.dock
     val background = Modifier.dockSurface(style, look.panel, edge, look.onPanel).then(inner)
 
@@ -275,7 +276,8 @@ private fun DockBar(
     if (!vertical) {
         BoxWithConstraints(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             val cellW = 72.dp
-            val scrolls = cellW * count > maxWidth
+            // The padding at the ends counts too, or a slanted dock squeezes its last icons instead of scrolling
+            val scrolls = cellW * count + (8.dp + style.endRoom) * 2 > maxWidth
             val iconSize = 56.dp
             val cellH = iconSize + if (look.labelsDock) 36.dp else 20.dp
             Row(
@@ -316,13 +318,14 @@ private fun DockBar(
             },
         ) {
             val cellH = 80.dp
-            val scrolls = cellH * count > maxHeight
+            val scrolls = cellH * count + (8.dp + style.endRoom) * 2 > maxHeight
             val iconSize = 52.dp
             val cellW = 72.dp
             Column(
                 (if (full || scrolls) Modifier.fillMaxHeight() else Modifier)
                     .then(background)
-                    .width(cellW)
+                    // Padding and wave room widen the dock rather than squeezing the icons
+                    .width(cellW + style.padding.dp * 2 + style.waveRoom)
                     .then(if (scrolls) Modifier.verticalScroll(rememberScrollState()) else Modifier)
                     .padding(vertical = 8.dp + style.endRoom)
                     .padding(horizontal = style.padding.dp)

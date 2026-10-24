@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.withTransform
@@ -137,25 +138,33 @@ class DockOutlineShape(
             }
             DockOutline.POINTED -> {
                 val p = min(thick * 0.45f, length / 4f)
-                val points = if (flush) {
-                    listOf(at(p, 0f), at(length - p, 0f), at(length, thick / 2f), at(length, thick), at(0f, thick), at(0f, thick / 2f))
+                val h = r * 0.5f
+                // Flush, the two corners on the screen edge stay square
+                val (points, radii) = if (flush) {
+                    listOf(at(p, 0f), at(length - p, 0f), at(length, thick / 2f), at(length, thick), at(0f, thick), at(0f, thick / 2f)) to
+                        listOf(h, h, h, 0f, 0f, h)
                 } else {
-                    listOf(at(0f, thick / 2f), at(p, 0f), at(length - p, 0f), at(length, thick / 2f), at(length - p, thick), at(p, thick))
+                    listOf(at(0f, thick / 2f), at(p, 0f), at(length - p, 0f), at(length, thick / 2f), at(length - p, thick), at(p, thick)) to
+                        List(6) { h }
                 }
-                Outline.Generic(rounded(points, points.map { r * 0.5f }))
+                Outline.Generic(rounded(points, radii))
             }
             DockOutline.WAVE -> {
                 // The inner edge rises and falls a whole number of times, so both ends meet it at the same height
                 val amp = min(thick * 0.1f, with(density) { 7.dp.toPx() })
                 val waves = max(1, (length / (thick * 3f)).roundToInt())
                 val steps = waves * 24
+                val corner = r * 0.6f
                 val points = ArrayList<Offset>()
                 val radii = ArrayList<Float>()
                 points += at(0f, thick); radii += outer
                 for (k in 0..steps) {
                     val u = length * k / steps
+                    // Skip the wave right next to the ends: a corner can only round as far as half its shortest side,
+                    // and the wave's tiny steps would keep the inner corners almost square
+                    if (k != 0 && k != steps && (u < corner * 2f || u > length - corner * 2f)) continue
                     points += at(u, amp - amp * sin(2f * PI.toFloat() * waves * k / steps))
-                    radii += if (k == 0 || k == steps) r * 0.6f else 0f
+                    radii += if (k == 0 || k == steps) corner else 0f
                 }
                 points += at(length, thick); radii += outer
                 Outline.Generic(rounded(points, radii))
@@ -177,7 +186,8 @@ class DockOutlineShape(
             val a = if (d0 > 0f) p1 + (p0 - p1) * (r / d0) else p1
             val b = if (d2 > 0f) p1 + (p2 - p1) * (r / d2) else p1
             if (i == 0) path.moveTo(a.x, a.y) else path.lineTo(a.x, a.y)
-            if (r > 0f) path.quadraticTo(p1.x, p1.y, b.x, b.y)
+            // quadraticBezierTo is in every Compose version (quadraticTo only in newer ones)
+            if (r > 0f) path.quadraticBezierTo(p1.x, p1.y, b.x, b.y)
         }
         path.close()
         return path
