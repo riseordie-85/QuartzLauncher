@@ -39,7 +39,7 @@ import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.MusicNote
-import androidx.compose.material.icons.rounded.Newspaper
+import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.ShoppingBag
@@ -101,7 +101,7 @@ val FolderBadges: List<Pair<String, ImageVector>> = listOf(
     "travel" to Icons.Rounded.Flight,
     "health" to Icons.Rounded.FavoriteBorder,
     "school" to Icons.Rounded.School,
-    "news" to Icons.Rounded.Newspaper,
+    "news" to Icons.Rounded.Description,
     "home" to Icons.Rounded.Home,
     "star" to Icons.Rounded.Star,
 )

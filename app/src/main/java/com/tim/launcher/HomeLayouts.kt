@@ -39,6 +39,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -421,11 +424,16 @@ private fun HomePager(
     }
 
     val edgePx = with(LocalDensity.current) { 36.dp.toPx() }
-    val edge = when {
-        !drag.active -> 0
-        drag.pointer.x < edgePx -> -1
-        drag.pointer.x > screen.widthPx - edgePx -> 1
-        else -> 0
+    val widthPx = screen.widthPx
+    val edge by remember(edgePx, widthPx) {
+        derivedStateOf {
+            when {
+                !drag.active -> 0
+                drag.pointer.x < edgePx -> -1
+                drag.pointer.x > widthPx - edgePx -> 1
+                else -> 0
+            }
+        }
     }
     LaunchedEffect(edge) {
         if (edge == 0) return@LaunchedEffect

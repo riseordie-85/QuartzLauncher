@@ -38,7 +38,7 @@ class LockService : AccessibilityService() {
         val isOn: Boolean get() = instance != null
 
         /** Locks the screen. False if Quartz Lock isn't turned on. */
-        fun lock(): Boolean = instance?.performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN) ?: false
+        fun lock(): Boolean = instance?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN) ?: false
 
         fun openSettings(context: Context) {
             runCatching {

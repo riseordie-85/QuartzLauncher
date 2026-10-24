@@ -208,7 +208,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val categories = keys.mapNotNull { apps[it]?.category }.distinct()
         val c = categories.singleOrNull() ?: return "Folder"
         if (c == ApplicationInfo.CATEGORY_UNDEFINED) return "Folder"
-        return ApplicationInfo.getCategoryTitle(getApplication(), c)?.toString() ?: "Folder"
+        return ApplicationInfo.getCategoryTitle(getApplication<Application>(), c)?.toString() ?: "Folder"
     }
 
     /**
@@ -217,8 +217,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun makeFolder(target: SlotRef, key: String, source: SlotRef?, fromFolder: String?) {
         if (isFolderKey(key) || target == source) return
-        val list = list(target.area)
-        val existing = list.getOrNull(target.index) ?: return
+        val slots = list(target.area)
+        val existing = slots.getOrNull(target.index) ?: return
         if (existing == key) return
         val folder = folderFor(existing)
         if (folder != null) {
@@ -229,7 +229,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val id = System.currentTimeMillis().toString(36)
             val name = suggestName(listOf(existing, key))
             folders[id] = Folder(id, name, listOf(existing, key))
-            list[target.index] = FOLDER_PREFIX + id
+            slots[target.index] = FOLDER_PREFIX + id
             Diag.log("Made a folder \"$name\"")
         }
         if (source != null) list(source.area)[source.index] = null
@@ -346,10 +346,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val placed = (cover + dockCover + dockExtra).filter { isFolderKey(it) }.map { it!!.removePrefix(FOLDER_PREFIX) }.toSet()
         folders.keys.filter { it !in placed }.forEach { folders.remove(it) }
         saveFolders()
-        if (removed > 0) {
-            save()
-            Diag.log("Cleared $removed spots for apps that aren't installed")
-        }
+        save()
+        if (removed > 0) Diag.log("Cleared $removed spots for apps that aren't installed")
     }
 
     /** Reloads the layout if it was replaced by an import. */

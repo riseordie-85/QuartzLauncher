@@ -45,6 +45,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -290,6 +291,18 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         vm.setGrid(store[S.gridCols, gridScope], store[S.gridRows, gridScope])
     }
 
+    // Declared before `look`, whose onSwipePast calls it (local functions aren't visible before their declaration)
+    fun run(action: GestureAction) {
+        when (action) {
+            GestureAction.NONE -> Unit
+            GestureAction.APP_DRAWER, GestureAction.SEARCH -> drawerOpen = true
+            GestureAction.NOTIFICATIONS -> expandNotifications(activity)
+            GestureAction.SETTINGS -> SettingsActivity.open(activity)
+            GestureAction.LOCK -> if (!LockService.lock()) lockPrompt = true
+            GestureAction.SWAP_DOCK -> Diag.log("Swap dock side arrives with dock layouts")
+        }
+    }
+
     val panelColor = Color(store[S.panelColor])
     val look = HomeLook(
         panel = panelColor.copy(alpha = store[S.panelOpacity].coerceIn(0.05f, 1f)),
@@ -335,16 +348,6 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         if (scope == Scope.INNER && store.isLinked(S.drawerCols, Scope.INNER)) it * 2 else it
     }
 
-    fun run(action: GestureAction) {
-        when (action) {
-            GestureAction.NONE -> Unit
-            GestureAction.APP_DRAWER, GestureAction.SEARCH -> drawerOpen = true
-            GestureAction.NOTIFICATIONS -> expandNotifications(activity)
-            GestureAction.SETTINGS -> SettingsActivity.open(activity)
-            GestureAction.LOCK -> if (!LockService.lock()) lockPrompt = true
-            GestureAction.SWAP_DOCK -> Diag.log("Swap dock side arrives with dock layouts")
-        }
-    }
     var hintSeen by remember { mutableStateOf(prefs.getBoolean(Prefs.HINT_SEEN, false)) }
 
     LaunchedEffect(homeTick) {
@@ -364,7 +367,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
 
     // Hold a dragged icon over another for a moment to make a folder
     val haptics = LocalHapticFeedback.current
-    val hoverRef = drag.hover
+    val hoverRef by remember { derivedStateOf { drag.hover } }
     LaunchedEffect(hoverRef, drag.key) {
         drag.folderTarget = null
         val target = hoverRef ?: return@LaunchedEffect
@@ -726,7 +729,7 @@ internal fun Cell(
             )
         }
 
-    val hovered = drag.hover == ref && drag.source != ref
+    val hovered by remember(ref) { derivedStateOf { drag.hover == ref && drag.source != ref } }
     val folderArmed = drag.folderTarget == ref
     Box(
         modifier
