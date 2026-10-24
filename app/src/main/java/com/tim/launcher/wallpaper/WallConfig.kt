@@ -10,8 +10,14 @@ enum class WallKind(val label: String) { GRADIENT("Gradient"), SOLID("Color"), I
 
 enum class GradientStyle(val label: String) { LINEAR("Linear"), RADIAL("Radial"), CORNERS("Corners") }
 
-enum class PatternStyle(val label: String) {
-    NONE("None"), DOTS("Dots"), GRID("Grid"), STRIPES("Stripes"), CHECKS("Checks"), WAVES("Waves"),
+enum class PatternStyle(val label: String, val faceted: Boolean = false) {
+    NONE("None"),
+    CRYSTAL("Crystal", true),
+    RIPPLE("Ripple", true),
+    DIAMONDS("Diamonds", true),
+    PYRAMIDS("Pyramids", true),
+    SHARDS("Shards", true),
+    DOTS("Dots"), GRID("Grid"), STRIPES("Stripes"), CHECKS("Checks"), WAVES("Waves"),
 }
 
 /** How one wallpaper spans a folding phone's two screens. */
@@ -53,6 +59,10 @@ data class WallConfig(
     val patternColor: Int = 0xFFFFFFFF.toInt(),
     val patternStrength: Float = 0.12f,
     val patternSize: Float = 0.5f,
+    /** Picks a different arrangement for patterns with randomness in them (Crystal, Shards, sparkles). */
+    val patternSeed: Int = 0,
+    /** Tiny glints over the pattern. */
+    val sparkles: Boolean = false,
     /** Darkens the whole wallpaper, 0–0.7, so icons and labels stand out. */
     val dim: Float = 0f,
 ) {
@@ -82,6 +92,8 @@ data class WallConfig(
         put("patternColor", patternColor)
         put("patternStrength", patternStrength.toDouble())
         put("patternSize", patternSize.toDouble())
+        put("patternSeed", patternSeed)
+        put("sparkles", sparkles)
         put("dim", dim.toDouble())
     }.toString()
 
@@ -113,6 +125,8 @@ data class WallConfig(
                 patternColor = j.optInt("patternColor", d.patternColor),
                 patternStrength = f("patternStrength", d.patternStrength),
                 patternSize = f("patternSize", d.patternSize),
+                patternSeed = j.optInt("patternSeed", d.patternSeed),
+                sparkles = j.optBoolean("sparkles", d.sparkles),
                 dim = f("dim", d.dim),
             )
         }.getOrNull()
@@ -139,8 +153,29 @@ object WallPresets {
         WallConfig(kind = WallKind.GRADIENT, gradient = GradientStyle.CORNERS, colors = c.map { it.toInt() }),
     )
 
+    private fun radial(name: String, center: Long, edge: Long, y: Float, size: Float) = Preset(
+        name,
+        WallConfig(
+            kind = WallKind.GRADIENT,
+            gradient = GradientStyle.RADIAL,
+            colors = listOf(center.toInt(), center.toInt(), edge.toInt(), edge.toInt(), center.toInt()),
+            radialX = 0.5f,
+            radialY = y,
+            radialSize = size,
+        ),
+    )
+
+    private fun Preset.cut(style: PatternStyle, strength: Float, size: Float, sparkles: Boolean = false) =
+        copy(config = config.copy(pattern = style, patternColor = 0xFFFFFFFF.toInt(), patternStrength = strength, patternSize = size, sparkles = sparkles))
+
     val all: List<Preset> = listOf(
         Preset("Quartz", WallConfig.Default),
+        // Quartz stones, cut: each brings its own pattern
+        radial("Blue quartz", 0xFF1E63E0, 0xFF02081A, 0.45f, 0.85f).cut(PatternStyle.RIPPLE, 0.3f, 0.2f),
+        radial("Citrine", 0xFFE8A21E, 0xFF7A4306, 0.4f, 1.25f).cut(PatternStyle.CRYSTAL, 0.42f, 0.3f),
+        radial("Amethyst", 0xFFA4509E, 0xFF2E0F45, 0.42f, 0.95f).cut(PatternStyle.DIAMONDS, 0.2f, 0.35f, sparkles = true),
+        corners("Rose quartz", 0xFF7A2A6A, 0xFFD0566E, 0xFF3A1A6E, 0xFF2C34A8, 0xFFB8346E).cut(PatternStyle.PYRAMIDS, 0.42f, 0.45f),
+        linear("Smoky quartz", 90f, 0xFF2A2046, 0xFF33284A, 0xFF1D1838).cut(PatternStyle.SHARDS, 0.2f, 0.5f),
         linear("Dusk", 160f, 0xFF1B1035, 0xFF6B2D6E, 0xFFE07A5F),
         linear("Ocean", 120f, 0xFF061A2B, 0xFF0F5C7A, 0xFF4FB3BF),
         linear("Forest", 100f, 0xFF0B1F14, 0xFF1F5135, 0xFF8DB36B),

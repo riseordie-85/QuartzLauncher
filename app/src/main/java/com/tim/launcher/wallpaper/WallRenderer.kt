@@ -139,7 +139,14 @@ object WallRenderer {
             }
             WallKind.TEST -> drawTest(canvas, width, height, frame)
         }
-        if (c.kind != WallKind.TEST && c.pattern != PatternStyle.NONE) drawPattern(canvas, width, height, c)
+        if (c.kind != WallKind.TEST && c.pattern != PatternStyle.NONE) {
+            if (c.pattern.faceted) {
+                val clip = canvas.clipBounds.takeUnless { it.isEmpty } ?: Rect(0, 0, width.toInt(), height.toInt())
+                Facets.draw(canvas, width, height, clip, c)
+            } else {
+                drawPattern(canvas, width, height, c)
+            }
+        }
         canvas.restore()
         if (c.dim > 0.005f) canvas.drawColor(Color.argb((c.dim.coerceIn(0f, 0.8f) * 255).toInt(), 0, 0, 0))
         if (c.kind == WallKind.TEST) drawTestInfo(canvas, w, h, frame)
@@ -243,7 +250,7 @@ object WallRenderer {
         val y0 = floor(clip.top / cell).toInt() - 1
         val y1 = ceil(clip.bottom / cell).toInt() + 1
         when (c.pattern) {
-            PatternStyle.NONE -> Unit
+            else -> Unit
             PatternStyle.DOTS -> {
                 pat.style = Paint.Style.FILL
                 for (r in y0..y1) for (col in x0..x1) {

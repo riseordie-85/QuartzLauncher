@@ -64,6 +64,7 @@ import com.tim.launcher.settings.IconShape
 import com.tim.launcher.settings.IconStyle
 import com.tim.launcher.settings.Profile
 import com.tim.launcher.settings.S
+import com.tim.launcher.settings.applyPreset
 import com.tim.launcher.wallpaper.WallStore
 import com.tim.launcher.wallpaper.WallSlot
 import com.tim.launcher.wallpaper.WallCache
@@ -577,13 +578,8 @@ private fun ColumnScope.StepContent(
             val generation = WallCache.generation
             val chosen = remember(generation) { WallStore.load(context, WallSlot.MAIN) }
             WallpaperPreview(foldable, Modifier.fillMaxWidth().padding(bottom = 16.dp), height = 150.dp)
-            // Keeps your pattern, darkening and photo (a photo no wallpaper uses gets deleted)
-            PresetRow(chosen) {
-                WallStore.save(
-                    context, WallSlot.MAIN,
-                    it.copy(pattern = chosen.pattern, dim = chosen.dim, image = chosen.image, focusX = chosen.focusX, focusY = chosen.focusY, zoom = chosen.zoom),
-                )
-            }
+            // Keeps your darkening and photo (a photo no wallpaper uses gets deleted); cut-quartz ones bring their pattern
+            PresetRow(chosen) { WallStore.save(context, WallSlot.MAIN, applyPreset(chosen, it)) }
             Spacer(Modifier.height(16.dp))
             var active by remember { mutableStateOf(WallCache.isActive(context)) }
             LifecycleResumeEffect(Unit) {

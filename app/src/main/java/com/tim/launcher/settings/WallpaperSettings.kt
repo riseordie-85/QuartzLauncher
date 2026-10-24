@@ -135,15 +135,7 @@ fun WallpaperSettings(ctx: SettingsContext) {
 
         SectionLabel("Start from")
         // A preset keeps your pattern, darkening and photo (so trying one doesn't delete the photo you picked)
-        PresetRow(selected = cfg) { preset ->
-            update(
-                preset.copy(
-                    pattern = cfg.pattern, patternColor = cfg.patternColor, patternStrength = cfg.patternStrength,
-                    patternSize = cfg.patternSize, dim = cfg.dim,
-                    image = cfg.image, focusX = cfg.focusX, focusY = cfg.focusY, zoom = cfg.zoom,
-                ),
-            )
-        }
+        PresetRow(selected = cfg) { preset -> update(applyPreset(cfg, preset)) }
 
         SectionLabel("Wallpaper")
         GlassPanel {
@@ -166,15 +158,29 @@ fun WallpaperSettings(ctx: SettingsContext) {
         if (cfg.kind != WallKind.TEST) {
             SectionLabel("Pattern")
             GlassPanel {
-                SettingRow("Pattern", "Drawn over the wallpaper") {
-                    Dropdown(cfg.pattern, PatternStyle.entries, { it.label }) { update(cfg.copy(pattern = it)) }
+                SettingRow("Pattern", if (cfg.pattern.faceted) "Cut like crystal, lit from the top left" else "Drawn over the wallpaper") {
+                    Dropdown(cfg.pattern, PatternStyle.entries, { if (it.faceted) "◆ ${it.label}" else it.label }) {
+                        // Crystal patterns need a bit more strength than lines and dots to show
+                        val strength = if (it.faceted && cfg.patternStrength < 0.15f) 0.3f else cfg.patternStrength
+                        update(cfg.copy(pattern = it, patternStrength = strength))
+                    }
                 }
                 if (cfg.pattern != PatternStyle.NONE) {
                     RowDivider()
-                    Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-                        val light = Color(cfg.patternColor).luminance() > 0.5f
-                        Segmented(light, listOf(true, false), { if (it) "Light" else "Dark" }) {
-                            update(cfg.copy(patternColor = if (it) 0xFFFFFFFF.toInt() else 0xFF000000.toInt()))
+                    if (!cfg.pattern.faceted) {
+                        Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+                            val light = Color(cfg.patternColor).luminance() > 0.5f
+                            Segmented(light, listOf(true, false), { if (it) "Light" else "Dark" }) {
+                                update(cfg.copy(patternColor = if (it) 0xFFFFFFFF.toInt() else 0xFF000000.toInt()))
+                            }
+                        }
+                    }
+                    if (cfg.pattern.faceted) {
+                        SettingRow("Sparkles", "Tiny glints, like flecks in the stone") {
+                            Toggle(cfg.sparkles) { update(cfg.copy(sparkles = it)) }
+                        }
+                        if (cfg.pattern == PatternStyle.CRYSTAL || cfg.pattern == PatternStyle.SHARDS || cfg.sparkles) {
+                            SettingRow("Shuffle", "A new arrangement of the same pattern", onClick = { update(cfg.copy(patternSeed = cfg.patternSeed + 1)) })
                         }
                     }
                     SliderRow("Strength", cfg.patternStrength, 0.03f..0.5f, "${(cfg.patternStrength * 100).roundToInt()}%") {
@@ -281,6 +287,24 @@ fun WallpaperPreview(foldable: Boolean, modifier: Modifier = Modifier, height: D
     }
 }
 
+/**
+ * Picking a ready-made wallpaper keeps your photo (so switching back to Image still has it) and your darkening. A
+ * plain gradient keeps your pattern too; a cut-quartz one brings its own.
+ */
+fun applyPreset(current: WallConfig, preset: WallConfig): WallConfig {
+    val keepPattern = preset.pattern == PatternStyle.NONE
+    return preset.copy(
+        pattern = if (keepPattern) current.pattern else preset.pattern,
+        patternColor = if (keepPattern) current.patternColor else preset.patternColor,
+        patternStrength = if (keepPattern) current.patternStrength else preset.patternStrength,
+        patternSize = if (keepPattern) current.patternSize else preset.patternSize,
+        patternSeed = if (keepPattern) current.patternSeed else preset.patternSeed,
+        sparkles = if (keepPattern) current.sparkles else preset.sparkles,
+        dim = current.dim,
+        image = current.image, focusX = current.focusX, focusY = current.focusY, zoom = current.zoom,
+    )
+}
+
 /** A row of ready-made wallpapers to start from. */
 @Composable
 fun PresetRow(selected: WallConfig?, onPick: (WallConfig) -> Unit) {
@@ -297,7 +321,8 @@ fun PresetRow(selected: WallConfig?, onPick: (WallConfig) -> Unit) {
     ) {
         WallPresets.all.forEachIndexed { i, preset ->
             val on = selected != null && selected.kind == preset.config.kind && selected.gradient == preset.config.gradient &&
-                selected.colors == preset.config.colors && selected.angle == preset.config.angle
+                selected.colors == preset.config.colors && selected.angle == preset.config.angle &&
+                (preset.config.pattern == PatternStyle.NONE || selected.pattern == preset.config.pattern)
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 val shape = RoundedCornerShape(12.dp)
                 Box(
