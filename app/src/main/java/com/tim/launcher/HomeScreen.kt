@@ -121,6 +121,9 @@ import com.tim.launcher.settings.dockCounts
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import com.tim.launcher.ui.Q
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -235,6 +238,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
     var menuOpen by remember { mutableStateOf(false) }
     var openFolder by remember { mutableStateOf<Pair<String, SlotRef>?>(null) }
     var lockPrompt by remember { mutableStateOf(false) }
+    var overviewOpen by remember { mutableStateOf(false) }
     // Set while two fingers are down, so a two-finger gesture doesn't also count as a one-finger swipe
     var multiTouchUntil by remember { mutableStateOf(0L) }
 
@@ -300,6 +304,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             GestureAction.SETTINGS -> SettingsActivity.open(activity)
             GestureAction.LOCK -> if (!LockService.lock()) lockPrompt = true
             GestureAction.SWAP_DOCK -> Diag.log("Swap dock side arrives with dock layouts")
+            GestureAction.OVERVIEW -> overviewOpen = true
         }
     }
 
@@ -357,12 +362,14 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         panelOpen = false
         menuOpen = false
         openFolder = null
+        overviewOpen = false
     }
     BackHandler {
         drawerOpen = false
         panelOpen = false
         menuOpen = false
         openFolder = null
+        overviewOpen = false
     }
 
     // Hold a dragged icon over another for a moment to make a folder
@@ -384,6 +391,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
     LaunchedEffect(screen.posture, screen.widthDp, screen.heightDp) {
         Diag.log("Posture: ${screen.posture.label}, ${screen.widthDp}×${screen.heightDp}dp, display ${screen.displayId}")
         openFolder = null
+        overviewOpen = false
         if (drag.active) {
             drag.cancel()
             Diag.log("Drag interrupted by the fold change; icon stayed in its spot")
@@ -441,7 +449,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
                             lastCenter = center
                         }
                     } while (event.changes.any { it.pressed })
-                    if (startDist > 0f && !drag.active && !drawerOpen && openFolder == null) {
+                    if (startDist > 0f && !drag.active && !drawerOpen && openFolder == null && !overviewOpen) {
                         val dy = lastCenter.y - startCenter.y
                         when {
                             lastDist < startDist * 0.65f -> run(store[S.gesture(GestureSlot.PINCH)])
@@ -543,7 +551,20 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
                     menuOpen = false
                     panelOpen = true
                 },
+                onPages = {
+                    menuOpen = false
+                    overviewOpen = true
+                },
                 onDismiss = { menuOpen = false },
+            )
+        }
+
+        AnimatedVisibility(visible = overviewOpen, enter = fadeIn() + scaleIn(initialScale = 1.08f), exit = fadeOut() + scaleOut(targetScale = 1.08f)) {
+            PageOverview(
+                vm = vm,
+                onAddPage = { store.set(S.pages, value = (vm.pages + 1).coerceAtMost(HomeViewModel.MAX_PAGES)) },
+                onPagesChanged = { store.set(S.pages, value = vm.pages) },
+                onClose = { overviewOpen = false },
             )
         }
 
@@ -604,7 +625,7 @@ private fun RemoveZone(drag: DragController) {
 
 /** The long-press menu on an empty spot of the home screen. */
 @Composable
-private fun HomeMenu(onSettings: () -> Unit, onSetup: () -> Unit, onTestPanel: () -> Unit, onDismiss: () -> Unit) {
+private fun HomeMenu(onSettings: () -> Unit, onSetup: () -> Unit, onTestPanel: () -> Unit, onPages: () -> Unit, onDismiss: () -> Unit) {
     Box(
         Modifier
             .fillMaxSize()
@@ -622,6 +643,7 @@ private fun HomeMenu(onSettings: () -> Unit, onSetup: () -> Unit, onTestPanel: (
         ) {
             MenuItem("Quartz settings", Icons.Rounded.Settings, onSettings)
             MenuItem("Run setup again", Icons.Rounded.AutoAwesome, onSetup)
+            MenuItem("Pages", Icons.Rounded.GridView, onPages)
             MenuItem("Test panel", Icons.Rounded.BugReport, onTestPanel)
         }
     }

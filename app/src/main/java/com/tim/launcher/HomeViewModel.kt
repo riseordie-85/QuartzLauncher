@@ -79,6 +79,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     /** Bumped in Prefs when a layout is imported, so the home screen knows to reload it. */
     private var layoutStamp = prefs.getInt(Prefs.LAYOUT_STAMP, 0)
 
+    /** The page you chose as home in the page overview, or -1 to follow the cover side. */
+    var homePageChoice by mutableIntStateOf(prefs.getInt(Prefs.HOME_PAGE, -1))
+        private set
+
     /** The cover page you're on; kept across fold and unfold. Starts on your home page. */
     var currentPage by mutableIntStateOf(0)
 
@@ -86,7 +90,64 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
      * Your home page. Pages form one fixed strip; with the cover on the left half it's page 1, with the cover on
      * the right half it's page 2, so the unfolded screen opens on pages 1 | 2 either way.
      */
-    val homePage: Int get() = if (coverLeft || pageMode != "strip") 0 else minOf(1, pages - 1)
+    val homePage: Int
+        get() = if (homePageChoice in 0 until pages) homePageChoice else if (coverLeft) 0 else minOf(1, pages - 1)
+
+    /** True when you've picked your home page yourself (in the page overview). */
+    val homePageChosen: Boolean get() = homePageChoice in 0 until pages
+
+    fun setHomePage(page: Int) {
+        homePageChoice = page
+        prefs.edit().putInt(Prefs.HOME_PAGE, page).apply()
+        Diag.log("Home page set to page ${page + 1}")
+    }
+
+    /** Moves a whole page to a new position. Your home page and the page you're on follow it. */
+    fun movePage(from: Int, to: Int) {
+        if (from == to || from !in 0 until pages || to !in 0 until pages) return
+        val per = perPage
+        val chunks = (0 until pages).map { p -> cover.subList(p * per, (p + 1) * per).toList() }.toMutableList()
+        chunks.add(to, chunks.removeAt(from))
+        fill(cover, chunks.flatten(), pages * per)
+        fun follow(i: Int) = when {
+            i == from -> to
+            from < to && i in (from + 1)..to -> i - 1
+            from > to && i in to until from -> i + 1
+            else -> i
+        }
+        if (homePageChosen) setHomePage(follow(homePageChoice))
+        currentPage = follow(currentPage)
+        save()
+        Diag.log("Moved page ${from + 1} to position ${to + 1}")
+    }
+
+    /** Deletes one page. Its apps move to empty spots on your other pages. */
+    fun deletePage(page: Int) {
+        if (pages <= 1 || page !in 0 until pages) return
+        val per = perPage
+        val moving = cover.subList(page * per, (page + 1) * per).filterNotNull()
+        val kept = (0 until pages).filter { it != page }.flatMap { p -> cover.subList(p * per, (p + 1) * per).toList() }
+        pages -= 1
+        fill(cover, kept, pages * per)
+        fill(extra, emptyList(), pages * per)
+        prefs.edit().putInt(Prefs.PAGES, pages).apply()
+        val lost = moving.count { key ->
+            val slot = cover.indexOfFirst { it == null }
+            if (slot >= 0) {
+                cover[slot] = key
+                false
+            } else {
+                true
+            }
+        }
+        when {
+            homePageChoice == page -> setHomePage(-1)
+            homePageChoice > page -> setHomePage(homePageChoice - 1)
+        }
+        currentPage = (if (currentPage > page) currentPage - 1 else currentPage).coerceIn(0, pages - 1)
+        save()
+        Diag.log("Deleted page ${page + 1}" + if (moving.isNotEmpty()) " (moved ${moving.size - lost} apps" + (if (lost > 0) ", $lost had no room" else "") + ")" else "")
+    }
 
     fun goHome() {
         currentPage = homePage
@@ -419,7 +480,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setPageCount(count: Int) {
         reloadIfChanged() // an import may have replaced the saved layout; don't save over it with the old one
-        val n = count.coerceIn(1, 5)
+        val n = count.coerceIn(1, MAX_PAGES)
         if (n == pages) return
         val size = n * perPage
         val moving = (cover.drop(size) + extra.drop(size)).filterNotNull()
@@ -582,6 +643,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     companion object {
         private const val ICON_PX = 192
+
+        const val MAX_PAGES = 9
 
         /** "Unlimited" docks get this many slots and scroll. */
         const val UNLIMITED_DOCK = 20

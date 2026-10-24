@@ -231,7 +231,7 @@ fun HomeSettings(ctx: SettingsContext) {
                 SettingRow("Unfolded", "Shows one page at a time, with your apps flowed into this grid", enabled = false)
             }
             RowDivider()
-            SettingRow("Pages") { Stepper(store[S.pages], 1..5) { store.set(S.pages, value = it) } }
+            SettingRow("Pages", "Pinch the home screen to rearrange them or pick your home page") { Stepper(store[S.pages], 1..9) { store.set(S.pages, value = it) } }
         }
 
         if (ctx.type == DeviceType.FOLDABLE) {

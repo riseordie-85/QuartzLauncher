@@ -114,6 +114,7 @@ enum class GestureAction(val label: String) {
     SETTINGS("Open Quartz settings"),
     LOCK("Lock screen"),
     SWAP_DOCK("Swap dock side"),
+    OVERVIEW("Page overview"),
 }
 
 enum class GestureSlot(val label: String) {
@@ -196,6 +197,7 @@ object S {
     private val gestureDefaults = mapOf(
         GestureSlot.SWIPE_UP to GestureAction.APP_DRAWER,
         GestureSlot.SWIPE_DOWN to GestureAction.NOTIFICATIONS,
+        GestureSlot.PINCH to GestureAction.OVERVIEW,
     )
     private val gestures: Map<GestureSlot, Setting<GestureAction>> = GestureSlot.entries.associateWith { slot ->
         Setting(

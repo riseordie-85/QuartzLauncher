@@ -55,6 +55,7 @@ object Prefs {
 
     const val LAYOUT_READY = "layout_ready"
     const val LAYOUT_STAMP = "layout_stamp"
+    const val HOME_PAGE = "home_page"       // -1 = automatic
     const val L_COVER = "layout_cover"
     const val L_EXTRA = "layout_extra"
     const val L_DOCK_COVER = "layout_dock_cover"
