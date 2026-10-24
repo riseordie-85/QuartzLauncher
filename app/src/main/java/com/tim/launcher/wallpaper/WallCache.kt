@@ -94,6 +94,7 @@ object WallCache {
     private val glass = LinkedHashMap<String, Glass>()
     private val latest = HashMap<String, Glass>()
     private val pending = HashSet<String>()
+    private val wanted = HashMap<String, String>()
 
     /**
      * The wallpaper of a [w]×[h] screen, small and blurred by [blur] (0–1). If it isn't ready yet it's made in the
@@ -109,11 +110,18 @@ object WallCache {
         val key = "$size|$level|${frame.config.toJson()}|${frame.mode}|${frame.from}|${frame.aspect}"
         synchronized(this) {
             glass[key]?.let { return it }
+            wanted[size] = key
             if (pending.add(key)) {
                 worker.execute {
-                    val made = runCatching { make(app, frame, w, h, level) }
-                        .onFailure { Diag.log("Glass couldn't be made: ${it.message}") }
-                        .getOrNull()
+                    // Dragging a slider asks for a new copy on every step: skip the ones that are already out of date
+                    val stale = synchronized(this) { wanted[size] != key }
+                    val made = if (stale) {
+                        null
+                    } else {
+                        runCatching { make(app, frame, w, h, level) }
+                            .onFailure { Diag.log("Glass couldn't be made: ${it.message}") }
+                            .getOrNull()
+                    }
                     synchronized(this) {
                         pending.remove(key)
                         if (made != null) {
@@ -122,7 +130,9 @@ object WallCache {
                             while (glass.size > 6) glass.remove(glass.keys.first())
                         }
                     }
-                    main.post { generation++ }
+                    // Only when there's something new: a failed copy that bumped this would be asked for again
+                    // straight away, over and over
+                    if (made != null) main.post { generation++ }
                 }
             }
             return latest[size]
@@ -174,6 +184,10 @@ object WallCache {
             ScreenKind.SINGLE -> return
         }
         val prefs = Prefs.get(context)
-        if (prefs.getInt(kw, 0) != w || prefs.getInt(kh, 0) != h) prefs.edit().putInt(kw, w).putInt(kh, h).apply()
+        if (prefs.getInt(kw, 0) != w || prefs.getInt(kh, 0) != h) {
+            prefs.edit().putInt(kw, w).putInt(kh, h).apply()
+            // The cover's half of the unfolded wallpaper just changed shape: redo its glass and previews too
+            changed()
+        }
     }
 }

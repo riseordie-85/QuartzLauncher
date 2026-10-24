@@ -134,7 +134,16 @@ fun WallpaperSettings(ctx: SettingsContext) {
         }
 
         SectionLabel("Start from")
-        PresetRow(selected = cfg) { preset -> update(preset.copy(pattern = cfg.pattern, patternColor = cfg.patternColor, patternStrength = cfg.patternStrength, patternSize = cfg.patternSize, dim = cfg.dim)) }
+        // A preset keeps your pattern, darkening and photo (so trying one doesn't delete the photo you picked)
+        PresetRow(selected = cfg) { preset ->
+            update(
+                preset.copy(
+                    pattern = cfg.pattern, patternColor = cfg.patternColor, patternStrength = cfg.patternStrength,
+                    patternSize = cfg.patternSize, dim = cfg.dim,
+                    image = cfg.image, focusX = cfg.focusX, focusY = cfg.focusY, zoom = cfg.zoom,
+                ),
+            )
+        }
 
         SectionLabel("Wallpaper")
         GlassPanel {
@@ -453,7 +462,21 @@ fun ColorEditor(label: String, color: Int, open: Boolean, onToggle: () -> Unit, 
                     )
                 }
             }
-            val hsv = remember(color) { FloatArray(3).also { android.graphics.Color.colorToHSV(color, it) } }
+            // Black has no hue or saturation and greys have no hue, so working them out from the color again would
+            // throw them away: dragging brightness to 0 and back would leave you with grey. Keep the last ones instead.
+            val last = remember { FloatArray(3) }
+            val hsv = remember(color) {
+                FloatArray(3).also {
+                    android.graphics.Color.colorToHSV(color, it)
+                    if (it[2] == 0f) {
+                        it[0] = last[0]
+                        it[1] = last[1]
+                    } else if (it[1] == 0f) {
+                        it[0] = last[0]
+                    }
+                    it.copyInto(last)
+                }
+            }
             fun set(i: Int, v: Float) {
                 val next = hsv.copyOf()
                 next[i] = v

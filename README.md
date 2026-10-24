@@ -1,6 +1,17 @@
 # Quartz Launcher
 
-Phase 3: folders and gestures, on the phase 2 layout engine and phase 1 settings.
+Phase 4: the wallpaper engine, on the phase 3 folders and gestures, phase 2 layout engine and phase 1 settings.
+
+## Phase 4: what's new
+
+- **Quartz wallpaper:** Quartz draws the wallpaper itself. Settings › Wallpaper has gradients (linear, radial, and four corners plus a middle color), solid colors, your own photos, patterns (dots, grid, stripes, checks, waves) and a Darken slider. Presets to start from. The old test pattern is still there as "Test".
+- **Your photos stay on the phone:** Android's photo picker shares only the photo you choose; Quartz keeps a scaled copy in its private storage. Position it with Across, Up and down, and Zoom.
+- **Folding phones:** Shared · cropped (the cover shows its half of the unfolded wallpaper), Shared · stretched (fitted to each screen), or Independent (a different wallpaper per screen).
+- **Frosted glass:** the dock, app drawer and folders blur the wallpaper behind them. The blurred copy is made once per change and shared, so it costs almost nothing, and a new wallpaper engine after a fold draws instantly.
+- **Readable on light backgrounds:** labels, folder text, the drawer header and the status bar turn dark on light glass and light wallpapers.
+- **See-through slider:** now 0–100%, with 50% in the middle.
+- **Setup:** a wallpaper step after the dock style. Profiles carry the wallpaper settings (not the photo).
+- **After updating:** the wallpaper service was renamed, so your phone falls back to its own wallpaper once. Open Settings › Wallpaper and tap **Use Quartz wallpaper**.
 
 ## Phase 3: what's new
 

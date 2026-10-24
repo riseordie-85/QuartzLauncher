@@ -53,7 +53,9 @@ object WallRenderer {
 
     fun kindFor(context: Context, w: Int, h: Int): ScreenKind = when {
         !isFoldable(context) -> ScreenKind.SINGLE
-        w.toFloat() / h.coerceAtLeast(1) < 0.7f -> ScreenKind.COVER
+        // Short side over long side, so a cover screen turned sideways is still the cover (and doesn't get saved
+        // as the unfolded screen's size)
+        min(w, h).toFloat() / max(w, h).coerceAtLeast(1) < 0.7f -> ScreenKind.COVER
         else -> ScreenKind.INNER
     }
 

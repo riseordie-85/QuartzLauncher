@@ -577,7 +577,13 @@ private fun ColumnScope.StepContent(
             val generation = WallCache.generation
             val chosen = remember(generation) { WallStore.load(context, WallSlot.MAIN) }
             WallpaperPreview(foldable, Modifier.fillMaxWidth().padding(bottom = 16.dp), height = 150.dp)
-            PresetRow(chosen) { WallStore.save(context, WallSlot.MAIN, it.copy(pattern = chosen.pattern, dim = chosen.dim)) }
+            // Keeps your pattern, darkening and photo (a photo no wallpaper uses gets deleted)
+            PresetRow(chosen) {
+                WallStore.save(
+                    context, WallSlot.MAIN,
+                    it.copy(pattern = chosen.pattern, dim = chosen.dim, image = chosen.image, focusX = chosen.focusX, focusY = chosen.focusY, zoom = chosen.zoom),
+                )
+            }
             Spacer(Modifier.height(16.dp))
             var active by remember { mutableStateOf(WallCache.isActive(context)) }
             LifecycleResumeEffect(Unit) {
