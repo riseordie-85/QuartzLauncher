@@ -160,8 +160,11 @@ object WallStore {
     }
 
     fun save(context: Context, slot: WallSlot, config: WallConfig) {
-        Prefs.get(context).edit().putString(slot.key, config.toJson()).apply()
-        cleanImages(context)
+        val prefs = Prefs.get(context)
+        val before = WallConfig.fromJson(prefs.getString(slot.key, null))?.image
+        prefs.edit().putString(slot.key, config.toJson()).apply()
+        // Only look for unused photos when the photo changed, not on every slider step
+        if (before != config.image) cleanImages(context)
         WallCache.changed()
     }
 

@@ -183,9 +183,13 @@ object WallCache {
             ScreenKind.COVER -> Prefs.COVER_W to Prefs.COVER_H
             ScreenKind.SINGLE -> return
         }
+        // Saved in one orientation (unfolded: wide; cover: tall), so turning the phone doesn't move the cover's half
+        val long = maxOf(w, h)
+        val short = minOf(w, h)
+        val (sw, sh) = if (kind == ScreenKind.INNER) long to short else short to long
         val prefs = Prefs.get(context)
-        if (prefs.getInt(kw, 0) != w || prefs.getInt(kh, 0) != h) {
-            prefs.edit().putInt(kw, w).putInt(kh, h).apply()
+        if (prefs.getInt(kw, 0) != sw || prefs.getInt(kh, 0) != sh) {
+            prefs.edit().putInt(kw, sw).putInt(kh, sh).apply()
             // The cover's half of the unfolded wallpaper just changed shape: redo its glass and previews too
             changed()
         }
