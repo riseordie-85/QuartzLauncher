@@ -81,11 +81,16 @@ import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.delay
+import android.content.pm.ActivityInfo
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import com.tim.launcher.settings.DockAlign
+import com.tim.launcher.settings.DockLength
+import com.tim.launcher.settings.DockPosition
 import kotlinx.coroutines.flow.drop
 import android.annotation.SuppressLint
 import android.content.Context
 import android.widget.Toast
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
@@ -106,7 +111,6 @@ import com.tim.launcher.settings.DockShape
 import com.tim.launcher.settings.DrawerOpen
 import com.tim.launcher.settings.GestureAction
 import com.tim.launcher.settings.GestureSlot
-import com.tim.launcher.settings.PageMode
 import com.tim.launcher.settings.S
 import com.tim.launcher.settings.Scope
 import com.tim.launcher.settings.SettingsActivity
@@ -117,10 +121,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import com.tim.launcher.ui.Q
 
-private val PanelShape = RoundedCornerShape(28.dp)
-private val DockGlass = Color.White.copy(alpha = 0.14f)
-private const val HINGE_GAP_DP = 24
-private const val SIDE_PAD_DP = 12
 
 /** Tracks the icon being dragged (from a home slot or from the drawer) and where every slot sits on screen. */
 class DragController {
@@ -214,23 +214,19 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
     // First run after settings arrived: keep the layout you already had instead of resetting it to defaults
     remember(gridScope) {
         if (store.owner(S.gridCols, gridScope) == null) {
-            store.set(S.gridCols, gridScope, if (gridScope == Scope.TABLET) vm.cols * 2 else vm.cols)
+            store.set(S.gridCols, gridScope, vm.cols)
             store.set(S.gridRows, gridScope, vm.rows)
         }
         if (store.owner(S.pages, Scope.GLOBAL) == null) store.set(S.pages, value = vm.pages)
         if (store.owner(S.coverSide, Scope.GLOBAL) == null) {
             store.set(S.coverSide, value = if (vm.coverLeft) CoverSide.LEFT else CoverSide.RIGHT)
         }
-        if (store.owner(S.pageMode, Scope.GLOBAL) == null) {
-            store.set(S.pageMode, value = if (vm.pageMode == "strip") PageMode.STRIP else PageMode.PAIRED)
-        }
         true
     }
     val settingCols = store[S.gridCols, gridScope]
     val settingRows = store[S.gridRows, gridScope]
     LaunchedEffect(settingCols, settingRows, gridScope) {
-        val c = if (gridScope == Scope.TABLET) (settingCols / 2).coerceAtLeast(3) else settingCols
-        vm.setGrid(c, settingRows)
+        vm.setGrid(settingCols, settingRows)
     }
     val settingSide = store[S.coverSide]
     LaunchedEffect(settingSide) {
@@ -239,8 +235,18 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
     }
     val settingPages = store[S.pages]
     LaunchedEffect(settingPages) { vm.setPageCount(settingPages) }
-    val settingMode = if (store[S.pageMode] == PageMode.STRIP) "strip" else "paired"
-    LaunchedEffect(settingMode) { if (vm.pageMode != settingMode) vm.choosePageMode(settingMode) }
+
+    // Phones and the cover screen stay upright unless you allow rotation. The unfolded screen and tablets always
+    // follow the device (Android requires it on large screens), and their grids reflow instead.
+    val rotate = store[S.rotateHome]
+    LaunchedEffect(screen.posture, rotate) {
+        val upright = !rotate && (screen.posture == Posture.PHONE || screen.posture == Posture.COVER)
+        activity.requestedOrientation =
+            if (upright) ActivityInfo.SCREEN_ORIENTATION_NOSENSOR else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    }
+
+    // Pick up a layout imported from another device while Settings was open
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.reloadIfChanged() }
 
     val panelColor = Color(store[S.panelColor])
     val look = HomeLook(
@@ -255,6 +261,12 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         button = if (store[S.drawerOpen] == DrawerOpen.SWIPE) null else store[S.drawerButtonEnd],
         buttonIcon = store[S.drawerButtonIcon],
         openDrawer = { drawerOpen = true },
+        carryOver = store[S.carryOver],
+        innerCols = store[S.gridCols, Scope.INNER],
+        innerRows = store[S.gridRows, Scope.INNER],
+        dockPosition = store[S.dockPosition, scope],
+        dockLength = store[S.dockLength, scope],
+        dockAlign = store[S.dockAlign, scope],
     )
     val deviceType = when {
         screen.foldable -> DeviceType.FOLDABLE
@@ -349,11 +361,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             },
     ) {
       CompositionLocalProvider(LocalHomeLook provides look) {
-        if (screen.posture.split) {
-            SplitLayout(screen, vm, drag)
-        } else {
-            SingleLayout(screen, vm, drag, showHint = !hintSeen)
-        }
+        HomeLayout(screen, vm, drag, showHint = !hintSeen)
 
         AnimatedVisibility(
             visible = drawerOpen,
@@ -412,370 +420,6 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
     }
 }
 
-/** Phone or Fold cover screen: swipeable pages of one grid, plus the dock. */
-@Composable
-private fun SingleLayout(screen: ScreenState, vm: HomeViewModel, drag: DragController, showHint: Boolean) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.systemBars)
-            .padding(horizontal = SIDE_PAD_DP.dp),
-    ) {
-        if (showHint) HintLine()
-        HomePager(
-            count = vm.pages,
-            page = vm.currentPage,
-            onSettled = { vm.currentPage = it },
-            screen = screen,
-            drag = drag,
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-        ) { page ->
-            GridArea(Area.COVER, page * vm.perPage, vm.cover, vm.cols, vm.rows, vm, drag, Modifier.fillMaxSize())
-        }
-        PageDots(vm.pages, vm.currentPage)
-        DockPanel {
-            DockWithButton(Modifier.fillMaxWidth()) {
-                DockRow(Area.DOCK_COVER, vm.dockCover, vm, drag, Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-/**
- * Unfolded Fold or tablet. Book orientation: the cover grid doubled horizontally, split at the hinge, in either
- * paired or strip page mode. Rotated (taller than wide): one reflowed grid, iPad style.
- */
-@Composable
-private fun SplitLayout(screen: ScreenState, vm: HomeViewModel, drag: DragController) {
-    if (screen.heightDp > screen.widthDp) {
-        ReflowLayout(screen, vm, drag)
-        return
-    }
-    Column(
-        Modifier
-            .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Vertical))
-            .padding(horizontal = SIDE_PAD_DP.dp),
-    ) {
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-            val (leftW, rightW) = halfWidths(screen, maxWidth)
-            if (vm.pageMode == "strip") {
-                StripPages(screen, vm, drag, leftW)
-            } else {
-                HomePager(
-                    count = vm.pages,
-                    page = vm.currentPage,
-                    onSettled = { vm.currentPage = it },
-                    screen = screen,
-                    drag = drag,
-                    modifier = Modifier.fillMaxSize(),
-                ) { page ->
-                    Row(Modifier.fillMaxSize()) {
-                        HalfGrid(vm.coverLeft, page, coverCaption(screen, vm.coverLeft, page), vm, drag, Modifier.width(leftW).fillMaxHeight())
-                        Spacer(Modifier.width(HINGE_GAP_DP.dp))
-                        HalfGrid(!vm.coverLeft, page, coverCaption(screen, !vm.coverLeft, page), vm, drag, Modifier.width(rightW).fillMaxHeight())
-                    }
-                }
-            }
-        }
-        PageDots(vm.pages, vm.currentPage)
-        DockPanel {
-            DockWithButton(Modifier.fillMaxWidth()) {
-                RefRow(unfoldedDock(vm), vm, drag, Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-private fun coverCaption(screen: ScreenState, isCover: Boolean, page: Int): String {
-    val n = page + 1
-    return when {
-        screen.posture == Posture.TABLET -> if (isCover) "Phone layout · page $n" else "Other half · page $n"
-        isCover -> "Cover · page $n"
-        else -> "Inner half · page $n"
-    }
-}
-
-/**
- * Strip mode: your pages are one fixed row, and the unfolded screen shows two neighbors at a time. The cover
- * screen is the left or right page of that pair. Choosing a side never moves the pages; at the ends the view
- * simply stops at the first or last pair.
- */
-@Composable
-private fun StripPages(screen: ScreenState, vm: HomeViewModel, drag: DragController, halfWidth: Dp) {
-    val lastFirst = maxOf(0, vm.pages - 2)
-    HomePager(
-        count = vm.pages,
-        page = (if (vm.coverLeft) vm.currentPage else vm.currentPage - 1).coerceIn(0, lastFirst),
-        onSettled = { first ->
-            vm.currentPage = (if (vm.coverLeft) first else first + 1).coerceIn(0, vm.pages - 1)
-        },
-        screen = screen,
-        drag = drag,
-        modifier = Modifier.fillMaxSize(),
-        pageSize = PageSize.Fixed(halfWidth),
-        pageSpacing = HINGE_GAP_DP.dp,
-        maxPage = lastFirst,
-    ) { page ->
-        Column(Modifier.fillMaxSize()) {
-            val isCover = page == vm.currentPage
-            Caption(if (isCover) "Page ${page + 1} · cover" else "Page ${page + 1}")
-            GridArea(Area.COVER, page * vm.perPage, vm.cover, vm.cols, vm.rows, vm, drag, Modifier.weight(1f).fillMaxWidth())
-        }
-    }
-}
-
-/** Rotated unfolded screen: the same apps, in the same order, flowed into one grid sized for the tall screen. */
-@Composable
-private fun ReflowLayout(screen: ScreenState, vm: HomeViewModel, drag: DragController) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.systemBars)
-            .padding(horizontal = SIDE_PAD_DP.dp),
-    ) {
-        Caption(if (vm.pageMode == "strip") "Rotated · reflowed cover page" else "Rotated · cover + inner half, reflowed")
-        HomePager(
-            count = vm.pages,
-            page = vm.currentPage,
-            onSettled = { vm.currentPage = it },
-            screen = screen,
-            drag = drag,
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-        ) { page ->
-            BoxWithConstraints(Modifier.fillMaxSize()) {
-                val refs = reflowRefs(vm, page)
-                val capacity = if (vm.pageMode == "strip") vm.perPage else vm.perPage * 2
-                val cols = maxOf(vm.cols, (maxWidth / REFLOW_CELL).toInt())
-                val rowsNeeded = (capacity + cols - 1) / cols
-                val rowsFit = maxOf(1, (maxHeight / REFLOW_CELL).toInt())
-                RefGrid(refs, cols, maxOf(rowsNeeded, rowsFit), vm, drag, Modifier.fillMaxSize())
-            }
-        }
-        PageDots(vm.pages, vm.currentPage)
-        DockPanel {
-            DockWithButton(Modifier.fillMaxWidth()) {
-                RefRow(unfoldedDock(vm), vm, drag, Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-private val REFLOW_CELL = 92.dp
-
-/** The unfolded dock: your folded dock icons first, then the extra unfolded slots after them. */
-private fun unfoldedDock(vm: HomeViewModel): List<SlotRef> =
-    vm.dockCover.indices.map { SlotRef(Area.DOCK_COVER, it) } + vm.dockExtra.indices.map { SlotRef(Area.DOCK_EXTRA, it) }
-
-/** Filled slots of one page in reading order: row by row across both halves (paired) or one cover page (strip). */
-private fun reflowRefs(vm: HomeViewModel, page: Int): List<SlotRef> {
-    val base = page * vm.perPage
-    val refs = mutableListOf<SlotRef>()
-    for (r in 0 until vm.rows) {
-        val halves = when {
-            vm.pageMode == "strip" -> listOf(Area.COVER)
-            vm.coverLeft -> listOf(Area.COVER, Area.EXTRA)
-            else -> listOf(Area.EXTRA, Area.COVER)
-        }
-        for (area in halves) {
-            for (c in 0 until vm.cols) refs.add(SlotRef(area, base + r * vm.cols + c))
-        }
-    }
-    return refs.filter { vm.keyAt(it) != null }
-}
-
-@Composable
-private fun RefGrid(refs: List<SlotRef>, cols: Int, rows: Int, vm: HomeViewModel, drag: DragController, modifier: Modifier) {
-    BoxWithConstraints(modifier) {
-        val cellW = maxWidth / cols
-        val cellH = maxHeight / rows
-        val look = LocalHomeLook.current
-        val iconSize = minOf(cellW * 0.62f * look.iconScale, cellH * 0.55f, 80.dp)
-        Column {
-            for (r in 0 until rows) {
-                Row {
-                    for (c in 0 until cols) {
-                        val ref = refs.getOrNull(r * cols + c)
-                        if (ref != null) {
-                            Cell(ref, vm.keyAt(ref), iconSize, look.labelsHome, vm, drag, Modifier.width(cellW).height(cellH))
-                        } else {
-                            Spacer(Modifier.width(cellW).height(cellH))
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RefRow(refs: List<SlotRef>, vm: HomeViewModel, drag: DragController, modifier: Modifier) {
-    BoxWithConstraints(modifier) {
-        val count = refs.size.coerceAtLeast(1)
-        // Fit the row when there's room; past that (an unlimited dock) the row scrolls sideways
-        val cellW = (maxWidth / count).coerceIn(60.dp, 88.dp)
-        val scrolls = cellW * count > maxWidth
-        val iconSize = minOf(cellW * 0.66f, 56.dp)
-        val labels = LocalHomeLook.current.labelsDock
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .then(if (scrolls) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
-            horizontalArrangement = if (scrolls) Arrangement.Start else Arrangement.Center,
-        ) {
-            refs.forEach { ref ->
-                Cell(ref, vm.keyAt(ref), iconSize, labels, vm, drag, Modifier.width(cellW).height(iconSize + if (labels) 36.dp else 20.dp))
-            }
-        }
-    }
-}
-
-/**
- * A horizontal pager for home pages. While an icon is dragged near the left or right edge of the screen, it
- * flips to the neighboring page. All pages stay composed so a drag survives its page sliding away.
- */
-@Composable
-private fun HomePager(
-    count: Int,
-    page: Int,
-    onSettled: (Int) -> Unit,
-    screen: ScreenState,
-    drag: DragController,
-    modifier: Modifier,
-    pageSize: PageSize = PageSize.Fill,
-    pageSpacing: Dp = 0.dp,
-    maxPage: Int = count - 1,
-    content: @Composable (Int) -> Unit,
-) {
-    val last = maxPage.coerceIn(0, maxOf(0, count - 1))
-    val state = rememberPagerState(initialPage = page.coerceIn(0, last)) { count }
-    // Report pages you swipe to (not the one we opened on, so unfolding at an edge doesn't change your page)
-    LaunchedEffect(state) {
-        snapshotFlow { state.settledPage }.drop(1).collect { onSettled(it.coerceAtMost(last)) }
-    }
-    // Follow the page from outside: Home, switching cover side, or folding
-    LaunchedEffect(page, last) {
-        val target = page.coerceIn(0, last)
-        if (!state.isScrollInProgress && state.currentPage != target) state.animateScrollToPage(target)
-    }
-
-    val edgePx = with(LocalDensity.current) { 36.dp.toPx() }
-    val edge = when {
-        !drag.active -> 0
-        drag.pointer.x < edgePx -> -1
-        drag.pointer.x > screen.widthPx - edgePx -> 1
-        else -> 0
-    }
-    LaunchedEffect(edge) {
-        if (edge == 0) return@LaunchedEffect
-        delay(450)
-        while (true) {
-            val target = (state.currentPage + edge).coerceIn(0, last)
-            if (target == state.currentPage) break
-            state.animateScrollToPage(target)
-            delay(650)
-        }
-    }
-
-    HorizontalPager(
-        state = state,
-        modifier = modifier,
-        pageSize = pageSize,
-        pageSpacing = pageSpacing,
-        beyondViewportPageCount = count,
-    ) { index -> content(index) }
-}
-
-@Composable
-private fun PageDots(count: Int, current: Int) {
-    if (count <= 1) return
-    Row(
-        Modifier.fillMaxWidth().padding(top = 4.dp),
-        horizontalArrangement = Arrangement.Center,
-    ) {
-        repeat(count) { i ->
-            Box(
-                Modifier
-                    .padding(horizontal = 4.dp)
-                    .size(if (i == current) 8.dp else 6.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(Color.White.copy(alpha = if (i == current) 0.95f else 0.45f)),
-            )
-        }
-    }
-}
-
-@Composable
-private fun Caption(text: String) {
-    Text(
-        text,
-        color = Color.White.copy(alpha = 0.55f),
-        fontSize = 11.sp,
-        modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp),
-        textAlign = TextAlign.Center,
-        style = labelStyle(),
-    )
-}
-
-/** Widths of the two halves inside the padded area, split around the hinge. */
-@Composable
-private fun halfWidths(screen: ScreenState, available: Dp): Pair<Dp, Dp> {
-    val density = LocalDensity.current
-    val gap = HINGE_GAP_DP.dp
-    val hingeLocal = screen.hingeCenterPx
-        ?.let { with(density) { it.toDp() } - SIDE_PAD_DP.dp }
-        ?: (available / 2)
-    val left = (hingeLocal - gap / 2).coerceIn(0.dp, available)
-    val right = (available - left - gap).coerceAtLeast(0.dp)
-    return left to right
-}
-
-@Composable
-private fun HalfGrid(isCover: Boolean, page: Int, caption: String, vm: HomeViewModel, drag: DragController, modifier: Modifier) {
-    Column(modifier) {
-        Caption(caption)
-        GridArea(
-            area = if (isCover) Area.COVER else Area.EXTRA,
-            base = page * vm.perPage,
-            items = if (isCover) vm.cover else vm.extra,
-            cols = vm.cols,
-            rows = vm.rows,
-            vm = vm,
-            drag = drag,
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-        )
-    }
-}
-
-@Composable
-private fun GridArea(
-    area: Area,
-    base: Int,
-    items: List<String?>,
-    cols: Int,
-    rows: Int,
-    vm: HomeViewModel,
-    drag: DragController,
-    modifier: Modifier,
-) {
-    BoxWithConstraints(modifier) {
-        val cellW = maxWidth / cols
-        val cellH = maxHeight / rows
-        val look = LocalHomeLook.current
-        val iconSize = minOf(cellW * 0.62f * look.iconScale, cellH * 0.55f, 80.dp)
-        Column {
-            for (r in 0 until rows) {
-                Row {
-                    for (c in 0 until cols) {
-                        val index = base + r * cols + c
-                        Cell(SlotRef(area, index), items.getOrNull(index), iconSize, look.labelsHome, vm, drag, Modifier.width(cellW).height(cellH))
-                    }
-                }
-            }
-        }
-    }
-}
-
 /** Shown at the top while dragging. Dropping a home icon here takes it off the home screen (it stays installed). */
 @Composable
 private fun RemoveZone(drag: DragController) {
@@ -799,56 +443,6 @@ private fun RemoveZone(drag: DragController) {
                 .padding(horizontal = 28.dp, vertical = 14.dp),
         ) {
             Text("✕  $label", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-        }
-    }
-}
-
-@Composable
-private fun DockRow(area: Area, items: List<String?>, vm: HomeViewModel, drag: DragController, modifier: Modifier) {
-    RefRow(items.indices.map { SlotRef(area, it) }, vm, drag, modifier)
-}
-
-@Composable
-private fun DockPanel(content: @Composable () -> Unit) {
-    val look = LocalHomeLook.current
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .padding(top = 6.dp, bottom = 10.dp)
-            .clip(look.dockShape)
-            .background(if (look.dockBackground) look.panel else Color.Transparent),
-        contentAlignment = Alignment.Center,
-    ) { content() }
-}
-
-/** A dock row with the apps button at the chosen end, when the drawer opens by button. */
-@Composable
-private fun DockWithButton(modifier: Modifier, content: @Composable RowScope.() -> Unit) {
-    val look = LocalHomeLook.current
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        if (look.button == ButtonEnd.START) DrawerButton()
-        content()
-        if (look.button == ButtonEnd.END) DrawerButton()
-    }
-}
-
-@Composable
-private fun DrawerButton() {
-    val look = LocalHomeLook.current
-    Box(
-        Modifier
-            .padding(horizontal = 8.dp)
-            .size(48.dp)
-            .clip(CircleShape)
-            .background(Q.Accent)
-            .clickable { look.openDrawer() },
-        contentAlignment = Alignment.Center,
-    ) {
-        when (look.buttonIcon) {
-            ButtonIcon.QUARTZ -> Text("Q", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            ButtonIcon.GRID -> Icon(Icons.Rounded.Apps, contentDescription = "Apps", tint = Color.White)
-            ButtonIcon.DOTS -> Icon(Icons.Rounded.MoreHoriz, contentDescription = "Apps", tint = Color.White)
-            ButtonIcon.CIRCLE -> Icon(Icons.Rounded.RadioButtonUnchecked, contentDescription = "Apps", tint = Color.White)
         }
     }
 }
@@ -918,12 +512,18 @@ data class HomeLook(
     val button: ButtonEnd? = null,
     val buttonIcon: ButtonIcon = ButtonIcon.QUARTZ,
     val openDrawer: () -> Unit = {},
+    val carryOver: Boolean = true,
+    val innerCols: Int = 8,
+    val innerRows: Int = 6,
+    val dockPosition: DockPosition = DockPosition.BOTTOM,
+    val dockLength: DockLength = DockLength.FULL,
+    val dockAlign: DockAlign = DockAlign.END,
 )
 
 val LocalHomeLook = compositionLocalOf { HomeLook() }
 
 @Composable
-private fun Cell(
+internal fun Cell(
     ref: SlotRef,
     key: String?,
     iconSize: Dp,
@@ -1004,12 +604,12 @@ fun AppIcon(app: AppEntry, size: Dp, showLabel: Boolean, modifier: Modifier = Mo
     }
 }
 
-private fun labelStyle() = TextStyle(
+internal fun labelStyle() = TextStyle(
     shadow = Shadow(color = Color.Black.copy(alpha = 0.6f), offset = Offset(0f, 1f), blurRadius = 4f),
 )
 
 @Composable
-private fun HintLine() {
+internal fun HintLine() {
     Text(
         "Phase 0 test · swipe up for apps · long-press empty space for the test panel",
         color = Color.White.copy(alpha = 0.75f),

@@ -214,14 +214,22 @@ fun HomeSettings(ctx: SettingsContext) {
                 if (derived) "Doubled from the cover screen" else null,
                 link = if (derived) null else ctx.link(S.gridCols),
                 enabled = !derived,
-            ) { Stepper(cols, 3..if (derived) 16 else 8, enabled = !derived) { store.set(S.gridCols, scope, it) } }
+            ) { Stepper(cols, 3..if (derived) 16 else if (scope == Scope.TABLET || scope == Scope.INNER) 10 else 8, enabled = !derived) { store.set(S.gridCols, scope, it) } }
             RowDivider()
             SettingRow(
                 "Rows",
                 if (derived) "Same as the cover screen" else null,
                 link = if (derived) null else ctx.link(S.gridRows),
                 enabled = !derived,
-            ) { Stepper(rows, 4..10, enabled = !derived) { store.set(S.gridRows, scope, it) } }
+            ) { Stepper(rows, 3..10, enabled = !derived) { store.set(S.gridRows, scope, it) } }
+            if (scope == Scope.TABLET) {
+                RowDivider()
+                SettingRow("Held upright", "The grid flips to ${store[S.gridRows, scope]} × ${store[S.gridCols, scope]} and your apps keep their order", enabled = false)
+            }
+            if (scope == Scope.INNER && !store[S.carryOver]) {
+                RowDivider()
+                SettingRow("Unfolded", "Shows one page at a time, with your apps flowed into this grid", enabled = false)
+            }
             RowDivider()
             SettingRow("Pages") { Stepper(store[S.pages], 1..5) { store.set(S.pages, value = it) } }
         }
@@ -237,10 +245,6 @@ fun HomeSettings(ctx: SettingsContext) {
                     Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
                         Text("It lands on the", color = Q.Text, fontSize = 16.sp, modifier = Modifier.padding(bottom = 10.dp))
                         Segmented(store[S.coverSide], CoverSide.entries, { it.label }) { store.set(S.coverSide, value = it) }
-                    }
-                    RowDivider()
-                    SettingRow("Pages when unfolded", "Side by side shows the page you're on and its neighbor") {
-                        Dropdown(store[S.pageMode], PageMode.entries, { it.label }) { store.set(S.pageMode, value = it) }
                     }
                 }
             }
@@ -263,8 +267,8 @@ fun HomeSettings(ctx: SettingsContext) {
             GlassPanel {
                 SettingRow(
                     "Rotate the home screen",
-                    (if (ctx.type == DeviceType.FOLDABLE) "The cover screen stays upright when off. The unfolded screen always rotates (Android requires it) and reflows your apps."
-                    else "Stays upright when off") + " Takes effect with the layout engine (phase 2).",
+                    if (ctx.type == DeviceType.FOLDABLE) "The cover screen stays upright when off. The unfolded screen always rotates (Android requires it) and reflows your apps."
+                    else "Stays upright when off. When on, your grid flips sideways in landscape.",
                 ) { Toggle(store[S.rotateHome]) { store.set(S.rotateHome, value = it) } }
             }
         }
@@ -603,14 +607,14 @@ fun PrivacySettings(ctx: SettingsContext) {
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         runCatching {
-            context.contentResolver.openOutputStream(uri)?.use { it.write(store.exportJson().toByteArray()) }
+            context.contentResolver.openOutputStream(uri)?.use { it.write(Profile.export(context).toByteArray()) }
         }.onSuccess { toast(context, "Settings exported") }.onFailure { toast(context, "Export failed: ${it.message}") }
     }
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         runCatching {
             val text = context.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } ?: error("Empty file")
-            store.importJson(text)
+            Profile.import(context, text)
         }.onSuccess { toast(context, "Imported $it settings") }.onFailure { toast(context, "Import failed: ${it.message}") }
     }
 
@@ -647,17 +651,17 @@ fun PrivacySettings(ctx: SettingsContext) {
 
         SectionLabel("Backup")
         GlassPanel {
-            SettingRow("Export settings", "Save a profile file to move your setup to another device", onClick = {
+            SettingRow("Export profile", "Your settings and home screen layout, as a file for another device", onClick = {
                 exporter.launch("quartz-settings.json")
             })
             RowDivider()
-            SettingRow("Import settings", "Load a profile from another device", onClick = {
+            SettingRow("Import profile", "Load settings and layout from another device", onClick = {
                 importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
             })
             RowDivider()
             SettingRow("Reset all settings", "Back to the defaults. Your home screen layout isn't touched.", onClick = { confirmReset = true })
         }
-        BodyText("Profiles hold your settings today. Layouts join them in phase 2.", Modifier.padding(horizontal = 20.dp, vertical = 14.dp))
+        BodyText("Importing a profile replaces this device's layout. Apps it doesn't have leave their spots empty.", Modifier.padding(horizontal = 20.dp, vertical = 14.dp))
     }
 
     if (confirmReset) {

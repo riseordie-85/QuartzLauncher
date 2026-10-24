@@ -54,9 +54,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var pages by mutableIntStateOf(prefs.getInt(Prefs.PAGES, 3))
         private set
-    /** "paired": each cover page has its own inner half. "strip": unfolded shows two cover pages side by side. */
-    var pageMode by mutableStateOf(prefs.getString(Prefs.PAGE_MODE, "strip") ?: "strip")
-        private set
+    /** Pages always form one strip; unfolding shows two neighbors at a time. (The old "paired" mode is gone.) */
+    val pageMode = "strip"
+
+    /** Bumped in Prefs when a layout is imported, so the home screen knows to reload it. */
+    private var layoutStamp = prefs.getInt(Prefs.LAYOUT_STAMP, 0)
 
     /** The cover page you're on; kept across fold and unfold. Starts on your home page. */
     var currentPage by mutableIntStateOf(0)
@@ -89,6 +91,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         restoreLayout()
+        migratePairedPages()
         currentPage = homePage
         launcherApps.registerCallback(callback, Handler(Looper.getMainLooper()))
         reload()
@@ -113,6 +116,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             apps = loaded.associateBy { it.key }
             sortedApps = loaded
             if (!prefs.getBoolean(Prefs.LAYOUT_READY, false) && loaded.isNotEmpty()) fillDefaults()
+            else if (loaded.isNotEmpty()) dropMissingApps()
         }
     }
 
@@ -151,6 +155,53 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val savedExtra = read(Prefs.L_DOCK_EXTRA)
         fill(dockCover, savedDock, if (savedDock.isEmpty()) cols else savedDock.size)
         fill(dockExtra, savedExtra, if (savedExtra.isEmpty()) cols else savedExtra.size)
+    }
+
+    /** Apps placed in the old "paired" inner pages move onto empty spots of your pages. */
+    private fun migratePairedPages() {
+        val moving = extra.filterNotNull()
+        if (moving.isEmpty()) return
+        extra.indices.forEach { extra[it] = null }
+        var lost = 0
+        moving.forEach { key ->
+            val slot = cover.indexOfFirst { it == null }
+            if (slot >= 0) cover[slot] = key else lost++
+        }
+        save()
+        Diag.log("Moved ${moving.size - lost} apps from the old inner pages onto your pages" + if (lost > 0) " ($lost had no room)" else "")
+    }
+
+    /** Uninstalled apps (or apps from another device's imported layout) leave their spots instead of hiding in them. */
+    private fun dropMissingApps() {
+        var removed = 0
+        listOf(cover, extra, dockCover, dockExtra).forEach { list ->
+            list.indices.forEach { i ->
+                val key = list[i]
+                if (key != null && key !in apps) {
+                    list[i] = null
+                    removed++
+                }
+            }
+        }
+        if (removed > 0) {
+            save()
+            Diag.log("Cleared $removed spots for apps that aren't installed")
+        }
+    }
+
+    /** Reloads the layout if it was replaced by an import. */
+    fun reloadIfChanged() {
+        val stamp = prefs.getInt(Prefs.LAYOUT_STAMP, 0)
+        if (stamp == layoutStamp) return
+        layoutStamp = stamp
+        cols = prefs.getInt(Prefs.COLS, cols)
+        rows = prefs.getInt(Prefs.ROWS, rows)
+        pages = prefs.getInt(Prefs.PAGES, pages)
+        restoreLayout()
+        migratePairedPages()
+        if (apps.isNotEmpty()) dropMissingApps()
+        currentPage = homePage
+        Diag.log("Loaded an imported layout")
     }
 
     private fun fill(target: SnapshotStateList<String?>, items: List<String?>, size: Int) {
@@ -220,11 +271,6 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    fun choosePageMode(mode: String) {
-        pageMode = mode
-        prefs.edit().putString(Prefs.PAGE_MODE, mode).apply()
-        Diag.log("Unfolded pages: " + if (mode == "strip") "side by side (strip)" else "paired with inner pages")
-    }
 
     fun move(from: SlotRef, to: SlotRef) {
         val a = list(from.area)
@@ -284,20 +330,41 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         return false
     }
 
+    /**
+     * Changes the grid without shuffling your apps: each app keeps its row and column on its page. Apps that no
+     * longer fit (a column or row was removed) move to the first empty spot on the same page, then any page.
+     */
     fun setGrid(newCols: Int, newRows: Int) {
-        val c = newCols.coerceIn(3, 8)
-        val r = newRows.coerceIn(4, 10)
+        val c = newCols.coerceIn(3, 10)
+        val r = newRows.coerceIn(3, 10)
         if (c == cols && r == rows) return
-        fun resized(list: List<String?>, size: Int) = list.filterNotNull().take(size)
-        val coverItems = resized(cover, pages * c * r)
-        val extraItems = resized(extra, pages * c * r)
+        val oldCols = cols
+        val oldRows = rows
+        val oldPer = oldCols * oldRows
+        val newPer = c * r
+        val next = MutableList<String?>(pages * newPer) { null }
+        val overflow = mutableListOf<Pair<Int, String>>()
+        for (p in 0 until pages) {
+            for (i in 0 until oldPer) {
+                val key = cover.getOrNull(p * oldPer + i) ?: continue
+                val row = i / oldCols
+                val col = i % oldCols
+                if (row < r && col < c) next[p * newPer + row * c + col] = key else overflow += p to key
+            }
+        }
+        var lost = 0
+        overflow.forEach { (p, key) ->
+            val onPage = (p * newPer until (p + 1) * newPer).firstOrNull { next[it] == null }
+            val slot = onPage ?: next.indexOfFirst { it == null }.takeIf { it >= 0 }
+            if (slot != null) next[slot] = key else lost++
+        }
         cols = c
         rows = r
-        fill(cover, coverItems, pages * c * r)
-        fill(extra, extraItems, pages * c * r)
+        fill(cover, next, pages * newPer)
+        fill(extra, emptyList(), pages * newPer)
         prefs.edit().putInt(Prefs.COLS, c).putInt(Prefs.ROWS, r).apply()
         save()
-        Diag.log("Cover grid set to ${c}×$r (unfolded ${c * 2}×$r)")
+        Diag.log("Grid set to ${c}×$r" + if (overflow.isNotEmpty()) " (moved ${overflow.size - lost} apps that no longer fit)" else "")
     }
 
     /**

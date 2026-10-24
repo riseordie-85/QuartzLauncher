@@ -54,6 +54,7 @@ object Prefs {
     const val PAGE_MODE = "page_mode"       // "paired" or "strip"
 
     const val LAYOUT_READY = "layout_ready"
+    const val LAYOUT_STAMP = "layout_stamp"
     const val L_COVER = "layout_cover"
     const val L_EXTRA = "layout_extra"
     const val L_DOCK_COVER = "layout_dock_cover"

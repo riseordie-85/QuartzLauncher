@@ -61,6 +61,7 @@ import com.tim.launcher.settings.GestureSlot
 import com.tim.launcher.settings.IconBackground
 import com.tim.launcher.settings.IconShape
 import com.tim.launcher.settings.IconStyle
+import com.tim.launcher.settings.Profile
 import com.tim.launcher.settings.S
 import com.tim.launcher.settings.Scope
 import com.tim.launcher.settings.SettingsStore
@@ -184,7 +185,7 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
         if (uri == null) return@rememberLauncherForActivityResult
         runCatching {
             val text = context.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } ?: error("Empty file")
-            store.importJson(text)
+            Profile.import(context, text)
         }.onSuccess {
             path = Path.IMPORT
             toast(context, "Imported $it settings")
@@ -390,7 +391,17 @@ private fun ColumnScope.StepContent(
                 BodyText("This is your cover screen. Unfolded, the columns double: ${cols * 2} × $rows.")
                 Spacer(Modifier.height(12.dp))
             }
-            GridSteppers(cols, rows, onCols = { store.set(S.gridCols, primary, it) }, onRows = { store.set(S.gridRows, primary, it) })
+            if (type == DeviceType.TABLET) {
+                BodyText("Set it for landscape. Held upright, the grid flips to $rows × $cols and your apps keep their order.")
+                Spacer(Modifier.height(12.dp))
+            }
+            GridSteppers(
+                cols,
+                rows,
+                maxCols = if (type == DeviceType.TABLET) 10 else 8,
+                onCols = { store.set(S.gridCols, primary, it) },
+                onRows = { store.set(S.gridRows, primary, it) },
+            )
         }
 
         Step.INNER_GRID -> {
@@ -622,7 +633,7 @@ private fun GridSteppers(cols: Int, rows: Int, maxCols: Int = 8, onCols: (Int) -
     GlassPanel {
         SettingRow("Columns") { Stepper(cols, 3..maxCols) { onCols(it) } }
         RowDivider()
-        SettingRow("Rows") { Stepper(rows, 4..10) { onRows(it) } }
+        SettingRow("Rows") { Stepper(rows, 3..10) { onRows(it) } }
     }
 }
 
