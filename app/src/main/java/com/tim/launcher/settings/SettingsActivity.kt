@@ -70,7 +70,7 @@ class SettingsActivity : ComponentActivity() {
                         },
                         label = "settings",
                     ) { s ->
-                        val ctx = SettingsContext(store, type, editing, onEditing = { editing = it }, go = ::go, back = ::back)
+                        val ctx = SettingsContext(store, type, editing, onEditing = { editing = it }, go = { go(it) }, back = { back() })
                         when (s.last()) {
                             Route.MAIN -> MainSettings(ctx)
                             Route.HOME -> HomeSettings(ctx)

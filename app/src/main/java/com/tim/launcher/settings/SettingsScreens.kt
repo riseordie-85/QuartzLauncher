@@ -653,7 +653,7 @@ fun PrivacySettings(ctx: SettingsContext) {
         AlertDialog(
             onDismissRequest = { confirmReset = false },
             title = { Text("Reset all settings?") },
-            text = { Text("Every setting goes back to its default, and setup will run again next time you go home.") },
+            text = { Text("Every setting goes back to its default. To run setup again, long-press the home screen and choose Run setup again.") },
             confirmButton = {
                 TextButton(onClick = {
                     store.resetAll()

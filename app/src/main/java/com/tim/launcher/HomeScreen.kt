@@ -81,6 +81,7 @@ import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
 import android.annotation.SuppressLint
 import android.content.Context
 import android.widget.Toast
@@ -268,6 +269,8 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
     var hintSeen by remember { mutableStateOf(prefs.getBoolean(Prefs.HINT_SEEN, false)) }
 
     LaunchedEffect(homeTick) {
+        // Pressing Home while already home, with nothing open, returns to your home page
+        if (homeTick > 0 && !drawerOpen && !panelOpen && !menuOpen) vm.goHome()
         drawerOpen = false
         panelOpen = false
         menuOpen = false
@@ -338,7 +341,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             enter = slideInVertically { it / 3 } + fadeIn(),
             exit = slideOutVertically { it / 3 } + fadeOut(),
         ) {
-            AppDrawer(vm, drag, drawerCols, onClose = { drawerOpen = false })
+            AppDrawer(vm, drag, drawerCols.coerceAtLeast(1), onClose = { drawerOpen = false })
         }
 
         if (drag.active) RemoveZone(drag)
@@ -402,7 +405,7 @@ private fun SingleLayout(screen: ScreenState, vm: HomeViewModel, drag: DragContr
         if (showHint) HintLine()
         HomePager(
             count = vm.pages,
-            startPage = vm.currentPage,
+            page = vm.currentPage,
             onSettled = { vm.currentPage = it },
             screen = screen,
             drag = drag,
@@ -442,7 +445,7 @@ private fun SplitLayout(screen: ScreenState, vm: HomeViewModel, drag: DragContro
             } else {
                 HomePager(
                     count = vm.pages,
-                    startPage = vm.currentPage,
+                    page = vm.currentPage,
                     onSettled = { vm.currentPage = it },
                     screen = screen,
                     drag = drag,
@@ -490,31 +493,30 @@ private fun coverCaption(screen: ScreenState, isCover: Boolean, page: Int): Stri
 }
 
 /**
- * Strip mode: cover pages laid out in one continuous row, two visible at a time when unfolded. A blank page pads
- * the end (cover on the left) or the start (cover on the right) so the page you were on stays on its half.
+ * Strip mode: your pages are one fixed row, and the unfolded screen shows two neighbors at a time. The cover
+ * screen is the left or right page of that pair. Choosing a side never moves the pages; at the ends the view
+ * simply stops at the first or last pair.
  */
 @Composable
 private fun StripPages(screen: ScreenState, vm: HomeViewModel, drag: DragController, halfWidth: Dp) {
+    val lastFirst = maxOf(0, vm.pages - 2)
     HomePager(
-        count = vm.pages + 1,
-        startPage = vm.currentPage,
-        onSettled = { vm.currentPage = it.coerceIn(0, vm.pages - 1) },
+        count = vm.pages,
+        page = (if (vm.coverLeft) vm.currentPage else vm.currentPage - 1).coerceIn(0, lastFirst),
+        onSettled = { first ->
+            vm.currentPage = (if (vm.coverLeft) first else first + 1).coerceIn(0, vm.pages - 1)
+        },
         screen = screen,
         drag = drag,
         modifier = Modifier.fillMaxSize(),
         pageSize = PageSize.Fixed(halfWidth),
         pageSpacing = HINGE_GAP_DP.dp,
-    ) { index ->
-        val page = if (vm.coverLeft) index else index - 1
-        if (page in 0 until vm.pages) {
-            Column(Modifier.fillMaxSize()) {
-                Caption("Page ${page + 1}")
-                GridArea(Area.COVER, page * vm.perPage, vm.cover, vm.cols, vm.rows, vm, drag, Modifier.weight(1f).fillMaxWidth())
-            }
-        } else {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Caption(if (page < 0) "Start" else "End")
-            }
+        maxPage = lastFirst,
+    ) { page ->
+        Column(Modifier.fillMaxSize()) {
+            val isCover = page == vm.currentPage
+            Caption(if (isCover) "Page ${page + 1} · cover" else "Page ${page + 1}")
+            GridArea(Area.COVER, page * vm.perPage, vm.cover, vm.cols, vm.rows, vm, drag, Modifier.weight(1f).fillMaxWidth())
         }
     }
 }
@@ -531,7 +533,7 @@ private fun ReflowLayout(screen: ScreenState, vm: HomeViewModel, drag: DragContr
         Caption(if (vm.pageMode == "strip") "Rotated · reflowed cover page" else "Rotated · cover + inner half, reflowed")
         HomePager(
             count = vm.pages,
-            startPage = vm.currentPage,
+            page = vm.currentPage,
             onSettled = { vm.currentPage = it },
             screen = screen,
             drag = drag,
@@ -626,18 +628,26 @@ private fun RefRow(refs: List<SlotRef>, vm: HomeViewModel, drag: DragController,
 @Composable
 private fun HomePager(
     count: Int,
-    startPage: Int,
+    page: Int,
     onSettled: (Int) -> Unit,
     screen: ScreenState,
     drag: DragController,
     modifier: Modifier,
     pageSize: PageSize = PageSize.Fill,
     pageSpacing: Dp = 0.dp,
+    maxPage: Int = count - 1,
     content: @Composable (Int) -> Unit,
 ) {
-    val state = rememberPagerState(initialPage = startPage.coerceIn(0, maxOf(0, count - 1))) { count }
+    val last = maxPage.coerceIn(0, maxOf(0, count - 1))
+    val state = rememberPagerState(initialPage = page.coerceIn(0, last)) { count }
+    // Report pages you swipe to (not the one we opened on, so unfolding at an edge doesn't change your page)
     LaunchedEffect(state) {
-        snapshotFlow { state.settledPage }.collect { onSettled(it) }
+        snapshotFlow { state.settledPage }.drop(1).collect { onSettled(it.coerceAtMost(last)) }
+    }
+    // Follow the page from outside: Home, switching cover side, or folding
+    LaunchedEffect(page, last) {
+        val target = page.coerceIn(0, last)
+        if (!state.isScrollInProgress && state.currentPage != target) state.animateScrollToPage(target)
     }
 
     val edgePx = with(LocalDensity.current) { 36.dp.toPx() }
@@ -651,7 +661,7 @@ private fun HomePager(
         if (edge == 0) return@LaunchedEffect
         delay(450)
         while (true) {
-            val target = (state.currentPage + edge).coerceIn(0, count - 1)
+            val target = (state.currentPage + edge).coerceIn(0, last)
             if (target == state.currentPage) break
             state.animateScrollToPage(target)
             delay(650)

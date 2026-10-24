@@ -58,8 +58,18 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     var pageMode by mutableStateOf(prefs.getString(Prefs.PAGE_MODE, "strip") ?: "strip")
         private set
 
-    /** The cover page you're on; kept across fold and unfold. */
+    /** The cover page you're on; kept across fold and unfold. Starts on your home page. */
     var currentPage by mutableIntStateOf(0)
+
+    /**
+     * Your home page. Pages form one fixed strip; with the cover on the left half it's page 1, with the cover on
+     * the right half it's page 2, so the unfolded screen opens on pages 1 | 2 either way.
+     */
+    val homePage: Int get() = if (coverLeft || pageMode != "strip") 0 else minOf(1, pages - 1)
+
+    fun goHome() {
+        currentPage = homePage
+    }
 
     /** Slots per page. Home lists are flat: page p holds indices p*perPage until (p+1)*perPage. */
     val perPage: Int get() = cols * rows
@@ -79,6 +89,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         restoreLayout()
+        currentPage = homePage
         launcherApps.registerCallback(callback, Handler(Looper.getMainLooper()))
         reload()
     }
@@ -292,6 +303,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setCoverSide(left: Boolean) {
+        if (left == coverLeft) return
+        // Keep the same unfolded spread: the cover just becomes its other half, so it shows the neighboring page
+        if (pageMode == "strip") {
+            currentPage = (if (left) currentPage - 1 else currentPage + 1).coerceIn(0, pages - 1)
+        }
         coverLeft = left
         prefs.edit().putString(Prefs.COVER_SIDE, if (left) "left" else "right").apply()
         Diag.log("Cover layout lands on the ${if (left) "left" else "right"} half")
