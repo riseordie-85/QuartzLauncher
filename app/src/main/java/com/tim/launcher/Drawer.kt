@@ -140,7 +140,8 @@ fun AppDrawer(vm: HomeViewModel, drag: DragController, look: DrawerLook, startWi
                 .fillMaxSize()
                 .graphicsLayer { alpha = if (carried || drag.fromDrawer) 0f else 1f }
                 .then(if (full) Modifier else Modifier.background(Color(0x40000000)))
-                .pointerInput(Unit) { detectTapGestures { if (!full) onClose() } },
+                // Keyed on the style, so switching it while open (via the + tab button) doesn't keep the old rule
+                .pointerInput(full) { detectTapGestures { if (!full) onClose() } },
         ) {
             val size = look.size.coerceIn(0.4f, 1f)
             val margin = 12.dp
@@ -180,7 +181,8 @@ fun AppDrawer(vm: HomeViewModel, drag: DragController, look: DrawerLook, startWi
 
 /** What one row of the drawer is: a heading or an app. */
 private sealed interface Entry {
-    data class Heading(val text: String) : Entry
+    /** [key] is unique even when the same heading shows twice (A to Z can put "#" both before A and after Z). */
+    data class Heading(val text: String, val key: String) : Entry
     data class App(val app: AppEntry) : Entry
 }
 
@@ -475,7 +477,7 @@ private fun entries(apps: List<AppEntry>, look: DrawerLook): List<Entry> {
             else -> app.label.firstOrNull()?.uppercaseChar()?.takeIf { it.isLetter() }?.toString() ?: "#"
         }
         if (head != last) {
-            out += Entry.Heading(head)
+            out += Entry.Heading(head, "h${out.size}:$head")
             last = head
         }
         out += Entry.App(app)
@@ -507,7 +509,7 @@ private fun AppsView(
         val cols = columnsFor(look, maxWidth)
         when {
             look.view == DrawerView.LIST -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) {
-                items(list, key = { e -> if (e is Entry.App) e.app.key else "h" + (e as Entry.Heading).text }) { e ->
+                items(list, key = { e -> if (e is Entry.App) e.app.key else (e as Entry.Heading).key }) { e ->
                     when (e) {
                         is Entry.Heading -> Heading(e.text, ink)
                         is Entry.App -> DrawerItem(e.app, vm, drag, list = true, labels = true, onPickUp = onPickUp, onClose = onClose)
@@ -558,7 +560,7 @@ private fun AppsView(
             ) {
                 list.forEach { e ->
                     when (e) {
-                        is Entry.Heading -> item(span = { GridItemSpan(maxLineSpan) }, key = "h" + e.text) { Heading(e.text, ink) }
+                        is Entry.Heading -> item(span = { GridItemSpan(maxLineSpan) }, key = e.key) { Heading(e.text, ink) }
                         is Entry.App -> item(key = e.app.key) {
                             DrawerItem(e.app, vm, drag, list = false, labels = look.labels, onPickUp = onPickUp, onClose = onClose)
                         }

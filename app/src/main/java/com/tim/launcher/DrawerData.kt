@@ -24,7 +24,8 @@ import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.PrivacyTip
 import androidx.compose.material.icons.rounded.Schedule
-import androidx.compose.material.icons.rounded.Settings
+// Renamed here so it can't be mixed up with android.provider.Settings, also used in this file
+import androidx.compose.material.icons.rounded.Settings as SettingsGear
 import androidx.compose.material.icons.rounded.SettingsSuggest
 import androidx.compose.material.icons.rounded.SdStorage
 import androidx.compose.material.icons.rounded.VolumeUp
@@ -63,7 +64,8 @@ object DrawerTabs {
                     id = o.getString("id"),
                     name = o.optString("name", "Tab"),
                     icon = o.optString("icon", "star"),
-                    apps = if (apps == null) emptyList() else (0 until apps.length()).map { apps.getString(it) },
+                    // distinct: an app listed twice (a hand-edited or imported file) would crash the drawer's list
+                    apps = if (apps == null) emptyList() else (0 until apps.length()).map { apps.getString(it) }.distinct(),
                 )
             }
         }
@@ -210,7 +212,7 @@ object SearchSources {
         SettingsShortcut("Developer options", "developer usb debugging", Icons.Rounded.DeveloperMode, Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS),
         SettingsShortcut("About phone", "about phone device info version", Icons.Rounded.PhoneAndroid, Settings.ACTION_DEVICE_INFO_SETTINGS),
         SettingsShortcut("Wallpaper (Quartz)", "wallpaper background", Icons.Rounded.Wallpaper, "quartz:wallpaper"),
-        SettingsShortcut("Quartz settings", "quartz launcher home settings", Icons.Rounded.Settings, "quartz:settings"),
+        SettingsShortcut("Quartz settings", "quartz launcher home settings", Icons.Rounded.SettingsGear, "quartz:settings"),
     )
 
     /** Apps whose names match: starts-with first, then a word starting with it, then anywhere in the name. */

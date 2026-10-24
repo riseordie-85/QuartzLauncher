@@ -269,7 +269,8 @@ private fun DockBar(
     val refs = if (dropSpot != null) filled + dropSpot else filled
     val count = refs.size + if (button != null) 1 else 0
     // An empty dock still keeps its room from the screen edge (the content no longer has insets on that side)
-    if (count == 0) { Spacer(modifier.then(inner)); return }
+    // (it still reports where it is, or an open drawer would leave room for the icons it used to have)
+    if (count == 0) { Spacer(modifier.then(inner).onGloballyPositioned { look.onDockBounds(it.boundsInRoot()) }); return }
     val style = look.dock
 
     CompositionLocalProvider(LocalLabelColor provides look.onPanel) {
