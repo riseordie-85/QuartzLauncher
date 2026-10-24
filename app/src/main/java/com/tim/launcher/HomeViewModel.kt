@@ -147,8 +147,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             prefs.getString(key, null)?.split("|")?.map { it.ifEmpty { null } } ?: emptyList()
         fill(cover, read(Prefs.L_COVER), pages * cols * rows)
         fill(extra, read(Prefs.L_EXTRA), pages * cols * rows)
-        fill(dockCover, read(Prefs.L_DOCK_COVER), cols)
-        fill(dockExtra, read(Prefs.L_DOCK_EXTRA), cols)
+        val savedDock = read(Prefs.L_DOCK_COVER)
+        val savedExtra = read(Prefs.L_DOCK_EXTRA)
+        fill(dockCover, savedDock, if (savedDock.isEmpty()) cols else savedDock.size)
+        fill(dockExtra, savedExtra, if (savedExtra.isEmpty()) cols else savedExtra.size)
     }
 
     private fun fill(target: SnapshotStateList<String?>, items: List<String?>, size: Int) {
@@ -289,17 +291,31 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         fun resized(list: List<String?>, size: Int) = list.filterNotNull().take(size)
         val coverItems = resized(cover, pages * c * r)
         val extraItems = resized(extra, pages * c * r)
-        val dockItems = resized(dockCover, c)
-        val dockExtraItems = resized(dockExtra, c)
         cols = c
         rows = r
         fill(cover, coverItems, pages * c * r)
         fill(extra, extraItems, pages * c * r)
-        fill(dockCover, dockItems, c)
-        fill(dockExtra, dockExtraItems, c)
         prefs.edit().putInt(Prefs.COLS, c).putInt(Prefs.ROWS, r).apply()
         save()
         Diag.log("Cover grid set to ${c}×$r (unfolded ${c * 2}×$r)")
+    }
+
+    /**
+     * Sizes the docks from settings: [folded] slots on the cover (or only) screen and [extra] more that are added
+     * after them when unfolded. Icons that no longer fit move to an empty spot instead of disappearing.
+     */
+    fun setDockSizes(folded: Int, extra: Int) {
+        val f = folded.coerceIn(1, UNLIMITED_DOCK)
+        val e = extra.coerceIn(0, UNLIMITED_DOCK)
+        if (dockCover.size == f && dockExtra.size == e) return
+        val overflow = (dockCover.drop(f) + dockExtra.drop(e)).filterNotNull()
+        fill(dockCover, dockCover.toList(), f)
+        fill(dockExtra, dockExtra.toList(), e)
+        overflow.forEach { key ->
+            if (!putInFirstEmpty(key, Area.DOCK_EXTRA to dockExtra.indices)) Diag.log("No room for ${apps[key]?.label ?: key}")
+        }
+        save()
+        Diag.log("Dock: $f folded" + if (e > 0) " + $e more unfolded" else "")
     }
 
     fun setCoverSide(left: Boolean) {
@@ -330,5 +346,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     companion object {
         private const val ICON_PX = 192
+
+        /** "Unlimited" docks get this many slots and scroll. */
+        const val UNLIMITED_DOCK = 20
     }
 }

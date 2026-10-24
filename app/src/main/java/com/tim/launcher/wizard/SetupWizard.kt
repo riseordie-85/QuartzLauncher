@@ -67,6 +67,8 @@ import com.tim.launcher.settings.SettingsStore
 import com.tim.launcher.settings.isDefaultHome
 import com.tim.launcher.settings.openHomeSettings
 import com.tim.launcher.settings.toast
+import com.tim.launcher.settings.dockCounts
+import com.tim.launcher.ui.DockSample
 import com.tim.launcher.ui.BodyText
 import com.tim.launcher.ui.Bullet
 import com.tim.launcher.ui.ChoiceCard
@@ -101,6 +103,7 @@ private enum class Step(val title: String, val preview: Boolean = true) {
     DOCK_LENGTH("Which dock style do you prefer?"),
     DOCK_SAME_SIDE("Should the dock stay on the same side folded and unfolded?"),
     DOCK_ICONS("How many icons in your dock?"),
+    DOCK_ICONS_UNFOLDED("How many when unfolded?"),
     DRAWER_OPEN("How would you like to open your apps?"),
     DRAWER_SWIPE("Which way should you swipe?"),
     DRAWER_BUTTON("Where should the apps button go?"),
@@ -143,6 +146,7 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
                 add(Step.DOCK_LENGTH)
                 if (foldable) add(Step.DOCK_SAME_SIDE)
                 add(Step.DOCK_ICONS)
+                if (foldable && store[S.dockIcons, type.primary] != 0) add(Step.DOCK_ICONS_UNFOLDED)
             }
             add(Step.DRAWER_OPEN)
             if (store[S.drawerOpen] != DrawerOpen.BUTTON) add(Step.DRAWER_SWIPE)
@@ -227,7 +231,7 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
         ) { s ->
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                 Text(
-                    s.title,
+                    if (s == Step.DOCK_ICONS && foldable) "How many icons when folded?" else s.title,
                     color = Q.Text,
                     fontSize = if (s.preview) 22.sp else 30.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -435,11 +439,6 @@ private fun ColumnScope.StepContent(
 
         Step.DOCK_ICONS -> {
             val count = store[S.dockIcons, primary]
-            val position = store[S.dockPosition, primary]
-            if (foldable && (position == DockPosition.BOTTOM || position == DockPosition.TOP)) {
-                BodyText("Unfolded, the dock is twice as wide, so this doubles.")
-                Spacer(Modifier.height(12.dp))
-            }
             listOf(4, 5, 6, 0).forEach { n ->
                 ChoiceCard(
                     if (n == 0) "Unlimited" else "$n",
@@ -447,6 +446,22 @@ private fun ColumnScope.StepContent(
                     count == n,
                     gap,
                 ) { store.set(S.dockIcons, primary, n) }
+            }
+        }
+
+        Step.DOCK_ICONS_UNFOLDED -> {
+            val (folded, unfolded) = store.dockCounts(type)
+            BodyText("Your $folded folded icons stay first. Extra icons are added after them.")
+            Spacer(Modifier.height(12.dp))
+            GlassPanel(gap) {
+                SettingRow("Icons when unfolded", if (unfolded == 0) "The dock scrolls when it's full" else null) {
+                    Stepper(if (unfolded == 0) 16 else unfolded, folded..16, enabled = unfolded != 0) {
+                        store.setAt(S.dockIcons, Scope.INNER, it)
+                    }
+                }
+            }
+            ChoiceCard("Unlimited", "The dock scrolls when it's full", unfolded == 0, gap) {
+                store.setAt(S.dockIcons, Scope.INNER, if (unfolded == 0) minOf(folded * 2, 16) else 0)
             }
         }
 
@@ -521,6 +536,7 @@ private fun ColumnScope.StepContent(
         }
 
         Step.DOCK_STYLE -> {
+            DockSample(store, gap)
             val shape = store[S.dockShape]
             ChoiceCard("Square", null, shape == DockShape.SQUARE, gap) { store.set(S.dockShape, value = DockShape.SQUARE) }
             ChoiceCard("Rounded", null, shape == DockShape.ROUNDED, gap) { store.set(S.dockShape, value = DockShape.ROUNDED) }
@@ -536,6 +552,7 @@ private fun ColumnScope.StepContent(
         Step.COLOR -> {
             BodyText("This sets the dock and the app drawer together, so they match.")
             Spacer(Modifier.height(12.dp))
+            DockSample(store, gap)
             GlassPanel {
                 SwatchRow(store[S.panelColor], PanelColors) { store.set(S.panelColor, value = it) }
                 RowDivider()

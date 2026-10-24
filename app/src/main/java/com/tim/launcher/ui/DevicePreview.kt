@@ -43,6 +43,7 @@ import com.tim.launcher.settings.IconShape
 import com.tim.launcher.settings.S
 import com.tim.launcher.settings.Scope
 import com.tim.launcher.settings.SettingsStore
+import com.tim.launcher.settings.dockCounts
 import kotlin.math.min
 
 /** What one screen looks like with the current settings, for the live preview. */
@@ -90,7 +91,7 @@ fun previewLook(store: SettingsStore, type: DeviceType): PreviewLook {
                 rows = store[S.gridRows, Scope.COVER]
                 half = store[S.coverSide]
             }
-            if (store.isLinked(S.dockIcons, Scope.INNER) && isHorizontal(dock)) dockIcons *= 2
+            dockIcons = store.dockCounts(type).second
         }
         return ScreenLook(
             scope = scope,
@@ -186,12 +187,14 @@ private fun DrawScope.drawScreen(screen: ScreenLook, look: PreviewLook) {
         DockPosition.NONE -> grid
     }
 
-    // Which half the cover layout lands on when unfolded
+    // Which half the cover layout lands on when unfolded: the other half dims, the cover half gets an outline
     if (screen.coverHalf != null) {
         val mid = w / 2f
-        val half = if (screen.coverHalf == CoverSide.LEFT) Rect(grid.left, grid.top, mid - m / 2, grid.bottom)
-        else Rect(mid + m / 2, grid.top, grid.right, grid.bottom)
-        drawRoundRect(Color.White.copy(alpha = 0.10f), half.topLeft, half.size, CornerRadius(m, m))
+        val coverLeft = screen.coverHalf == CoverSide.LEFT
+        val half = if (coverLeft) Rect(m * 0.6f, m * 0.6f, mid - m * 0.6f, h - m * 0.6f)
+        else Rect(mid + m * 0.6f, m * 0.6f, w - m * 0.6f, h - m * 0.6f)
+        drawRoundRect(Q.Accent.copy(alpha = 0.22f), half.topLeft, half.size, CornerRadius(m, m))
+        drawRoundRect(Q.Accent, half.topLeft, half.size, CornerRadius(m, m), style = Stroke(width = 3f))
         drawLine(
             Color.White.copy(alpha = 0.55f),
             Offset(mid, 0f),
@@ -210,6 +213,11 @@ private fun DrawScope.drawScreen(screen: ScreenLook, look: PreviewLook) {
             val center = Offset(grid.left + cellW * (c + 0.5f), grid.top + cellH * (r + 0.5f))
             drawIcon(center, icon, look.iconShape, Color.White.copy(alpha = 0.85f))
         }
+    }
+    if (screen.coverHalf != null) {
+        val mid = w / 2f
+        val other = if (screen.coverHalf == CoverSide.LEFT) Rect(mid, 0f, w, h) else Rect(0f, 0f, mid, h)
+        drawRect(Color.Black.copy(alpha = 0.45f), other.topLeft, other.size)
     }
 
     if (dock == DockPosition.NONE) return

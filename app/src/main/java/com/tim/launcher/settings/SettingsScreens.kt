@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import com.tim.launcher.ui.BodyText
 import com.tim.launcher.ui.Bullet
 import com.tim.launcher.ui.DevicePreview
+import com.tim.launcher.ui.DockSample
 import com.tim.launcher.ui.Dropdown
 import com.tim.launcher.ui.GlassPanel
 import com.tim.launcher.ui.LinkState
@@ -309,15 +310,23 @@ fun DockSettings(ctx: SettingsContext) {
                     }
                 }
                 RowDivider()
-                val doubled = scope == Scope.INNER && store.isLinked(S.dockIcons, Scope.INNER) &&
-                    (position == DockPosition.BOTTOM || position == DockPosition.TOP)
-                SettingRow(
-                    "Icons",
-                    if (doubled) "Doubled when unfolded" else null,
-                    link = ctx.link(S.dockIcons),
-                ) {
-                    Dropdown(store[S.dockIcons, scope], listOf(4, 5, 6, 7, 8, 0), { if (it == 0) "Unlimited" else "$it" }) {
-                        store.set(S.dockIcons, scope, it)
+                val (folded, unfolded) = store.dockCounts(ctx.type)
+                val foldable = ctx.type == DeviceType.FOLDABLE
+                SettingRow(if (foldable) "Icons when folded" else "Icons", if (folded == 0) "The dock scrolls when it's full" else null) {
+                    Dropdown(folded, listOf(4, 5, 6, 7, 8, 0), { if (it == 0) "Unlimited" else "$it" }) {
+                        store.set(S.dockIcons, ctx.type.primary, it)
+                    }
+                }
+                if (foldable) {
+                    RowDivider()
+                    SettingRow(
+                        "Icons when unfolded",
+                        if (folded == 0) "Unlimited, like folded" else "Extra icons go after your folded ones",
+                        enabled = folded != 0,
+                    ) {
+                        Dropdown(unfolded, (folded..16).toList() + 0, { if (it == 0) "Unlimited" else "$it" }, enabled = folded != 0) {
+                            store.setAt(S.dockIcons, Scope.INNER, it)
+                        }
                     }
                 }
             }
@@ -338,6 +347,7 @@ fun DockSettings(ctx: SettingsContext) {
 
         SectionLabel("Style")
         GlassPanel {
+            DockSample(store, Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp))
             Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
                 Text("Background", color = Q.Text, fontSize = 16.sp, modifier = Modifier.padding(bottom = 10.dp))
                 Segmented(store[S.dockShape], DockShape.entries, { if (it == DockShape.NONE) "None" else it.label }) {
@@ -489,6 +499,7 @@ fun AppearanceSettings(ctx: SettingsContext) {
 
         SectionLabel("Glass")
         GlassPanel {
+            DockSample(store, Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp))
             Text("Color", color = Q.Text, fontSize = 16.sp, modifier = Modifier.padding(start = 20.dp, top = 14.dp))
             SwatchRow(store[S.panelColor], PanelColors) { store.set(S.panelColor, value = it) }
             RowDivider()

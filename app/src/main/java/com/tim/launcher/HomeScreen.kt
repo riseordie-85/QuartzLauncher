@@ -111,6 +111,10 @@ import com.tim.launcher.settings.S
 import com.tim.launcher.settings.Scope
 import com.tim.launcher.settings.SettingsActivity
 import com.tim.launcher.settings.SettingsStore
+import com.tim.launcher.settings.DeviceType
+import com.tim.launcher.settings.dockCounts
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import com.tim.launcher.ui.Q
 
 private val PanelShape = RoundedCornerShape(28.dp)
@@ -252,6 +256,21 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         buttonIcon = store[S.drawerButtonIcon],
         openDrawer = { drawerOpen = true },
     )
+    val deviceType = when {
+        screen.foldable -> DeviceType.FOLDABLE
+        screen.posture == Posture.TABLET -> DeviceType.TABLET
+        else -> DeviceType.PHONE
+    }
+    val (dockFolded, dockUnfolded) = store.dockCounts(deviceType)
+    LaunchedEffect(dockFolded, dockUnfolded) {
+        val folded = if (dockFolded == 0) HomeViewModel.UNLIMITED_DOCK else dockFolded
+        val extra = when {
+            deviceType != DeviceType.FOLDABLE || dockFolded == 0 -> 0
+            dockUnfolded == 0 -> HomeViewModel.UNLIMITED_DOCK
+            else -> dockUnfolded - dockFolded
+        }
+        vm.setDockSizes(folded, extra)
+    }
     val drawerCols = store[S.drawerCols, scope].let {
         if (scope == Scope.INNER && store.isLinked(S.drawerCols, Scope.INNER)) it * 2 else it
     }
@@ -461,23 +480,8 @@ private fun SplitLayout(screen: ScreenState, vm: HomeViewModel, drag: DragContro
         }
         PageDots(vm.pages, vm.currentPage)
         DockPanel {
-            BoxWithConstraints(Modifier.fillMaxWidth()) {
-                val (leftW, rightW) = halfWidths(screen, maxWidth)
-                Row {
-                    DockHalf(
-                        if (vm.coverLeft) Area.DOCK_COVER else Area.DOCK_EXTRA,
-                        if (vm.coverLeft) vm.dockCover else vm.dockExtra,
-                        withButton = vm.coverLeft,
-                        vm, drag, Modifier.width(leftW),
-                    )
-                    Spacer(Modifier.width(HINGE_GAP_DP.dp))
-                    DockHalf(
-                        if (vm.coverLeft) Area.DOCK_EXTRA else Area.DOCK_COVER,
-                        if (vm.coverLeft) vm.dockExtra else vm.dockCover,
-                        withButton = !vm.coverLeft,
-                        vm, drag, Modifier.width(rightW),
-                    )
-                }
+            DockWithButton(Modifier.fillMaxWidth()) {
+                RefRow(unfoldedDock(vm), vm, drag, Modifier.weight(1f))
             }
         }
     }
@@ -550,20 +554,18 @@ private fun ReflowLayout(screen: ScreenState, vm: HomeViewModel, drag: DragContr
         }
         PageDots(vm.pages, vm.currentPage)
         DockPanel {
-            val dock = buildList {
-                val first = if (vm.coverLeft) Area.DOCK_COVER else Area.DOCK_EXTRA
-                val second = if (vm.coverLeft) Area.DOCK_EXTRA else Area.DOCK_COVER
-                vm.list(first).indices.forEach { add(SlotRef(first, it)) }
-                vm.list(second).indices.forEach { add(SlotRef(second, it)) }
-            }.filter { vm.keyAt(it) != null }
             DockWithButton(Modifier.fillMaxWidth()) {
-                RefRow(dock, vm, drag, Modifier.weight(1f))
+                RefRow(unfoldedDock(vm), vm, drag, Modifier.weight(1f))
             }
         }
     }
 }
 
 private val REFLOW_CELL = 92.dp
+
+/** The unfolded dock: your folded dock icons first, then the extra unfolded slots after them. */
+private fun unfoldedDock(vm: HomeViewModel): List<SlotRef> =
+    vm.dockCover.indices.map { SlotRef(Area.DOCK_COVER, it) } + vm.dockExtra.indices.map { SlotRef(Area.DOCK_EXTRA, it) }
 
 /** Filled slots of one page in reading order: row by row across both halves (paired) or one cover page (strip). */
 private fun reflowRefs(vm: HomeViewModel, page: Int): List<SlotRef> {
@@ -610,10 +612,17 @@ private fun RefGrid(refs: List<SlotRef>, cols: Int, rows: Int, vm: HomeViewModel
 private fun RefRow(refs: List<SlotRef>, vm: HomeViewModel, drag: DragController, modifier: Modifier) {
     BoxWithConstraints(modifier) {
         val count = refs.size.coerceAtLeast(1)
-        val cellW = minOf(maxWidth / count, 88.dp)
+        // Fit the row when there's room; past that (an unlimited dock) the row scrolls sideways
+        val cellW = (maxWidth / count).coerceIn(60.dp, 88.dp)
+        val scrolls = cellW * count > maxWidth
         val iconSize = minOf(cellW * 0.66f, 56.dp)
         val labels = LocalHomeLook.current.labelsDock
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .then(if (scrolls) Modifier.horizontalScroll(rememberScrollState()) else Modifier),
+            horizontalArrangement = if (scrolls) Arrangement.Start else Arrangement.Center,
+        ) {
             refs.forEach { ref ->
                 Cell(ref, vm.keyAt(ref), iconSize, labels, vm, drag, Modifier.width(cellW).height(iconSize + if (labels) 36.dp else 20.dp))
             }
@@ -796,17 +805,7 @@ private fun RemoveZone(drag: DragController) {
 
 @Composable
 private fun DockRow(area: Area, items: List<String?>, vm: HomeViewModel, drag: DragController, modifier: Modifier) {
-    BoxWithConstraints(modifier) {
-        val count = items.size.coerceAtLeast(1)
-        val cellW = maxWidth / count
-        val iconSize = minOf(cellW * 0.62f, 56.dp)
-        val labels = LocalHomeLook.current.labelsDock
-        Row {
-            items.forEachIndexed { index, key ->
-                Cell(SlotRef(area, index), key, iconSize, labels, vm, drag, Modifier.width(cellW).height(iconSize + if (labels) 36.dp else 20.dp))
-            }
-        }
-    }
+    RefRow(items.indices.map { SlotRef(area, it) }, vm, drag, modifier)
 }
 
 @Composable
@@ -830,15 +829,6 @@ private fun DockWithButton(modifier: Modifier, content: @Composable RowScope.() 
         if (look.button == ButtonEnd.START) DrawerButton()
         content()
         if (look.button == ButtonEnd.END) DrawerButton()
-    }
-}
-
-@Composable
-private fun DockHalf(area: Area, items: List<String?>, withButton: Boolean, vm: HomeViewModel, drag: DragController, modifier: Modifier) {
-    if (withButton) {
-        DockWithButton(modifier) { DockRow(area, items, vm, drag, Modifier.weight(1f)) }
-    } else {
-        DockRow(area, items, vm, drag, modifier)
     }
 }
 

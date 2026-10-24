@@ -324,3 +324,21 @@ class SettingsStore private constructor(context: Context) {
             instance ?: synchronized(this) { instance ?: SettingsStore(context).also { instance = it } }
     }
 }
+
+/**
+ * Dock icon counts as (folded or only screen, unfolded). 0 means unlimited. Unfolded never has fewer than folded:
+ * the extra icons are added after your folded ones. Until it's set on its own, unfolded doubles a top or bottom
+ * dock (twice the width) and matches a side dock.
+ */
+fun SettingsStore.dockCounts(type: DeviceType): Pair<Int, Int> {
+    val folded = this[S.dockIcons, type.primary]
+    if (type != DeviceType.FOLDABLE) return folded to folded
+    if (folded == 0) return 0 to 0
+    val inner = if (isLinked(S.dockIcons, Scope.INNER)) {
+        val p = this[S.dockPosition, Scope.INNER]
+        if (p == DockPosition.BOTTOM || p == DockPosition.TOP) folded * 2 else folded
+    } else {
+        this[S.dockIcons, Scope.INNER]
+    }
+    return folded to if (inner == 0) 0 else maxOf(inner, folded)
+}
