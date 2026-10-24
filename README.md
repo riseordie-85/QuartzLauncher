@@ -1,6 +1,16 @@
 # Quartz Launcher
 
-Phase 4: the wallpaper engine, on the phase 3 folders and gestures, phase 2 layout engine and phase 1 settings.
+Phase 5: dock styling, on the phase 4 wallpaper engine, phase 3 folders and gestures, phase 2 layout engine and phase 1 settings.
+
+## Phase 5: what's new
+
+- **Dock background** is a simple on/off; one **Roundness** slider (all the way left is square). Old Square/Rounded/None choices carry over.
+- **Shapes:** straight, slanted, pointed, wave, or fade (solid at the screen edge, clear toward the middle).
+- **Floating or flush:** flush runs to the screen edge like a taskbar, with only the inner corners rounded; icons stay clear of the system bars.
+- **Fill:** the shared glass color or a gradient to a second color, plus an optional pattern (including the quartz ones) cut into the glass.
+- **Edge:** none, hairline, or a soft or bright rim of light that's brightest at the top-left and bottom-right corners.
+- **Padding** around the dock icons.
+- **Swap handle** (Settings › Dock): a small pill on the dock's inner edge flips it to the other side, on every screen. "Swap dock side" also works as a gesture.
 
 ## Phase 4: what's new
 
