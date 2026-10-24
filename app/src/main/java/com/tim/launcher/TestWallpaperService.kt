@@ -138,10 +138,16 @@ class TestWallpaperService : WallpaperService() {
                 listOf(
                     "Quartz test wallpaper #$id",
                     "$screenName · ${w}×$h px",
-                    "Display ${displayId()} · mode: $mode",
+                    "Display ${displayId()} · ${modeLabel(mode)}",
                     "Showing $showing",
                 ),
             )
+        }
+
+        private fun modeLabel(mode: String) = when (mode) {
+            "independent" -> "Shared · stretched"
+            "separate" -> "Independent"
+            else -> "Shared · cropped"
         }
 
         /** Draws the part [from]..[to] (0–1) of one wide test image across the whole surface. */

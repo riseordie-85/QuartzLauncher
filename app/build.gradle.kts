@@ -18,8 +18,15 @@ android {
 
     buildTypes {
         release {
-            // Phase 0 is a test build; shrinking comes back for real releases
-            isMinifyEnabled = false
+            // Debug builds of Compose are much slower than release, so test scrolling and animation speed
+            // with this variant (Build > Select Build Variant > release). Signed with the debug key for testing.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 

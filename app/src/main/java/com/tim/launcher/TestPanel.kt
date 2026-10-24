@@ -103,13 +103,13 @@ fun TestPanel(activity: Activity, vm: HomeViewModel, screen: ScreenState, onClos
             Section("Test wallpaper") {
                 PanelButton("Set Quartz test wallpaper") { setTestWallpaper(context) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PanelButton("Matched", Modifier.weight(1f), selected = vm.wallpaperMode == "matched") { vm.chooseWallpaperMode("matched") }
-                    PanelButton("Independent", Modifier.weight(1f), selected = vm.wallpaperMode == "independent") { vm.chooseWallpaperMode("independent") }
-                    PanelButton("Separate", Modifier.weight(1f), selected = vm.wallpaperMode == "separate") { vm.chooseWallpaperMode("separate") }
+                    PanelButton("Shared · cropped", Modifier.weight(1f), selected = vm.wallpaperMode == "matched") { vm.chooseWallpaperMode("matched") }
+                    PanelButton("Shared · stretched", Modifier.weight(1f), selected = vm.wallpaperMode == "independent") { vm.chooseWallpaperMode("independent") }
+                    PanelButton("Independent", Modifier.weight(1f), selected = vm.wallpaperMode == "separate") { vm.chooseWallpaperMode("separate") }
                 }
                 Hint(
-                    "Matched: the cover screen shows its half of one wide image. Independent: each screen shows " +
-                        "the whole image. Separate: different wallpaper per screen.",
+                    "Shared · cropped: one image; the cover screen shows its half of it. Shared · stretched: one " +
+                        "image, the whole thing on each screen. Independent: a different wallpaper per screen.",
                 )
             }
 

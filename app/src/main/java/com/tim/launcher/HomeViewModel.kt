@@ -169,23 +169,27 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         save()
     }
 
-    fun addToHome(key: String) {
+    /**
+     * Places an app dragged in from the drawer. If the slot is taken, the app already there moves to the
+     * nearest empty slot in the same area (or anywhere empty) so nothing silently disappears.
+     */
+    fun place(key: String, to: SlotRef) {
+        val target = list(to.area)
+        if (to.index !in target.indices) return
         val label = apps[key]?.label ?: key
-        val slot = cover.indexOfFirst { it == null }
-        if (slot >= 0) {
-            cover[slot] = key
-            Diag.log("Added $label to the cover layout")
-        } else {
-            val extraSlot = extra.indexOfFirst { it == null }
-            if (extraSlot >= 0) {
-                extra[extraSlot] = key
-                Diag.log("Cover layout full; added $label to the other half")
+        val bumped = target[to.index]
+        target[to.index] = key
+        if (bumped != null && bumped != key) {
+            val home = listOf(target, cover, extra, dockCover, dockExtra)
+                .firstOrNull { list -> list.any { it == null } }
+            if (home != null) {
+                home[home.indexOfFirst { it == null }] = bumped
             } else {
-                Diag.log("No empty slots for $label")
-                return
+                Diag.log("No empty slot for ${apps[bumped]?.label ?: bumped}; it was removed from home")
             }
         }
         save()
+        Diag.log("Placed $label in ${to.area.name.lowercase()} slot ${to.index + 1}")
     }
 
     fun setGrid(newCols: Int, newRows: Int) {
@@ -217,7 +221,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     fun chooseWallpaperMode(mode: String) {
         wallpaperMode = mode
         prefs.edit().putString(Prefs.WP_MODE, mode).apply()
-        Diag.log("Wallpaper mode: $mode")
+        Diag.log("Wallpaper mode: " + when (mode) {
+            "independent" -> "Shared · stretched"
+            "separate" -> "Independent"
+            else -> "Shared · cropped"
+        })
     }
 
     fun resetLayout() {

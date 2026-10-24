@@ -8,11 +8,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -82,7 +80,7 @@ private val DockGlass = Color.White.copy(alpha = 0.14f)
 private const val HINGE_GAP_DP = 24
 private const val SIDE_PAD_DP = 12
 
-/** Tracks the icon being dragged and where every slot sits on screen. */
+/** Tracks the icon being dragged (from a home slot or from the drawer) and where every slot sits on screen. */
 class DragController {
     var source by mutableStateOf<SlotRef?>(null)
         private set
@@ -91,9 +89,13 @@ class DragController {
     var pointer by mutableStateOf(Offset.Zero)
         private set
 
+    /** True while an app picked up from the drawer is being placed on the home screen. */
+    var fromDrawer by mutableStateOf(false)
+        private set
+
     val bounds = HashMap<SlotRef, Rect>()
 
-    val active: Boolean get() = source != null
+    val active: Boolean get() = app != null
 
     val hover: SlotRef?
         get() = if (!active) null else bounds.entries.firstOrNull { it.value.contains(pointer) }?.key
@@ -102,6 +104,14 @@ class DragController {
         source = ref
         app = entry
         pointer = at
+        fromDrawer = false
+    }
+
+    fun startFromDrawer(entry: AppEntry, at: Offset) {
+        source = null
+        app = entry
+        pointer = at
+        fromDrawer = true
     }
 
     fun moveBy(delta: Offset) {
@@ -109,9 +119,14 @@ class DragController {
     }
 
     fun drop(vm: HomeViewModel) {
+        val entry = app
         val from = source
         val to = hover
-        if (from != null && to != null && from != to) vm.move(from, to)
+        when {
+            entry == null || to == null -> Unit
+            fromDrawer -> vm.place(entry.key, to)
+            from != null && from != to -> vm.move(from, to)
+        }
         clear()
     }
 
@@ -120,6 +135,7 @@ class DragController {
     private fun clear() {
         source = null
         app = null
+        fromDrawer = false
     }
 }
 
@@ -188,6 +204,15 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             SingleLayout(vm, drag, showHint = !hintSeen)
         }
 
+        AnimatedVisibility(
+            visible = drawerOpen,
+            enter = slideInVertically { it / 3 } + fadeIn(),
+            exit = slideOutVertically { it / 3 } + fadeOut(),
+        ) {
+            val drawerCols = if (screen.posture.split) vm.cols * 2 else vm.cols
+            AppDrawer(vm, drag, drawerCols, onClose = { drawerOpen = false })
+        }
+
         // The icon under your finger while dragging
         drag.app?.let { app ->
             val sizePx = with(LocalDensity.current) { 64.dp.toPx() }
@@ -208,15 +233,6 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
                         alpha = 0.92f
                     },
             )
-        }
-
-        AnimatedVisibility(
-            visible = drawerOpen,
-            enter = slideInVertically { it / 3 } + fadeIn(),
-            exit = slideOutVertically { it / 3 } + fadeOut(),
-        ) {
-            val drawerCols = if (screen.posture.split) vm.cols * 2 else vm.cols
-            AppDrawer(vm, drawerCols, onClose = { drawerOpen = false })
         }
 
         AnimatedVisibility(visible = panelOpen, enter = fadeIn(), exit = fadeOut()) {
@@ -475,12 +491,14 @@ private fun HintLine() {
     )
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AppDrawer(vm: HomeViewModel, cols: Int, onClose: () -> Unit) {
+private fun AppDrawer(vm: HomeViewModel, drag: DragController, cols: Int, onClose: () -> Unit) {
+    // Once an app is picked up, the drawer stays invisible until it closes (no flash on drop)
+    var carried by remember { mutableStateOf(false) }
     Column(
         Modifier
             .fillMaxSize()
+            .graphicsLayer { alpha = if (carried || drag.fromDrawer) 0f else 1f }
             .background(Color(0xEE101018))
             // Keep long-presses inside the drawer from opening the test panel underneath
             .pointerInput(Unit) { detectTapGestures { } }
@@ -505,7 +523,7 @@ private fun AppDrawer(vm: HomeViewModel, cols: Int, onClose: () -> Unit) {
             )
         }
         Text(
-            "Apps · ${vm.sortedApps.size}   (long-press to add to home)",
+            "Apps · ${vm.sortedApps.size}   (long-press and drag to place on home)",
             color = Color.White.copy(alpha = 0.8f),
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
@@ -518,22 +536,59 @@ private fun AppDrawer(vm: HomeViewModel, cols: Int, onClose: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(vm.sortedApps, key = { it.key }) { app ->
-                AppIcon(
-                    app = app,
-                    size = 52.dp,
-                    showLabel = true,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
-                        .combinedClickable(
-                            onClick = {
-                                vm.launch(app, null)
-                                onClose()
-                            },
-                            onLongClick = { vm.addToHome(app.key) },
-                        )
-                        .padding(vertical = 10.dp),
-                )
+                DrawerItem(app, vm, drag, onPickUp = { carried = true }, onClose = onClose)
             }
         }
     }
+}
+
+@Composable
+private fun DrawerItem(
+    app: AppEntry,
+    vm: HomeViewModel,
+    drag: DragController,
+    onPickUp: () -> Unit,
+    onClose: () -> Unit,
+) {
+    val haptics = LocalHapticFeedback.current
+    val itemBounds = remember { arrayOf(Rect.Zero) }
+    AppIcon(
+        app = app,
+        size = 52.dp,
+        showLabel = true,
+        modifier = Modifier
+            .onGloballyPositioned { itemBounds[0] = it.boundsInRoot() }
+            .clip(RoundedCornerShape(16.dp))
+            .pointerInput(app.key) {
+                detectTapGestures(
+                    onTap = {
+                        vm.launch(app, itemBounds[0].toAndroidRect())
+                        onClose()
+                    },
+                    onLongPress = { }, // long press picks the app up instead
+                )
+            }
+            .pointerInput(app.key) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { local ->
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onPickUp()
+                        drag.startFromDrawer(app, itemBounds[0].topLeft + local)
+                    },
+                    onDrag = { change, amount ->
+                        change.consume()
+                        drag.moveBy(amount)
+                    },
+                    onDragEnd = {
+                        drag.drop(vm)
+                        onClose()
+                    },
+                    onDragCancel = {
+                        drag.cancel()
+                        onClose()
+                    },
+                )
+            }
+            .padding(vertical = 10.dp),
+    )
 }

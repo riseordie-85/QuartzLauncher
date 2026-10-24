@@ -75,9 +75,11 @@ fun rememberScreenState(activity: Activity): ScreenState {
     val widthDp = (bounds.width() / density).roundToInt()
     val heightDp = (bounds.height() / density).roundToInt()
 
+    // Samsung reports the open hinge a moment before the window grows to the inner screen size, so a fold
+    // report alone doesn't mean "unfolded" until the window is actually wide enough.
     val posture = when {
-        fold != null -> Posture.UNFOLDED
-        foldable && widthDp >= 600 -> Posture.UNFOLDED
+        foldable && min(widthDp, heightDp) >= 600 -> Posture.UNFOLDED
+        fold != null && widthDp >= 600 -> Posture.UNFOLDED
         foldable -> Posture.COVER
         min(widthDp, heightDp) >= 600 -> Posture.TABLET
         else -> Posture.PHONE

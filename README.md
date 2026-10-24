@@ -8,13 +8,15 @@ A bare-bones test launcher. It isn't pretty on purpose: its only job is to prove
 - **Cover screen / phone:** one grid (default 4×6) plus a dock.
 - **Unfolded / tablet:** the same grid doubled horizontally (4×6 → 8×6). The cover layout lands on the left or right half, split at the hinge position the phone reports.
 - Long-press an icon and drag it to any slot, including across halves and into the dock.
-- Swipe up for a simple app drawer. Long-press an app there to add it to the home screen.
+- Swipe up for a simple app drawer. Long-press an app there and drag it to a spot on the home screen.
 - Long-press empty space for the **test panel**: what the device reports, cover side, grid size, test wallpaper, default home, copy report, event log.
 - A **test live wallpaper** that labels which screen, size, and display it is drawing on.
 
 ## Build
 
 Open the folder in Android Studio, let Gradle sync, and run on a device. Same Gradle, Kotlin, and Compose versions as Quartz Gallery.
+
+For speed testing (scrolling, animations), use the **release** variant: Build > Select Build Variant > release. Debug builds of Compose are noticeably slower. Both variants are signed with the debug key, so they install over each other.
 
 ## Test checklist
 
@@ -34,7 +36,7 @@ Do these on each device, then use **Copy report to clipboard** in the test panel
 7. Fold and unfold several times. Smooth, or a flash/blank frame? Check **Last relayout** in the panel.
 8. Switch **Left half / Right half** in the panel. Does the cover layout move?
 9. Start dragging an icon, then fold or unfold mid-drag. The icon should go back to its spot without breaking anything.
-10. Wallpaper, **Matched** mode: folded should show "LEFT HALF" (or "RIGHT HALF"); unfolded should show both halves with a dashed hinge line in the middle. Try **Independent** and **Separate** too.
+10. Wallpaper, **Shared · cropped** mode: folded should show "LEFT HALF" (or "RIGHT HALF"); unfolded should show both halves with a dashed hinge line in the middle. Try **Shared · stretched** and **Independent** too.
 11. Look at the wallpaper's info box on each screen. Is it one wallpaper engine redrawing at a new size, or a different engine number per screen?
 12. Rotate the unfolded phone to landscape. Does the layout still make sense?
 
