@@ -38,6 +38,7 @@ import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.key
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -182,9 +183,9 @@ private fun DockBar(slots: List<SlotRef>, vertical: Boolean, vm: HomeViewModel, 
     val refs = if (dropSpot != null) filled + dropSpot else filled
     val count = refs.size + if (button != null) 1 else 0
     if (count == 0) return
-    val background = Modifier
-        .clip(look.dockShape)
-        .background(if (look.dockBackground) look.panel else Color.Transparent)
+    val background = if (look.dockBackground) Modifier.glass(look.dockShape, look.panel) else Modifier
+
+    CompositionLocalProvider(LocalLabelColor provides look.onPanel) {
 
     if (!vertical) {
         BoxWithConstraints(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -251,6 +252,7 @@ private fun DockBar(slots: List<SlotRef>, vertical: Boolean, vm: HomeViewModel, 
                 if (button == ButtonEnd.END) Box(Modifier.height(cellH), contentAlignment = Alignment.Center) { DrawerButton() }
             }
         }
+    }
     }
 }
 
@@ -493,6 +495,7 @@ private fun HomePager(
 @Composable
 private fun PageDots(count: Int, current: Int) {
     if (count <= 1) return
+    val dots = LocalLabelColor.current
     Row(
         Modifier.fillMaxWidth().padding(top = 4.dp),
         horizontalArrangement = Arrangement.Center,
@@ -503,7 +506,7 @@ private fun PageDots(count: Int, current: Int) {
                     .padding(horizontal = 4.dp)
                     .size(if (i == current) 8.dp else 6.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(Color.White.copy(alpha = if (i == current) 0.95f else 0.45f)),
+                    .background(dots.copy(alpha = if (i == current) 0.95f else 0.45f)),
             )
         }
     }
@@ -513,11 +516,11 @@ private fun PageDots(count: Int, current: Int) {
 private fun Caption(text: String) {
     Text(
         text,
-        color = Color.White.copy(alpha = 0.55f),
+        color = LocalLabelColor.current.copy(alpha = 0.55f),
         fontSize = 11.sp,
         modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp),
         textAlign = TextAlign.Center,
-        style = labelStyle(),
+        style = labelStyle(LocalLabelColor.current),
     )
 }
 

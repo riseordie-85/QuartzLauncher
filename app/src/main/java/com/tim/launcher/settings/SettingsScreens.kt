@@ -40,6 +40,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import com.tim.launcher.wallpaper.WallCache
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -75,7 +78,7 @@ import kotlin.math.roundToInt
 // ---- Shared pieces ----
 
 @Composable
-private fun ScreenScaffold(ctx: SettingsContext, showBack: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
+internal fun ScreenScaffold(ctx: SettingsContext, showBack: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
@@ -179,6 +182,8 @@ fun MainSettings(ctx: SettingsContext) {
         }
         SectionLabel("Look and behavior")
         GlassPanel {
+            NavRow("Wallpaper", "Gradients, colors, photos, patterns", Icons.Rounded.Wallpaper) { ctx.go(Route.WALLPAPER) }
+            RowDivider()
             NavRow("Appearance", "Color, glass, icons, badges", Icons.Rounded.Palette) { ctx.go(Route.APPEARANCE) }
             RowDivider()
             NavRow("Gestures", "What each swipe and tap does", Icons.Rounded.Swipe) { ctx.go(Route.GESTURES) }
@@ -540,6 +545,12 @@ fun DrawerSettings(ctx: SettingsContext) {
 @Composable
 fun AppearanceSettings(ctx: SettingsContext) {
     val store = ctx.store
+    val context = LocalContext.current
+    var quartzWallpaper by remember { mutableStateOf(WallCache.isActive(context)) }
+    LifecycleResumeEffect(Unit) {
+        quartzWallpaper = WallCache.isActive(context)
+        onPauseOrDispose { }
+    }
     ScreenScaffold(ctx) {
         ScreenTitle("Appearance", "Dock and app drawer share one glass style")
         Box(Modifier.fillMaxWidth().padding(top = 16.dp)) {
@@ -552,14 +563,9 @@ fun AppearanceSettings(ctx: SettingsContext) {
             Text("Color", color = Q.Text, fontSize = 16.sp, modifier = Modifier.padding(start = 20.dp, top = 14.dp))
             SwatchRow(store[S.panelColor], PanelColors) { store.set(S.panelColor, value = it) }
             RowDivider()
-            val opacity = store[S.panelOpacity]
-            SliderRow("See-through", 1f - opacity, 0f..0.95f, "${((1f - opacity) * 100).roundToInt()}%") {
-                store.set(S.panelOpacity, value = 1f - it)
-            }
-            RowDivider()
-            val blur = store[S.panelBlur]
-            SliderRow("Blur", blur, 0f..1f, if (blur < 0.05f) "Off" else "${(blur * 100).roundToInt()}%") {
-                store.set(S.panelBlur, value = it)
+            GlassSliders(store)
+            if (!quartzWallpaper) {
+                SettingRow("Blur needs the Quartz wallpaper", "Glass blurs the wallpaper Quartz draws", onClick = { ctx.go(Route.WALLPAPER) })
             }
         }
 
@@ -607,10 +613,27 @@ fun AppearanceSettings(ctx: SettingsContext) {
             SettingRow("24-hour time") { Toggle(store[S.clock24h]) { store.set(S.clock24h, value = it) } }
         }
 
-        SectionLabel("Coming later")
+        SectionLabel("Wallpaper")
         GlassPanel {
-            SettingRow("Wallpaper", "Gradients, patterns and fold-aware images (phase 4)", enabled = false)
+            NavRow("Wallpaper", "Gradients, colors, photos, patterns", Icons.Rounded.Wallpaper) { ctx.go(Route.WALLPAPER) }
         }
+    }
+}
+
+/**
+ * See-through and blur, shared by settings and setup. See-through runs 0–100% so 50% sits in the middle; a panel
+ * never goes fully invisible (it keeps 5% of its color).
+ */
+@Composable
+fun GlassSliders(store: SettingsStore) {
+    val seeThrough = 1f - store[S.panelOpacity]
+    SliderRow("See-through", seeThrough, 0f..1f, "${(seeThrough * 100).roundToInt()}%") {
+        store.set(S.panelOpacity, value = (1f - it).coerceAtLeast(0.05f))
+    }
+    RowDivider()
+    val blur = store[S.panelBlur]
+    SliderRow("Blur", blur, 0f..1f, if (blur < 0.03f) "Off" else "${(blur * 100).roundToInt()}%") {
+        store.set(S.panelBlur, value = it)
     }
 }
 

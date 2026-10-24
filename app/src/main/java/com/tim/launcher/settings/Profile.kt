@@ -9,7 +9,10 @@ import org.json.JSONObject
  * Apps the other device doesn't have simply leave their spots empty.
  */
 object Profile {
-    private val layoutKeys = listOf(Prefs.L_COVER, Prefs.L_DOCK_COVER, Prefs.L_DOCK_EXTRA, Prefs.L_FOLDERS)
+    // The wallpaper travels too (its photo doesn't: a new device shows the backup color until you pick one there)
+    private val layoutKeys = listOf(
+        Prefs.L_COVER, Prefs.L_DOCK_COVER, Prefs.L_DOCK_EXTRA, Prefs.L_FOLDERS, Prefs.WP_MAIN, Prefs.WP_COVER, Prefs.WP_MODE,
+    )
 
     fun export(context: Context): String {
         val json = JSONObject(SettingsStore.get(context).exportJson())
@@ -37,6 +40,7 @@ object Profile {
         edit.putBoolean(Prefs.LAYOUT_READY, true)
         edit.putInt(Prefs.LAYOUT_STAMP, prefs.getInt(Prefs.LAYOUT_STAMP, 0) + 1)
         edit.apply()
+        com.tim.launcher.wallpaper.WallCache.changed()
         return count
     }
 }

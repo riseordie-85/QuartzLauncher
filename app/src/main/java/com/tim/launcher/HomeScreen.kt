@@ -43,6 +43,12 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.RectangleShape
+import com.tim.launcher.wallpaper.WallCache
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.spring
@@ -386,16 +392,38 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         }
     }
 
+    // The wallpaper behind everything: blurred for glass, and how bright it is so text stays readable
+    var quartzWallpaper by remember { mutableStateOf(WallCache.isActive(activity)) }
+    LifecycleResumeEffect(Unit) {
+        quartzWallpaper = WallCache.isActive(activity)
+        onPauseOrDispose { }
+    }
+    val blur = store[S.panelBlur]
+    val wallGen = WallCache.generation
+    val wall = remember(wallGen, quartzWallpaper, screen.widthPx, screen.heightPx, blur, vm.coverLeft) {
+        if (quartzWallpaper) WallCache.glass(activity, screen.widthPx, screen.heightPx, blur) else null
+    }
+    val glass = wall?.takeIf { it.blurred && blur > 0.02f }
+    val wallBrightness = wall?.brightness ?: 0.3f
+
     val panelColor = Color(store[S.panelColor])
+    val opacity = store[S.panelOpacity].coerceIn(0.05f, 1f)
+    val panel = panelColor.copy(alpha = opacity)
+    // Without blur the drawer needs to be nearly solid to hide the icons under it; with blur the glass does that
+    val drawerBg = panelColor.copy(alpha = if (glass != null) opacity else maxOf(opacity, 0.85f))
+    val homeLabels = if (quartzWallpaper && wallBrightness > 0.62f) Ink.Dark else Ink.Light
     val look = HomeLook(
-        panel = panelColor.copy(alpha = store[S.panelOpacity].coerceIn(0.05f, 1f)),
+        panel = panel,
         dockShape = if (store[S.dockShape] == DockShape.SQUARE) RoundedCornerShape(0.dp) else RoundedCornerShape(store[S.dockRadius].dp),
         dockBackground = store[S.dockShape] != DockShape.NONE,
         labelsHome = store[S.labelsHome, scope],
         labelsDock = store[S.labelsDock],
         labelsDrawer = store[S.labelsDrawer],
         iconScale = store[S.iconSize, scope],
-        drawerBg = panelColor.copy(alpha = maxOf(store[S.panelOpacity], 0.85f)),
+        drawerBg = drawerBg,
+        onPanel = if (store[S.dockShape] == DockShape.NONE) homeLabels else Ink.on(Ink.brightness(panel, wallBrightness)),
+        onDrawer = Ink.on(Ink.brightness(drawerBg, if (glass != null) wallBrightness else 0.3f)),
+        onHome = homeLabels,
         button = if (store[S.drawerOpen] == DrawerOpen.SWIPE) null else store[S.drawerButtonEnd],
         buttonIcon = store[S.drawerButtonIcon],
         openDrawer = { drawerOpen = true },
@@ -412,6 +440,16 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             run(store[S.gesture(if (first) GestureSlot.SWIPE_PAST_LEFT else GestureSlot.SWIPE_PAST_RIGHT)])
         },
     )
+    // Status and navigation bar icons follow what's behind them: dark on light glass or wallpaper
+    val view = LocalView.current
+    val darkBars = (if (drawerOpen) look.onDrawer else homeLabels) == Ink.Dark
+    SideEffect {
+        WindowCompat.getInsetsController(activity.window, view).apply {
+            isAppearanceLightStatusBars = darkBars
+            isAppearanceLightNavigationBars = darkBars
+        }
+    }
+
     val deviceType = when {
         screen.foldable -> DeviceType.FOLDABLE
         screen.posture == Posture.TABLET -> DeviceType.TABLET
@@ -560,7 +598,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
                 )
             },
     ) {
-      CompositionLocalProvider(LocalHomeLook provides look) {
+      CompositionLocalProvider(LocalHomeLook provides look, LocalGlass provides glass, LocalLabelColor provides homeLabels) {
         HomeLayout(screen, vm, drag, showHint = !hintSeen)
 
         AnimatedVisibility(
@@ -775,6 +813,10 @@ data class HomeLook(
     val labelsDrawer: Boolean = true,
     val iconScale: Float = 1f,
     val drawerBg: Color = Color(0xEE101018),
+    /** Text and icon color on the dock, the drawer and folders, and on the wallpaper. */
+    val onPanel: Color = Color.White,
+    val onDrawer: Color = Color.White,
+    val onHome: Color = Color.White,
     val button: ButtonEnd? = null,
     val buttonIcon: ButtonIcon = ButtonIcon.QUARTZ,
     val openDrawer: () -> Unit = {},
@@ -792,6 +834,9 @@ data class HomeLook(
 )
 
 val LocalHomeLook = compositionLocalOf { HomeLook() }
+
+/** The color of icon labels where they're drawn: white on dark glass and wallpapers, dark on light ones. */
+val LocalLabelColor = compositionLocalOf { Color.White }
 
 @Composable
 internal fun Cell(
@@ -906,32 +951,38 @@ fun AppIcon(app: AppEntry, size: Dp, showLabel: Boolean, modifier: Modifier = Mo
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Image(bitmap = app.icon, contentDescription = app.label, modifier = Modifier.size(size))
         if (showLabel) {
+            val color = LocalLabelColor.current
             Text(
                 text = app.label,
-                color = Color.White,
+                color = color,
                 fontSize = 11.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
-                style = labelStyle(),
+                style = labelStyle(color),
                 modifier = Modifier.padding(top = 4.dp).widthIn(max = size * 1.6f),
             )
         }
     }
 }
 
-internal fun labelStyle() = TextStyle(
-    shadow = Shadow(color = Color.Black.copy(alpha = 0.6f), offset = Offset(0f, 1f), blurRadius = 4f),
+/** Light labels get a soft dark shadow to lift them off busy wallpapers; dark labels get a faint light one. */
+internal fun labelStyle(color: Color = Color.White) = TextStyle(
+    shadow = if (color.luminance() > 0.5f) {
+        Shadow(color = Color.Black.copy(alpha = 0.6f), offset = Offset(0f, 1f), blurRadius = 4f)
+    } else {
+        Shadow(color = Color.White.copy(alpha = 0.35f), offset = Offset(0f, 1f), blurRadius = 3f)
+    },
 )
 
 @Composable
 internal fun HintLine() {
     Text(
         "Phase 0 test · swipe up for apps · long-press empty space for the test panel",
-        color = Color.White.copy(alpha = 0.75f),
+        color = LocalLabelColor.current.copy(alpha = 0.75f),
         fontSize = 12.sp,
         textAlign = TextAlign.Center,
-        style = labelStyle(),
+        style = labelStyle(LocalLabelColor.current),
         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
     )
 }
@@ -940,11 +991,13 @@ internal fun HintLine() {
 private fun AppDrawer(vm: HomeViewModel, drag: DragController, cols: Int, onClose: () -> Unit) {
     // Once an app is picked up, the drawer stays invisible until it closes (no flash on drop)
     var carried by remember { mutableStateOf(false) }
+    val onDrawer = LocalHomeLook.current.onDrawer
+    CompositionLocalProvider(LocalLabelColor provides onDrawer) {
     Column(
         Modifier
             .fillMaxSize()
             .graphicsLayer { alpha = if (carried || drag.fromDrawer) 0f else 1f }
-            .background(LocalHomeLook.current.drawerBg)
+            .glass(RectangleShape, LocalHomeLook.current.drawerBg)
             // Keep long-presses inside the drawer from opening the test panel underneath
             .pointerInput(Unit) { detectTapGestures { } }
             .windowInsetsPadding(WindowInsets.systemBars),
@@ -964,12 +1017,12 @@ private fun AppDrawer(vm: HomeViewModel, drag: DragController, cols: Int, onClos
                     .width(40.dp)
                     .height(4.dp)
                     .clip(RoundedCornerShape(2.dp))
-                    .background(Color.White.copy(alpha = 0.5f)),
+                    .background(onDrawer.copy(alpha = 0.5f)),
             )
         }
         Text(
             "Apps · ${vm.sortedApps.size}   (long-press and drag to place on home)",
-            color = Color.White.copy(alpha = 0.8f),
+            color = onDrawer.copy(alpha = 0.8f),
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
@@ -984,6 +1037,7 @@ private fun AppDrawer(vm: HomeViewModel, drag: DragController, cols: Int, onClos
                 DrawerItem(app, vm, drag, onPickUp = { carried = true }, onClose = onClose)
             }
         }
+    }
     }
 }
 

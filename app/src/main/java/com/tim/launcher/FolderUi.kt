@@ -51,6 +51,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.text.TextRange
@@ -71,6 +72,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toAndroidRect
@@ -135,18 +137,21 @@ fun ItemIcon(key: String, vm: HomeViewModel, size: Dp, showLabel: Boolean, modif
 @Composable
 fun FolderIconView(folder: Folder, vm: HomeViewModel, size: Dp, showLabel: Boolean, modifier: Modifier = Modifier) {
     val style = LocalHomeLook.current.folderIcon
+    // The tile is a light veil on dark backgrounds and a dark one on light backgrounds
+    val ink = LocalLabelColor.current
+    val light = ink.luminance() > 0.5f
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             Modifier
                 .size(size)
                 .clip(RoundedCornerShape(size * 0.28f))
-                .background(Color.White.copy(alpha = 0.24f))
-                .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(size * 0.28f)),
+                .background(ink.copy(alpha = if (light) 0.24f else 0.12f))
+                .border(1.dp, ink.copy(alpha = if (light) 0.18f else 0.14f), RoundedCornerShape(size * 0.28f)),
             contentAlignment = Alignment.Center,
         ) {
             when (style) {
-                FolderIcon.PLAIN -> Icon(Icons.Rounded.Folder, contentDescription = null, tint = Color.White, modifier = Modifier.size(size * 0.56f))
-                FolderIcon.BADGE -> Icon(badgeIcon(folder.badge), contentDescription = null, tint = Color.White, modifier = Modifier.size(size * 0.52f))
+                FolderIcon.PLAIN -> Icon(Icons.Rounded.Folder, contentDescription = null, tint = ink, modifier = Modifier.size(size * 0.56f))
+                FolderIcon.BADGE -> Icon(badgeIcon(folder.badge), contentDescription = null, tint = ink, modifier = Modifier.size(size * 0.52f))
                 FolderIcon.GRID2, FolderIcon.GRID3 -> {
                     val n = if (style == FolderIcon.GRID2) 2 else 3
                     val gap = size * 0.06f
@@ -166,14 +171,15 @@ fun FolderIconView(folder: Folder, vm: HomeViewModel, size: Dp, showLabel: Boole
             }
         }
         if (showLabel) {
+            val labelColor = LocalLabelColor.current
             Text(
                 folder.name,
-                color = Color.White,
+                color = labelColor,
                 fontSize = 11.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
-                style = labelStyle(),
+                style = labelStyle(labelColor),
                 modifier = Modifier.padding(top = 4.dp).width(size * 1.6f),
             )
         }
@@ -215,9 +221,9 @@ fun FolderOverlay(
             modifier = Modifier.fillMaxSize(),
             content = {
                 val panelMods = Modifier
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(look.drawerBg)
+                    .glass(RoundedCornerShape(24.dp), look.drawerBg)
                     .pointerInput(Unit) { detectTapGestures { } } // taps inside don't close it
+                CompositionLocalProvider(LocalLabelColor provides look.onDrawer) {
                 when {
                     style == FolderOpen.ROW -> FolderRow(folder, vm, drag, reorder, rowDirection, panelMods, { carried = true }, onClose)
                     else -> FolderPanel(
@@ -229,6 +235,7 @@ fun FolderOverlay(
                         onPickUp = { carried = true },
                         onClose = onClose,
                     )
+                }
                 }
             },
         ) { measurables, constraints ->
@@ -363,9 +370,9 @@ private fun FolderRowOptions(folder: Folder, vm: HomeViewModel, onClose: () -> U
     var badges by remember { mutableStateOf(false) }
     Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) {
         Box(
-            Modifier.size(40.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.12f)).clickable { menu = true },
+            Modifier.size(40.dp).clip(CircleShape).background(LocalLabelColor.current.copy(alpha = 0.12f)).clickable { menu = true },
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Rounded.MoreHoriz, contentDescription = "Folder options", tint = Color.White) }
+        ) { Icon(Icons.Rounded.MoreHoriz, contentDescription = "Folder options", tint = LocalLabelColor.current) }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; renaming = true })
             DropdownMenuItem(text = { Text("Badge") }, onClick = { menu = false; badges = true })
@@ -435,6 +442,7 @@ private fun FolderRowOptions(folder: Folder, vm: HomeViewModel, onClose: () -> U
 /** Folder name (tap to rename) and a menu for the badge and removing the folder. */
 @Composable
 private fun FolderHeader(folder: Folder, vm: HomeViewModel, onClose: () -> Unit) {
+    val ink = LocalLabelColor.current
     var editing by remember { mutableStateOf(false) }
     var text by remember(folder.id) { mutableStateOf(folder.name) }
     var menu by remember { mutableStateOf(false) }
@@ -448,7 +456,7 @@ private fun FolderHeader(folder: Folder, vm: HomeViewModel, onClose: () -> Unit)
                         value = text,
                         onValueChange = { text = it.take(30) },
                         singleLine = true,
-                        textStyle = TextStyle(color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center),
+                        textStyle = TextStyle(color = ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center),
                         cursorBrush = SolidColor(Q.Accent),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = {
@@ -458,13 +466,13 @@ private fun FolderHeader(folder: Folder, vm: HomeViewModel, onClose: () -> Unit)
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
-                            .background(Color.White.copy(alpha = 0.12f))
+                            .background(ink.copy(alpha = 0.12f))
                             .padding(horizontal = 10.dp, vertical = 6.dp),
                     )
                 } else {
                     Text(
                         folder.name,
-                        color = Color.White,
+                        color = ink,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -477,7 +485,7 @@ private fun FolderHeader(folder: Folder, vm: HomeViewModel, onClose: () -> Unit)
                 Box(
                     Modifier.size(36.dp).clip(CircleShape).clickable { menu = true },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Rounded.MoreHoriz, contentDescription = "Folder options", tint = Color.White) }
+                ) { Icon(Icons.Rounded.MoreHoriz, contentDescription = "Folder options", tint = ink) }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; text = folder.name; editing = true })
                     DropdownMenuItem(text = { Text("Badge") }, onClick = { menu = false; badges = !badges })
@@ -500,10 +508,10 @@ private fun FolderHeader(folder: Folder, vm: HomeViewModel, onClose: () -> Unit)
                         Modifier
                             .size(40.dp)
                             .clip(CircleShape)
-                            .background(if (on) Q.Accent else Color.White.copy(alpha = 0.12f))
+                            .background(if (on) Q.Accent else ink.copy(alpha = 0.12f))
                             .clickable { vm.setFolderBadge(folder.id, name) },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(icon, contentDescription = name, tint = Color.White, modifier = Modifier.size(22.dp)) }
+                    ) { Icon(icon, contentDescription = name, tint = if (on) Color.White else ink, modifier = Modifier.size(22.dp)) }
                 }
             }
         }
@@ -649,7 +657,7 @@ private fun FolderItem(
             Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Image(app.icon, contentDescription = null, modifier = Modifier.size(40.dp))
                 Spacer(Modifier.width(14.dp))
-                Text(app.label, color = Color.White, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(app.label, color = LocalLabelColor.current, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         } else {
             AppIcon(app, 52.dp, showLabel = labels)

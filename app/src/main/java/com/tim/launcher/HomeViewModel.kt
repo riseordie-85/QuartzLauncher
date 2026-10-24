@@ -741,6 +741,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     fun chooseWallpaperMode(mode: String) {
         wallpaperMode = mode
         prefs.edit().putString(Prefs.WP_MODE, mode).apply()
+        com.tim.launcher.wallpaper.WallCache.changed()
         Diag.log("Wallpaper mode: " + when (mode) {
             "independent" -> "Shared · stretched"
             "separate" -> "Independent"

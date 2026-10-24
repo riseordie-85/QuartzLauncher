@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Quartz Launcher</string>
-    <string name="wallpaper_name">Quartz Test Wallpaper</string>
-    <string name="wallpaper_desc">Phase 0 test pattern that shows which screen it is drawing on.</string>
+    <string name="wallpaper_name">Quartz</string>
+    <string name="wallpaper_desc">Gradients, colors, your own images and patterns, set up in Quartz settings. Knows a folding phone's two screens apart.</string>
     <string name="lock_service_name">Quartz Lock</string>
     <string name="lock_service_desc">Lets a Quartz Launcher gesture (like double-tap) lock your screen. It does nothing else: it can\'t see your screen or what you type.</string>
 </resources>

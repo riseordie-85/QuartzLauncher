@@ -48,6 +48,12 @@ object Prefs {
     const val COLS = "cols"
     const val ROWS = "rows"
     const val WP_MODE = "wp_mode"           // "matched", "independent", "separate"
+    const val WP_MAIN = "wp_main"           // the wallpaper, as JSON
+    const val WP_COVER = "wp_cover"         // the cover screen's own wallpaper (Independent mode)
+    const val INNER_W = "inner_w"           // the unfolded screen's size in px, so the cover can match it
+    const val INNER_H = "inner_h"
+    const val COVER_W = "cover_w"           // the cover screen's size in px, for previews
+    const val COVER_H = "cover_h"
     const val FOLDABLE = "foldable"
     const val HINT_SEEN = "hint_seen"
     const val PAGES = "pages"

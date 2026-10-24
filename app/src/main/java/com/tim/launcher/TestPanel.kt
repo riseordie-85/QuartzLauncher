@@ -96,8 +96,12 @@ fun TestPanel(activity: Activity, vm: HomeViewModel, screen: ScreenState, onClos
                 Hint("Grid, pages, cover side and page mode now live in Settings › Home screen.")
             }
 
-            Section("Test wallpaper") {
-                PanelButton("Set Quartz test wallpaper") { setTestWallpaper(context) }
+            Section("Wallpaper") {
+                PanelButton("Use Quartz wallpaper") {
+                    if (!com.tim.launcher.wallpaper.WallCache.openPicker(context)) {
+                        Toast.makeText(context, "This device didn't open the live wallpaper picker", Toast.LENGTH_LONG).show()
+                    }
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     PanelButton("Shared · cropped", Modifier.weight(1f), selected = vm.wallpaperMode == "matched") { vm.chooseWallpaperMode("matched") }
                     PanelButton("Shared · stretched", Modifier.weight(1f), selected = vm.wallpaperMode == "independent") { vm.chooseWallpaperMode("independent") }
@@ -105,7 +109,8 @@ fun TestPanel(activity: Activity, vm: HomeViewModel, screen: ScreenState, onClos
                 }
                 Hint(
                     "Shared · cropped: one image; the cover screen shows its half of it. Shared · stretched: one " +
-                        "image, the whole thing on each screen. Independent: a different wallpaper per screen.",
+                        "image, the whole thing on each screen. Independent: a different wallpaper per screen. " +
+                        "Pick the wallpaper itself in Settings › Wallpaper (Test shows the old test pattern).",
                 )
             }
 
@@ -168,19 +173,6 @@ private fun requestDefaultHome(activity: Activity) {
             .onFailure { Diag.log("Couldn't open home settings: ${it.message}") }
     }
     Diag.log("Asked to become the default home app")
-}
-
-private fun setTestWallpaper(context: Context) {
-    val intent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER)
-        .putExtra(
-            WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
-            ComponentName(context, TestWallpaperService::class.java),
-        )
-    runCatching { context.startActivity(intent) }
-        .onFailure {
-            Diag.log("Live wallpaper picker didn't open: ${it.message}")
-            Toast.makeText(context, "This device didn't open the live wallpaper picker", Toast.LENGTH_LONG).show()
-        }
 }
 
 private fun copyReport(context: Context, text: String) {

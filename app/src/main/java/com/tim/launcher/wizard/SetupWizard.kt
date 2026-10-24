@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -63,6 +64,14 @@ import com.tim.launcher.settings.IconShape
 import com.tim.launcher.settings.IconStyle
 import com.tim.launcher.settings.Profile
 import com.tim.launcher.settings.S
+import com.tim.launcher.wallpaper.WallStore
+import com.tim.launcher.wallpaper.WallSlot
+import com.tim.launcher.wallpaper.WallCache
+import com.tim.launcher.wallpaper.FoldMode
+import com.tim.launcher.settings.WallpaperPreview
+import com.tim.launcher.settings.UseQuartzWallpaper
+import com.tim.launcher.settings.PresetRow
+import com.tim.launcher.settings.GlassSliders
 import com.tim.launcher.settings.Scope
 import com.tim.launcher.settings.SettingsStore
 import com.tim.launcher.settings.isDefaultHome
@@ -112,6 +121,7 @@ private enum class Step(val title: String, val preview: Boolean = true) {
     DRAWER_ICONS("How should the app list scroll?"),
     FUNCTION_DONE("You've finished the basics", preview = false),
     DOCK_STYLE("Let's start with the dock"),
+    WALLPAPER("Pick a wallpaper", preview = false),
     COLOR("What's your favorite color, and can we see through it?"),
     ICONS("You can style your icons"),
     WIDGETS("Let's add a few widgets"),
@@ -157,6 +167,7 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
             add(Step.FUNCTION_DONE)
             if (customize == true) {
                 add(Step.DOCK_STYLE)
+                add(Step.WALLPAPER)
                 add(Step.COLOR)
                 add(Step.ICONS)
                 add(Step.WIDGETS)
@@ -560,6 +571,31 @@ private fun ColumnScope.StepContent(
             ChoiceCard("No background", "Icons float on the wallpaper", shape == DockShape.NONE, gap) { store.set(S.dockShape, value = DockShape.NONE) }
         }
 
+        Step.WALLPAPER -> {
+            BodyText("Quartz draws your wallpaper, so the glass on your dock and drawer can frost it. More options (photos, patterns, colors) are in Settings › Wallpaper.")
+            Spacer(Modifier.height(16.dp))
+            val generation = WallCache.generation
+            val chosen = remember(generation) { WallStore.load(context, WallSlot.MAIN) }
+            WallpaperPreview(foldable, Modifier.fillMaxWidth().padding(bottom = 16.dp), height = 150.dp)
+            PresetRow(chosen) { WallStore.save(context, WallSlot.MAIN, it.copy(pattern = chosen.pattern, dim = chosen.dim)) }
+            Spacer(Modifier.height(16.dp))
+            var active by remember { mutableStateOf(WallCache.isActive(context)) }
+            LifecycleResumeEffect(Unit) {
+                active = WallCache.isActive(context)
+                onPauseOrDispose { }
+            }
+            if (!active) UseQuartzWallpaper()
+            if (foldable) {
+                Text("Across both screens", color = Q.Text, fontSize = 16.sp, modifier = Modifier.padding(top = 16.dp, bottom = 10.dp))
+                var mode by remember { mutableStateOf(WallStore.mode(context)) }
+                Segmented(mode, FoldMode.entries, { it.label.replace(" · ", "\n") }) {
+                    mode = it
+                    WallStore.setMode(context, it)
+                }
+                BodyText(mode.about, Modifier.padding(top = 8.dp))
+            }
+        }
+
         Step.COLOR -> {
             BodyText("This sets the dock and the app drawer together, so they match.")
             Spacer(Modifier.height(12.dp))
@@ -567,15 +603,7 @@ private fun ColumnScope.StepContent(
             GlassPanel {
                 SwatchRow(store[S.panelColor], PanelColors) { store.set(S.panelColor, value = it) }
                 RowDivider()
-                val opacity = store[S.panelOpacity]
-                SliderRow("See-through", 1f - opacity, 0f..0.95f, "${((1f - opacity) * 100).roundToInt()}%") {
-                    store.set(S.panelOpacity, value = 1f - it)
-                }
-                RowDivider()
-                val blur = store[S.panelBlur]
-                SliderRow("Blur", blur, 0f..1f, if (blur < 0.05f) "Off" else "${(blur * 100).roundToInt()}%") {
-                    store.set(S.panelBlur, value = it)
-                }
+                GlassSliders(store)
             }
         }
 
