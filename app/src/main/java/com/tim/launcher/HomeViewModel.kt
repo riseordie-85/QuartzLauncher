@@ -55,7 +55,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     var pages by mutableIntStateOf(prefs.getInt(Prefs.PAGES, 3))
         private set
     /** "paired": each cover page has its own inner half. "strip": unfolded shows two cover pages side by side. */
-    var pageMode by mutableStateOf(prefs.getString(Prefs.PAGE_MODE, "paired") ?: "paired")
+    var pageMode by mutableStateOf(prefs.getString(Prefs.PAGE_MODE, "strip") ?: "strip")
         private set
 
     /** The cover page you're on; kept across fold and unfold. */
@@ -190,14 +190,21 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val n = count.coerceIn(1, 5)
         if (n == pages) return
         val size = n * perPage
-        val lost = (cover.drop(size) + extra.drop(size)).count { it != null }
+        val moving = (cover.drop(size) + extra.drop(size)).filterNotNull()
         fill(cover, cover.toList(), size)
         fill(extra, extra.toList(), size)
         pages = n
         currentPage = currentPage.coerceAtMost(n - 1)
+        val dropped = moving.count { !putInFirstEmpty(it, Area.COVER to ((n - 1) * perPage until size)) }
         prefs.edit().putInt(Prefs.PAGES, n).apply()
         save()
-        Diag.log("Pages: $n" + if (lost > 0) " ($lost apps on removed pages taken off home)" else "")
+        Diag.log(
+            "Pages: $n" + when {
+                moving.isEmpty() -> ""
+                dropped == 0 -> " (moved ${moving.size} apps from removed pages)"
+                else -> " (moved ${moving.size - dropped}; $dropped had no room and were taken off home)"
+            },
+        )
     }
 
     fun choosePageMode(mode: String) {
@@ -217,8 +224,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Places an app dragged in from the drawer. If the slot is taken, the app already there moves to the
-     * nearest empty slot in the same area (or anywhere empty) so nothing silently disappears.
+     * Places an app dragged in from the drawer. If the slot is taken, the app already there moves to the first
+     * empty spot on the same screen (same page, or the dock it was in), then the page you're on, then anywhere.
      */
     fun place(key: String, to: SlotRef) {
         val target = list(to.area)
@@ -227,16 +234,41 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val bumped = target[to.index]
         target[to.index] = key
         if (bumped != null && bumped != key) {
-            val home = listOf(target, cover, extra, dockCover, dockExtra)
-                .firstOrNull { list -> list.any { it == null } }
-            if (home != null) {
-                home[home.indexOfFirst { it == null }] = bumped
-            } else {
+            if (!putInFirstEmpty(bumped, screenRange(to))) {
                 Diag.log("No empty slot for ${apps[bumped]?.label ?: bumped}; it was removed from home")
             }
         }
         save()
         Diag.log("Placed $label in ${to.area.name.lowercase()} slot ${to.index + 1}")
+    }
+
+    /** The slots that make up the screen a slot sits on: its page for home grids, the whole dock for docks. */
+    private fun screenRange(ref: SlotRef): Pair<Area, IntRange> = when (ref.area) {
+        Area.COVER, Area.EXTRA -> {
+            val start = (ref.index / perPage) * perPage
+            ref.area to (start until start + perPage)
+        }
+        else -> ref.area to list(ref.area).indices
+    }
+
+    /** Puts [key] in the first empty slot of [first], then the current cover page, then anywhere. */
+    private fun putInFirstEmpty(key: String, first: Pair<Area, IntRange>): Boolean {
+        val current = currentPage * perPage
+        val candidates = listOf(
+            first,
+            Area.COVER to (current until current + perPage),
+            Area.COVER to cover.indices,
+            Area.EXTRA to extra.indices,
+            Area.DOCK_COVER to dockCover.indices,
+            Area.DOCK_EXTRA to dockExtra.indices,
+        )
+        for ((area, range) in candidates) {
+            val target = list(area)
+            val slot = range.firstOrNull { it in target.indices && target[it] == null } ?: continue
+            target[slot] = key
+            return true
+        }
+        return false
     }
 
     fun setGrid(newCols: Int, newRows: Int) {

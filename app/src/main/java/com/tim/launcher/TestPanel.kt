@@ -103,12 +103,12 @@ fun TestPanel(activity: Activity, vm: HomeViewModel, screen: ScreenState, onClos
 
             Section("Pages when unfolded") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PanelButton("Paired", Modifier.weight(1f), selected = vm.pageMode != "strip") { vm.choosePageMode("paired") }
                     PanelButton("Side by side", Modifier.weight(1f), selected = vm.pageMode == "strip") { vm.choosePageMode("strip") }
+                    PanelButton("Paired (old)", Modifier.weight(1f), selected = vm.pageMode != "strip") { vm.choosePageMode("paired") }
                 }
                 Hint(
-                    "Paired: each cover page gets its own inner half, and swiping moves both together. " +
-                        "Side by side: unfolding shows two cover pages at once, like an open book; there's no separate inner layout.",
+                    "Side by side (chosen): your cover pages form one strip, and unfolding shows the page you're on " +
+                        "plus its neighbor, on the side you picked. Paired is kept only for comparison.",
                 )
             }
 
