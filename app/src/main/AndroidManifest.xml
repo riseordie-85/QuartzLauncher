@@ -30,7 +30,6 @@
             android:stateNotNeeded="true"
             android:clearTaskOnLaunch="true"
             android:excludeFromRecents="true"
-            android:resumeWhilePaused="true"
             android:resizeableActivity="true"
             android:screenOrientation="unspecified"
             android:windowSoftInputMode="adjustPan"
