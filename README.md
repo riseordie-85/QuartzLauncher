@@ -1,6 +1,18 @@
 # Quartz Launcher
 
-Phase 1 (rough pass): settings, setup wizard and the design system, on top of the Phase 0 fold test home screen.
+Phase 2: the layout engine. Phase 1 (settings, setup wizard, design system) sits on top of it.
+
+## Phase 2: what's new
+
+- **Dock on any edge:** bottom, top, left, right or none, per screen. Full length or fit to icons; side docks sit top, middle or bottom. Long docks scroll. On the Fold, a side dock stays on the outer edge.
+- **No dock + apps button:** the button sits on the home screen.
+- **Per-device grids:** phones and the cover screen have their own grid; tablets have their own single grid (no more doubled phone layout). Up to 10 × 10.
+- **Grids flip when the screen turns:** a tablet held upright (or a phone allowed to rotate) flips the grid, iPad style, keeping every app in order.
+- **Changing the grid keeps your apps in place:** each app keeps its row and column; only apps that no longer fit move.
+- **Unfolded:** pages are always one strip (the old Paired mode is gone, its apps moved onto your pages). With carry-over off, the unfolded screen shows one page at a time in its own grid.
+- **Rotation:** the phone and cover screen stay upright unless you allow rotation in Settings › Home screen.
+- **Profiles include your layout:** export/import moves settings and home screen between devices. Missing apps leave empty spots.
+- **Uninstalled apps** free their spots instead of leaving invisible gaps.
 
 ## Phase 1: what's new
 

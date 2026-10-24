@@ -217,7 +217,6 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         }
         take(cover, cols * (rows - 1))
         take(dockCover, cols)
-        take(extra, cols * 2)
         take(dockExtra, cols)
         save()
         Diag.log("Filled a starter layout with ${sortedApps.size} apps")
@@ -251,6 +250,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setPageCount(count: Int) {
+        reloadIfChanged() // an import may have replaced the saved layout; don't save over it with the old one
         val n = count.coerceIn(1, 5)
         if (n == pages) return
         val size = n * perPage
@@ -317,7 +317,6 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             first,
             Area.COVER to (current until current + perPage),
             Area.COVER to cover.indices,
-            Area.EXTRA to extra.indices,
             Area.DOCK_COVER to dockCover.indices,
             Area.DOCK_EXTRA to dockExtra.indices,
         )
@@ -335,6 +334,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
      * longer fit (a column or row was removed) move to the first empty spot on the same page, then any page.
      */
     fun setGrid(newCols: Int, newRows: Int) {
+        reloadIfChanged() // an import may have replaced the saved layout; don't save over it with the old one
         val c = newCols.coerceIn(3, 10)
         val r = newRows.coerceIn(3, 10)
         if (c == cols && r == rows) return
@@ -372,6 +372,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
      * after them when unfolded. Icons that no longer fit move to an empty spot instead of disappearing.
      */
     fun setDockSizes(folded: Int, extra: Int) {
+        reloadIfChanged() // an import may have replaced the saved layout; don't save over it with the old one
         val f = folded.coerceIn(1, UNLIMITED_DOCK)
         val e = extra.coerceIn(0, UNLIMITED_DOCK)
         if (dockCover.size == f && dockExtra.size == e) return

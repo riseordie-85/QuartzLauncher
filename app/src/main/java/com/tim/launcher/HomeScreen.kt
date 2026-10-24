@@ -246,7 +246,11 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
     }
 
     // Pick up a layout imported from another device while Settings was open
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.reloadIfChanged() }
+    // (then re-apply this screen's grid setting, in case the file's grid differs and the setting itself didn't change)
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        vm.reloadIfChanged()
+        vm.setGrid(store[S.gridCols, gridScope], store[S.gridRows, gridScope])
+    }
 
     val panelColor = Color(store[S.panelColor])
     val look = HomeLook(
