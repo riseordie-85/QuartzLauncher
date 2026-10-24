@@ -1,0 +1,326 @@
+package com.tim.launcher.settings
+
+import android.content.Context
+import android.content.SharedPreferences
+import android.content.pm.PackageManager
+import androidx.compose.runtime.mutableStateMapOf
+import com.tim.launcher.Prefs
+import org.json.JSONObject
+
+/**
+ * Where a setting's value lives. Values resolve upward: a screen inherits from its device type, which inherits
+ * from "All devices". A screen only holds its own value when it's been unlinked ("Only this screen").
+ */
+enum class Scope(val label: String, val parent: Scope?) {
+    GLOBAL("All devices", null),
+    PHONE("Phone", GLOBAL),
+    FOLDABLE("Folding phone", GLOBAL),
+    COVER("Cover screen", FOLDABLE),
+    INNER("Unfolded screen", FOLDABLE),
+    TABLET("Tablet", GLOBAL),
+}
+
+enum class DeviceType(val label: String) {
+    PHONE("Phone"),
+    FOLDABLE("Folding phone"),
+    TABLET("Tablet");
+
+    /** The screens this kind of device has, in the order they're shown. */
+    val screens: List<Scope>
+        get() = when (this) {
+            PHONE -> listOf(Scope.PHONE)
+            FOLDABLE -> listOf(Scope.COVER, Scope.INNER)
+            TABLET -> listOf(Scope.TABLET)
+        }
+
+    /** The small "main" screen whose grid the others are based on. */
+    val primary: Scope get() = screens.first()
+}
+
+fun detectDeviceType(context: Context): DeviceType {
+    val foldable = Prefs.get(context).getBoolean(Prefs.FOLDABLE, false) ||
+        context.packageManager.hasSystemFeature(PackageManager.FEATURE_SENSOR_HINGE_ANGLE)
+    if (foldable) return DeviceType.FOLDABLE
+    val sw = context.resources.configuration.smallestScreenWidthDp
+    return if (sw >= 600) DeviceType.TABLET else DeviceType.PHONE
+}
+
+// ---- Value types ----
+
+sealed interface Codec<T> {
+    fun encode(value: T): String
+    fun decode(text: String): T?
+}
+
+object IntCodec : Codec<Int> {
+    override fun encode(value: Int) = value.toString()
+    override fun decode(text: String) = text.toIntOrNull()
+}
+
+object FloatCodec : Codec<Float> {
+    override fun encode(value: Float) = value.toString()
+    override fun decode(text: String) = text.toFloatOrNull()
+}
+
+object BoolCodec : Codec<Boolean> {
+    override fun encode(value: Boolean) = value.toString()
+    override fun decode(text: String) = text.toBooleanStrictOrNull()
+}
+
+object StringCodec : Codec<String> {
+    override fun encode(value: String) = value
+    override fun decode(text: String) = text
+}
+
+class EnumCodec<E : Enum<E>>(private val values: Array<E>) : Codec<E> {
+    override fun encode(value: E) = value.name
+    override fun decode(text: String) = values.firstOrNull { it.name == text }
+}
+
+/** One setting. [perScreen] settings can differ between screens; the rest are shared everywhere. */
+class Setting<T>(val id: String, val default: T, val codec: Codec<T>, val perScreen: Boolean = false)
+
+// ---- Choices ----
+
+enum class DockPosition(val label: String) { BOTTOM("Bottom"), RIGHT("Right"), TOP("Top"), LEFT("Left"), NONE("No dock") }
+enum class DockLength(val label: String) { FULL("Full width or height"), FIT("Fit to icons") }
+enum class DockAlign(val label: String) { START("Start"), CENTER("Center"), END("End") }
+enum class DockShape(val label: String) { SQUARE("Square"), ROUNDED("Rounded"), NONE("No background") }
+enum class CoverSide(val label: String) { LEFT("Left half"), RIGHT("Right half") }
+enum class PageMode(val label: String) { STRIP("Side by side"), PAIRED("Paired (old)") }
+enum class DrawerOpen(val label: String) { SWIPE("Swipe"), BUTTON("Button"), BOTH("Swipe and button") }
+enum class ButtonEnd(val label: String) { START("Start of the dock"), END("End of the dock") }
+enum class ButtonIcon(val label: String) { QUARTZ("Quartz Q"), GRID("Grid"), DOTS("Dots"), CIRCLE("Circle") }
+enum class DrawerView(val label: String) { ICONS("Icons"), LIST("List") }
+enum class DrawerScroll(val label: String) { VERTICAL("Vertical (infinite)"), HORIZONTAL("Horizontal (paged)") }
+enum class DrawerStyle(val label: String) { FULL("Full screen"), FLOATING("Floating box"), SIDE("Side list"), BOTTOM("Bottom popup") }
+enum class DrawerSort(val label: String) { ALPHA("Alphabetical"), INSTALLED("Install date"), CUSTOM("Custom order") }
+enum class IconShape(val label: String) {
+    SYSTEM("App's own shape"), CIRCLE("Circle"), SQUIRCLE("Squircle"), ROUNDED("Rounded square"), SQUARE("Square"),
+}
+enum class IconStyle(val label: String) { DEFAULT("Default"), MINIMAL("Minimal") }
+enum class IconBackground(val label: String) { NONE("None"), LIGHT("Light"), DARK("Dark"), COLOR("Color") }
+enum class BadgeStyle(val label: String) { DOT("Dot"), COUNTER("Counter") }
+
+enum class GestureAction(val label: String) {
+    NONE("Nothing"),
+    APP_DRAWER("Open apps"),
+    NOTIFICATIONS("Open notifications"),
+    SEARCH("Search apps"),
+    SETTINGS("Open Quartz settings"),
+    LOCK("Lock screen"),
+    SWAP_DOCK("Swap dock side"),
+}
+
+enum class GestureSlot(val label: String) {
+    SWIPE_UP("Swipe up"),
+    SWIPE_DOWN("Swipe down"),
+    SWIPE_PAST_LEFT("Swipe past the first page"),
+    SWIPE_PAST_RIGHT("Swipe past the last page"),
+    DOUBLE_TAP("Double-tap"),
+    TWO_FINGER_DOWN("Two-finger swipe down"),
+    PINCH("Pinch"),
+}
+
+/** Every setting Quartz knows about. Changing an id here orphans saved values, so ids stay stable. */
+object S {
+    // Home screen
+    val gridCols = Setting("home.cols", 4, IntCodec, perScreen = true)
+    val gridRows = Setting("home.rows", 6, IntCodec, perScreen = true)
+    val pages = Setting("home.pages", 3, IntCodec)
+    val carryOver = Setting("home.carryOver", true, BoolCodec)
+    val coverSide = Setting("home.coverSide", CoverSide.RIGHT, EnumCodec(CoverSide.entries.toTypedArray()))
+    val pageMode = Setting("home.pageMode", PageMode.STRIP, EnumCodec(PageMode.entries.toTypedArray()))
+    val labelsHome = Setting("home.labels", true, BoolCodec, perScreen = true)
+    val iconSize = Setting("home.iconSize", 1.0f, FloatCodec, perScreen = true)
+    val rotateHome = Setting("home.rotate", false, BoolCodec)
+
+    // Dock
+    val dockPosition = Setting("dock.position", DockPosition.BOTTOM, EnumCodec(DockPosition.entries.toTypedArray()), perScreen = true)
+    val dockLength = Setting("dock.length", DockLength.FULL, EnumCodec(DockLength.entries.toTypedArray()), perScreen = true)
+    val dockAlign = Setting("dock.align", DockAlign.END, EnumCodec(DockAlign.entries.toTypedArray()), perScreen = true)
+    /** 0 means unlimited (the dock scrolls). */
+    val dockIcons = Setting("dock.icons", 5, IntCodec, perScreen = true)
+    val dockShape = Setting("dock.shape", DockShape.ROUNDED, EnumCodec(DockShape.entries.toTypedArray()))
+    val dockRadius = Setting("dock.radius", 28, IntCodec)
+    val swapHandle = Setting("dock.swapHandle", false, BoolCodec)
+    val labelsDock = Setting("dock.labels", false, BoolCodec)
+
+    // App drawer
+    val drawerOpen = Setting("drawer.open", DrawerOpen.SWIPE, EnumCodec(DrawerOpen.entries.toTypedArray()))
+    val drawerButtonEnd = Setting("drawer.buttonEnd", ButtonEnd.START, EnumCodec(ButtonEnd.entries.toTypedArray()))
+    val drawerButtonIcon = Setting("drawer.buttonIcon", ButtonIcon.QUARTZ, EnumCodec(ButtonIcon.entries.toTypedArray()))
+    val drawerView = Setting("drawer.view", DrawerView.ICONS, EnumCodec(DrawerView.entries.toTypedArray()))
+    val drawerScroll = Setting("drawer.scroll", DrawerScroll.VERTICAL, EnumCodec(DrawerScroll.entries.toTypedArray()))
+    val drawerCols = Setting("drawer.cols", 4, IntCodec, perScreen = true)
+    val drawerStyle = Setting("drawer.style", DrawerStyle.FULL, EnumCodec(DrawerStyle.entries.toTypedArray()), perScreen = true)
+    val drawerSort = Setting("drawer.sort", DrawerSort.ALPHA, EnumCodec(DrawerSort.entries.toTypedArray()))
+    val drawerTabs = Setting("drawer.tabs", false, BoolCodec)
+    val labelsDrawer = Setting("drawer.labels", true, BoolCodec)
+
+    // Appearance
+    val panelColor = Setting("look.panelColor", 0xFF1E1B2E.toInt(), IntCodec)
+    val panelOpacity = Setting("look.panelOpacity", 0.55f, FloatCodec)
+    val panelBlur = Setting("look.panelBlur", 0.6f, FloatCodec)
+    val iconsMatch = Setting("look.iconsMatch", true, BoolCodec)
+    val iconShape = Setting("look.iconShape", IconShape.SYSTEM, EnumCodec(IconShape.entries.toTypedArray()))
+    val iconStyle = Setting("look.iconStyle", IconStyle.DEFAULT, EnumCodec(IconStyle.entries.toTypedArray()))
+    val iconBackground = Setting("look.iconBackground", IconBackground.NONE, EnumCodec(IconBackground.entries.toTypedArray()))
+    val badgeStyle = Setting("look.badgeStyle", BadgeStyle.DOT, EnumCodec(BadgeStyle.entries.toTypedArray()))
+    val badgeThreshold1 = Setting("look.badgeThreshold1", 10, IntCodec)
+    val badgeThreshold2 = Setting("look.badgeThreshold2", 50, IntCodec)
+    /** Comma-separated built-in widgets chosen in setup: clock, weather, calendar. */
+    val widgets = Setting("look.widgets", "clock,weather", StringCodec)
+    val clock24h = Setting("look.clock24h", false, BoolCodec)
+
+    // Setup
+    val wizardDone = Setting("setup.wizardDone", false, BoolCodec)
+
+    fun gesture(slot: GestureSlot) = gestures.getValue(slot)
+
+    private val gestureDefaults = mapOf(
+        GestureSlot.SWIPE_UP to GestureAction.APP_DRAWER,
+        GestureSlot.SWIPE_DOWN to GestureAction.NOTIFICATIONS,
+    )
+    private val gestures: Map<GestureSlot, Setting<GestureAction>> = GestureSlot.entries.associateWith { slot ->
+        Setting(
+            "gesture.${slot.name.lowercase()}",
+            gestureDefaults[slot] ?: GestureAction.NONE,
+            EnumCodec(GestureAction.entries.toTypedArray()),
+        )
+    }
+
+    /** Every per-screen setting, for counting what's synced vs split. */
+    val perScreenSettings: List<Setting<*>> = listOf(
+        gridCols, gridRows, labelsHome, iconSize, dockPosition, dockLength, dockAlign, dockIcons, drawerCols, drawerStyle,
+    )
+}
+
+/**
+ * The settings store. One instance per process (the home screen and settings share it), backed by
+ * SharedPreferences and mirrored in Compose state so every screen updates the moment a value changes.
+ */
+class SettingsStore private constructor(context: Context) {
+    private val prefs: SharedPreferences = context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+    private val values = mutableStateMapOf<String, String>()
+
+    init {
+        prefs.all.forEach { (k, v) -> if (v is String) values[k] = v }
+    }
+
+    private fun key(scope: Scope, setting: Setting<*>) = "${scope.name}/${setting.id}"
+
+    /** The scope a value is stored at for [setting] when seen from [scope] (non-screen settings are always global). */
+    private fun effective(setting: Setting<*>, scope: Scope) = if (setting.perScreen) scope else Scope.GLOBAL
+
+    operator fun <T> get(setting: Setting<T>, scope: Scope = Scope.GLOBAL): T {
+        var s: Scope? = effective(setting, scope)
+        while (s != null) {
+            values[key(s, setting)]?.let { text -> setting.codec.decode(text)?.let { return it } }
+            s = s.parent
+        }
+        return setting.default
+    }
+
+    /** The nearest scope (from [scope] upward) that holds its own value, or null if it's all defaults. */
+    fun owner(setting: Setting<*>, scope: Scope): Scope? {
+        var s: Scope? = effective(setting, scope)
+        while (s != null) {
+            if (values.containsKey(key(s, setting))) return s
+            s = s.parent
+        }
+        return null
+    }
+
+    /** True when [scope] follows its parent instead of having its own value. */
+    fun isLinked(setting: Setting<*>, scope: Scope): Boolean =
+        !setting.perScreen || scope.parent == null || !values.containsKey(key(scope, setting))
+
+    /**
+     * Changes a value as seen from [scope]. A linked screen edits the shared value it follows, so every linked
+     * screen changes together; an unlinked screen edits only itself.
+     */
+    fun <T> set(setting: Setting<T>, scope: Scope = Scope.GLOBAL, value: T) {
+        val target = if (!setting.perScreen) Scope.GLOBAL else owner(setting, scope) ?: Scope.GLOBAL
+        put(key(target, setting), setting.codec.encode(value))
+    }
+
+    /** Writes a value at exactly [scope], unlinking it if needed. Used by setup when screens differ. */
+    fun <T> setAt(setting: Setting<T>, scope: Scope, value: T) {
+        put(key(effective(setting, scope), setting), setting.codec.encode(value))
+    }
+
+    /** "Only this screen": copies the current value down so this screen can change on its own. */
+    fun unlink(setting: Setting<*>, scope: Scope) {
+        if (!setting.perScreen || scope.parent == null) return
+        @Suppress("UNCHECKED_CAST")
+        val s = setting as Setting<Any?>
+        put(key(scope, s), s.codec.encode(get(s, scope)))
+    }
+
+    /** "Synced": drops this screen's own value so it follows its parent again. */
+    fun link(setting: Setting<*>, scope: Scope) {
+        if (scope.parent == null) return
+        val k = key(scope, setting)
+        values.remove(k)
+        prefs.edit().remove(k).apply()
+    }
+
+    /** Clears any per-screen values for [setting] on these screens so they all follow one shared value. */
+    fun linkAll(setting: Setting<*>, scopes: List<Scope>) {
+        scopes.forEach { s ->
+            link(setting, s)
+            s.parent?.takeIf { it != Scope.GLOBAL }?.let { link(setting, it) }
+        }
+    }
+
+    private fun put(k: String, v: String) {
+        values[k] = v
+        prefs.edit().putString(k, v).apply()
+    }
+
+    // ---- Profiles ----
+
+    fun exportJson(): String {
+        val json = JSONObject()
+        json.put("format", "quartz-launcher-settings")
+        json.put("version", 1)
+        val data = JSONObject()
+        values.forEach { (k, v) -> data.put(k, v) }
+        json.put("settings", data)
+        return json.toString(2)
+    }
+
+    /** Imports settings from another device. Values for this device's own screens are kept unless overwritten. */
+    fun importJson(text: String): Int {
+        val json = JSONObject(text)
+        require(json.optString("format") == "quartz-launcher-settings") { "Not a Quartz settings file" }
+        val data = json.getJSONObject("settings")
+        var count = 0
+        val edit = prefs.edit()
+        data.keys().forEach { k ->
+            if (k.endsWith("/" + S.wizardDone.id)) return@forEach
+            val v = data.getString(k)
+            values[k] = v
+            edit.putString(k, v)
+            count++
+        }
+        edit.apply()
+        return count
+    }
+
+    fun resetAll() {
+        values.clear()
+        prefs.edit().clear().apply()
+    }
+
+    companion object {
+        private const val FILE = "quartz_settings"
+
+        @Volatile
+        private var instance: SettingsStore? = null
+
+        fun get(context: Context): SettingsStore =
+            instance ?: synchronized(this) { instance ?: SettingsStore(context).also { instance = it } }
+    }
+}

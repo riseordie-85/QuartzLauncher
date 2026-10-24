@@ -272,8 +272,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setGrid(newCols: Int, newRows: Int) {
-        val c = newCols.coerceIn(3, 7)
-        val r = newRows.coerceIn(4, 9)
+        val c = newCols.coerceIn(3, 8)
+        val r = newRows.coerceIn(4, 10)
         if (c == cols && r == rows) return
         fun resized(list: List<String?>, size: Int) = list.filterNotNull().take(size)
         val coverItems = resized(cover, pages * c * r)

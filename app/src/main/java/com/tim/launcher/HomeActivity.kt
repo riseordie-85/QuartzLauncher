@@ -14,6 +14,9 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
+import com.tim.launcher.settings.S
+import com.tim.launcher.settings.SettingsActivity
+import com.tim.launcher.settings.SettingsStore
 
 class HomeActivity : ComponentActivity() {
 
@@ -36,6 +39,17 @@ class HomeActivity : ComponentActivity() {
                 HomeScreen(activity = this, homeTick = homeTick)
             }
         }
+
+        // First launch: run setup once
+        if (savedInstanceState == null && !wizardShown && !SettingsStore.get(this)[S.wizardDone]) {
+            wizardShown = true
+            SettingsActivity.open(this, wizard = true)
+        }
+    }
+
+    companion object {
+        /** Only offer setup once per launch of the app, even if the home screen is recreated. */
+        private var wizardShown = false
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -1,6 +1,20 @@
-# Quartz Launcher — Phase 0 (fold test build)
+# Quartz Launcher
 
-A bare-bones test launcher. It isn't pretty on purpose: its only job is to prove the fold behavior on real devices before Phase 1 design work starts.
+Phase 1 (rough pass): settings, setup wizard and the design system, on top of the Phase 0 fold test home screen.
+
+## Phase 1: what's new
+
+- **Setup wizard** on first launch: privacy promise, set as default home, then Recommended / Walk me through it / Import. Function first (dock, grid, fold carry-over, drawer), then form (dock style, color and glass, icons, widgets), with a live preview of this device on every question.
+- **Settings** (long-press an empty spot → Quartz settings): Home screen, Dock, App drawer, Appearance, Gestures, Privacy & backup, About, Restart setup.
+- **Synced vs per-screen settings:** on a foldable, tap the cover or unfolded screen at the top to choose which one you're editing. Per-screen settings show a link chip: "Synced with the other screen" or "Only this screen".
+- **Gesture map:** each gesture holds one action. Picking a taken gesture for the app drawer asks before replacing it.
+- **Profiles:** export and import settings as a file (Privacy & backup).
+- **Wired into the home screen now:** grid, pages, cover side, page mode, dock color/see-through/shape/roundness, app names, icon size, drawer columns and color, the apps button, swipe up/down and double-tap actions.
+- **Saved for later phases:** dock position on other edges, drawer styles, icon shapes, badges, widgets, rotation lock, blur behind the dock.
+
+## Phase 0
+
+The fold test build underneath: its only job was to prove fold behavior on real devices.
 
 ## What it does
 

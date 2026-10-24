@@ -88,28 +88,12 @@ fun TestPanel(activity: Activity, vm: HomeViewModel, screen: ScreenState, onClos
                 Mono(readout(screen, isDefaultHome))
             }
 
-            Section("Cover layout lands on") {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PanelButton("Left half", Modifier.weight(1f), selected = vm.coverLeft) { vm.setCoverSide(true) }
-                    PanelButton("Right half", Modifier.weight(1f), selected = !vm.coverLeft) { vm.setCoverSide(false) }
+            Section("Layout") {
+                PanelButton("Open Quartz settings", Modifier.fillMaxWidth()) {
+                    onClose()
+                    com.tim.launcher.settings.SettingsActivity.open(context)
                 }
-            }
-
-            Section("Cover grid (unfolded doubles the columns)") {
-                Stepper("Columns", vm.cols, onMinus = { vm.setGrid(vm.cols - 1, vm.rows) }, onPlus = { vm.setGrid(vm.cols + 1, vm.rows) })
-                Stepper("Rows", vm.rows, onMinus = { vm.setGrid(vm.cols, vm.rows - 1) }, onPlus = { vm.setGrid(vm.cols, vm.rows + 1) })
-                Stepper("Pages", vm.pages, onMinus = { vm.setPageCount(vm.pages - 1) }, onPlus = { vm.setPageCount(vm.pages + 1) })
-            }
-
-            Section("Pages when unfolded") {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PanelButton("Side by side", Modifier.weight(1f), selected = vm.pageMode == "strip") { vm.choosePageMode("strip") }
-                    PanelButton("Paired (old)", Modifier.weight(1f), selected = vm.pageMode != "strip") { vm.choosePageMode("paired") }
-                }
-                Hint(
-                    "Side by side (chosen): your cover pages form one strip, and unfolding shows the page you're on " +
-                        "plus its neighbor, on the side you picked. Paired is kept only for comparison.",
-                )
+                Hint("Grid, pages, cover side and page mode now live in Settings › Home screen.")
             }
 
             Section("Test wallpaper") {

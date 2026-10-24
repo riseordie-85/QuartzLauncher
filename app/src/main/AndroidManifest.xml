@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Privacy: the Phase 0 test build never goes online. -->
+    <!-- Privacy: Quartz never sends anything about you anywhere. -->
+
+    <!-- Lets "swipe down" open the notification shade -->
+    <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
 
     <uses-feature
         android:name="android.software.live_wallpaper"
@@ -48,6 +51,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Settings and setup: a frosted sheet over the wallpaper -->
+        <activity
+            android:name=".settings.SettingsActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.QuartzLauncher.Settings"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density" />
 
         <!-- Test live wallpaper: shows which screen and size it is drawing on -->
         <service
