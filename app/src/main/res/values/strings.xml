@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Quartz Launcher</string>
+    <string name="wallpaper_name">Quartz Test Wallpaper</string>
+    <string name="wallpaper_desc">Phase 0 test pattern that shows which screen it is drawing on.</string>
+</resources>
