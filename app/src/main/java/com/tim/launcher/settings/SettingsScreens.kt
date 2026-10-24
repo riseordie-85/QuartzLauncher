@@ -273,9 +273,42 @@ fun HomeSettings(ctx: SettingsContext) {
             }
         }
 
-        SectionLabel("Coming later")
+        SectionLabel("Folders")
         GlassPanel {
-            SettingRow("Folders", "Icons, preview grids and how they open (phase 3)", enabled = false)
+            SettingRow("Make a folder", "Drag an app onto another and hold for a moment", enabled = false)
+            RowDivider()
+            SettingRow("Folder icon") {
+                Dropdown(store[S.folderIcon], FolderIcon.entries, { it.label }) { store.set(S.folderIcon, value = it) }
+            }
+            RowDivider()
+            SettingRow("Opens as") {
+                Dropdown(store[S.folderOpen], FolderOpen.entries, { it.label }) { store.set(S.folderOpen, value = it) }
+            }
+            when (store[S.folderOpen]) {
+                FolderOpen.ROW -> {
+                    RowDivider()
+                    SettingRow("Row direction") {
+                        Dropdown(store[S.folderRow], RowDirection.entries, { it.label }) { store.set(S.folderRow, value = it) }
+                    }
+                }
+                else -> {
+                    RowDivider()
+                    Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+                        Text("Show apps as", color = Q.Text, fontSize = 16.sp, modifier = Modifier.padding(bottom = 10.dp))
+                        Segmented(store[S.folderView], FolderView.entries, { it.label }) { store.set(S.folderView, value = it) }
+                    }
+                    if (store[S.folderView] == FolderView.GRID) {
+                        RowDivider()
+                        SettingRow("Grid size", "Columns in an open folder; sets how wide it is") {
+                            Stepper(store[S.folderCols], 2..6) { store.set(S.folderCols, value = it) }
+                        }
+                    }
+                }
+            }
+            if (ctx.type == DeviceType.FOLDABLE) {
+                RowDivider()
+                SettingRow("Unfolded", "Folders open within the half of the screen they're on", enabled = false)
+            }
         }
     }
 }
@@ -595,7 +628,9 @@ fun GestureSettings(ctx: SettingsContext) {
                 val action = store[S.gesture(slot)]
                 SettingRow(
                     slot.label,
-                    if (action == GestureAction.LOCK) "Needs Accessibility access, which Quartz will ask for later" else null,
+                    if (action == GestureAction.LOCK) {
+                        if (com.tim.launcher.LockService.isOn) "Quartz Lock is on" else "Needs Quartz Lock turned on in Accessibility settings; you'll be asked the first time"
+                    } else null,
                 ) {
                     Dropdown(action, GestureAction.entries, { it.label }) { store.set(S.gesture(slot), value = it) }
                 }
@@ -658,7 +693,11 @@ fun PrivacySettings(ctx: SettingsContext) {
             RowDivider()
             SettingRow("Location", "Weather can use a typed city instead") { StatusText("Not asked") }
             RowDivider()
-            SettingRow("Accessibility", "Only for double-tap to lock. Not used yet") { StatusText("Not used") }
+            SettingRow(
+                "Accessibility (Quartz Lock)",
+                "Only used to lock the screen from a gesture. It can't see your screen or what you type.",
+                onClick = { com.tim.launcher.LockService.openSettings(context) },
+            ) { StatusText(if (com.tim.launcher.LockService.isOn) "On" else "Off") }
         }
 
         SectionLabel("Backup")

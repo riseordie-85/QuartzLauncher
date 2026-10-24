@@ -101,6 +101,10 @@ enum class IconShape(val label: String) {
 enum class IconStyle(val label: String) { DEFAULT("Default"), MINIMAL("Minimal") }
 enum class IconBackground(val label: String) { NONE("None"), LIGHT("Light"), DARK("Dark"), COLOR("Color") }
 enum class BadgeStyle(val label: String) { DOT("Dot"), COUNTER("Counter") }
+enum class FolderIcon(val label: String) { PLAIN("Folder"), BADGE("Folder with badge"), GRID2("2 × 2 preview"), GRID3("3 × 3 preview") }
+enum class FolderOpen(val label: String) { FULL("Full screen"), CENTER("Floating box"), POPUP("Pop up by the icon"), ROW("Expanding row") }
+enum class FolderView(val label: String) { GRID("Grid"), LIST("List") }
+enum class RowDirection(val label: String) { HORIZONTAL("Sideways"), VERTICAL("Up and down") }
 
 enum class GestureAction(val label: String) {
     NONE("Nothing"),
@@ -134,6 +138,14 @@ object S {
     val labelsHome = Setting("home.labels", true, BoolCodec, perScreen = true)
     val iconSize = Setting("home.iconSize", 1.0f, FloatCodec, perScreen = true)
     val rotateHome = Setting("home.rotate", false, BoolCodec)
+
+    // Folders
+    val folderIcon = Setting("folder.icon", FolderIcon.GRID2, EnumCodec(FolderIcon.entries.toTypedArray()))
+    val folderOpen = Setting("folder.open", FolderOpen.POPUP, EnumCodec(FolderOpen.entries.toTypedArray()))
+    val folderView = Setting("folder.view", FolderView.GRID, EnumCodec(FolderView.entries.toTypedArray()))
+    /** Columns in an open folder; it sets how wide the window is. */
+    val folderCols = Setting("folder.cols", 3, IntCodec)
+    val folderRow = Setting("folder.row", RowDirection.HORIZONTAL, EnumCodec(RowDirection.entries.toTypedArray()))
 
     // Dock
     val dockPosition = Setting("dock.position", DockPosition.BOTTOM, EnumCodec(DockPosition.entries.toTypedArray()), perScreen = true)

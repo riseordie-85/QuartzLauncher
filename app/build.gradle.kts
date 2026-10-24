@@ -12,8 +12,8 @@ android {
         applicationId = "com.tim.launcher"
         minSdk = 33 // Android 13+ (AGSL shaders for gradients and glass later on)
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.2.0-phase2"
+        versionCode = 4
+        versionName = "0.3.0-phase3"
     }
 
     buildTypes {

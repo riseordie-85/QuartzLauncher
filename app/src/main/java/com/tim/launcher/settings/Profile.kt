@@ -9,7 +9,7 @@ import org.json.JSONObject
  * Apps the other device doesn't have simply leave their spots empty.
  */
 object Profile {
-    private val layoutKeys = listOf(Prefs.L_COVER, Prefs.L_DOCK_COVER, Prefs.L_DOCK_EXTRA)
+    private val layoutKeys = listOf(Prefs.L_COVER, Prefs.L_DOCK_COVER, Prefs.L_DOCK_EXTRA, Prefs.L_FOLDERS)
 
     fun export(context: Context): String {
         val json = JSONObject(SettingsStore.get(context).exportJson())

@@ -2,6 +2,7 @@ package com.tim.launcher
 
 import android.app.Application
 import android.content.ComponentName
+import android.content.pm.ApplicationInfo
 import android.content.pm.LauncherApps
 import android.os.Handler
 import android.os.Looper
@@ -10,6 +11,7 @@ import android.os.UserHandle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -21,13 +23,30 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 
 data class AppEntry(
     val key: String,
     val label: String,
     val icon: ImageBitmap,
     val component: ComponentName,
+    /** Android's app category (games, social, ...), used only to suggest folder names. */
+    val category: Int = ApplicationInfo.CATEGORY_UNDEFINED,
 )
+
+/** A folder on the home screen or dock. It sits in a slot as "folder:<id>". */
+data class Folder(
+    val id: String,
+    val name: String,
+    val items: List<String>,
+    /** Badge icon name (see FolderBadges), shown with the "folder with badge" icon style. */
+    val badge: String = "folder",
+)
+
+const val FOLDER_PREFIX = "folder:"
+
+fun isFolderKey(key: String?) = key != null && key.startsWith(FOLDER_PREFIX)
 
 /** Which list a home-screen slot belongs to. "Cover" lists are the folded layout; "extra" fills the other half. */
 enum class Area { COVER, EXTRA, DOCK_COVER, DOCK_EXTRA }
@@ -89,6 +108,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         override fun onPackagesUnavailable(packageNames: Array<out String>?, user: UserHandle?, replacing: Boolean) = reload()
     }
 
+    /** Folders by id. Declared before init, which reads them. */
+    val folders = mutableStateMapOf<String, Folder>()
+
     init {
         restoreLayout()
         migratePairedPages()
@@ -132,6 +154,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                         label = info.label.toString(),
                         icon = info.getIcon(density).toBitmap(ICON_PX, ICON_PX).asImageBitmap(),
                         component = info.componentName,
+                        category = info.applicationInfo.category,
                     )
                 }.getOrNull()
             }
@@ -146,6 +169,127 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- Layout ----
 
+    // ---- Folders ----
+
+    fun folderFor(key: String?): Folder? = if (isFolderKey(key)) folders[key!!.removePrefix(FOLDER_PREFIX)] else null
+
+    private fun restoreFolders() {
+        folders.clear()
+        val text = prefs.getString(Prefs.L_FOLDERS, null) ?: return
+        runCatching {
+            val array = JSONArray(text)
+            for (i in 0 until array.length()) {
+                val o = array.getJSONObject(i)
+                val items = o.getJSONArray("items").let { a -> (0 until a.length()).map { a.getString(it) } }
+                val folder = Folder(o.getString("id"), o.optString("name", "Folder"), items, o.optString("badge", "folder"))
+                folders[folder.id] = folder
+            }
+        }.onFailure { Diag.log("Couldn't read folders: ${it.message}") }
+    }
+
+    private fun saveFolders() {
+        val array = JSONArray()
+        folders.values.forEach { f ->
+            array.put(JSONObject().put("id", f.id).put("name", f.name).put("badge", f.badge).put("items", JSONArray(f.items)))
+        }
+        prefs.edit().putString(Prefs.L_FOLDERS, array.toString()).apply()
+    }
+
+    private fun slotOf(key: String): SlotRef? {
+        for (area in listOf(Area.COVER, Area.DOCK_COVER, Area.DOCK_EXTRA)) {
+            val i = list(area).indexOf(key)
+            if (i >= 0) return SlotRef(area, i)
+        }
+        return null
+    }
+
+    /** A name for a new folder: the apps' shared category if Android knows one, otherwise "Folder". */
+    private fun suggestName(keys: List<String>): String {
+        val categories = keys.mapNotNull { apps[it]?.category }.distinct()
+        val c = categories.singleOrNull() ?: return "Folder"
+        if (c == ApplicationInfo.CATEGORY_UNDEFINED) return "Folder"
+        return ApplicationInfo.getCategoryTitle(getApplication(), c)?.toString() ?: "Folder"
+    }
+
+    /**
+     * Drops [key] onto the app or folder at [target]: onto a folder it joins it, onto an app the two become a new
+     * folder. The app leaves wherever it came from ([source] slot or [fromFolder]).
+     */
+    fun makeFolder(target: SlotRef, key: String, source: SlotRef?, fromFolder: String?) {
+        if (isFolderKey(key) || target == source) return
+        val list = list(target.area)
+        val existing = list.getOrNull(target.index) ?: return
+        if (existing == key) return
+        val folder = folderFor(existing)
+        if (folder != null) {
+            if (folder.id == fromFolder) return
+            if (key !in folder.items) folders[folder.id] = folder.copy(items = folder.items + key)
+            Diag.log("Added ${apps[key]?.label ?: key} to ${folder.name}")
+        } else {
+            val id = System.currentTimeMillis().toString(36)
+            val name = suggestName(listOf(existing, key))
+            folders[id] = Folder(id, name, listOf(existing, key))
+            list[target.index] = FOLDER_PREFIX + id
+            Diag.log("Made a folder \"$name\"")
+        }
+        if (source != null) list(source.area)[source.index] = null
+        if (fromFolder != null) takeOutOfFolder(fromFolder, key, save = false)
+        save()
+        saveFolders()
+    }
+
+    /** An app dragged out of a folder onto a home or dock slot. */
+    fun placeFromFolder(folderId: String, key: String, to: SlotRef) {
+        if (keyAt(to) == FOLDER_PREFIX + folderId) return
+        takeOutOfFolder(folderId, key, save = false)
+        place(key, to)
+        saveFolders()
+    }
+
+    /** Removes an app from a folder (it leaves the home screen). A folder left with one app turns back into it. */
+    fun takeOutOfFolder(folderId: String, key: String, save: Boolean = true) {
+        val folder = folders[folderId] ?: return
+        val rest = folder.items - key
+        val slot = slotOf(FOLDER_PREFIX + folderId)
+        when {
+            rest.size >= 2 -> folders[folderId] = folder.copy(items = rest)
+            else -> {
+                folders.remove(folderId)
+                if (slot != null) list(slot.area)[slot.index] = rest.firstOrNull()
+            }
+        }
+        if (save) {
+            save()
+            saveFolders()
+        }
+    }
+
+    /** "Remove folder": its apps go back onto the screen, the first where the folder was. */
+    fun dissolveFolder(folderId: String) {
+        val folder = folders.remove(folderId) ?: return
+        val slot = slotOf(FOLDER_PREFIX + folderId)
+        val items = folder.items
+        if (slot != null) {
+            list(slot.area)[slot.index] = items.firstOrNull()
+            items.drop(1).forEach { putInFirstEmpty(it, screenRange(slot)) }
+        }
+        save()
+        saveFolders()
+        Diag.log("Removed folder \"${folder.name}\"; its apps are back on the screen")
+    }
+
+    fun renameFolder(folderId: String, name: String) {
+        val folder = folders[folderId] ?: return
+        folders[folderId] = folder.copy(name = name.trim().ifEmpty { "Folder" })
+        saveFolders()
+    }
+
+    fun setFolderBadge(folderId: String, badge: String) {
+        val folder = folders[folderId] ?: return
+        folders[folderId] = folder.copy(badge = badge)
+        saveFolders()
+    }
+
     private fun restoreLayout() {
         fun read(key: String): List<String?> =
             prefs.getString(key, null)?.split("|")?.map { it.ifEmpty { null } } ?: emptyList()
@@ -155,6 +299,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val savedExtra = read(Prefs.L_DOCK_EXTRA)
         fill(dockCover, savedDock, if (savedDock.isEmpty()) cols else savedDock.size)
         fill(dockExtra, savedExtra, if (savedExtra.isEmpty()) cols else savedExtra.size)
+        restoreFolders()
     }
 
     /** Apps placed in the old "paired" inner pages move onto empty spots of your pages. */
@@ -174,15 +319,33 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     /** Uninstalled apps (or apps from another device's imported layout) leave their spots instead of hiding in them. */
     private fun dropMissingApps() {
         var removed = 0
+        // Apps inside folders
+        folders.values.toList().forEach { f ->
+            val kept = f.items.filter { it in apps }
+            if (kept.size != f.items.size) {
+                removed += f.items.size - kept.size
+                folders[f.id] = f.copy(items = kept)
+            }
+        }
         listOf(cover, extra, dockCover, dockExtra).forEach { list ->
             list.indices.forEach { i ->
-                val key = list[i]
-                if (key != null && key !in apps) {
+                val key = list[i] ?: return@forEach
+                if (isFolderKey(key)) {
+                    val f = folderFor(key)
+                    when {
+                        f == null || f.items.isEmpty() -> { list[i] = null; f?.let { folders.remove(it.id) } }
+                        f.items.size == 1 -> { list[i] = f.items.first(); folders.remove(f.id) }
+                    }
+                } else if (key !in apps) {
                     list[i] = null
                     removed++
                 }
             }
         }
+        // Folders no slot points to anymore
+        val placed = (cover + dockCover + dockExtra).filter { isFolderKey(it) }.map { it!!.removePrefix(FOLDER_PREFIX) }.toSet()
+        folders.keys.filter { it !in placed }.forEach { folders.remove(it) }
+        saveFolders()
         if (removed > 0) {
             save()
             Diag.log("Cleared $removed spots for apps that aren't installed")
@@ -240,6 +403,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val key = target.getOrNull(ref.index) ?: return
         target[ref.index] = null
         save()
+        val folder = folderFor(key)
+        if (folder != null) {
+            folders.remove(folder.id)
+            saveFolders()
+            Diag.log("Removed folder \"${folder.name}\" from home (its apps are still installed)")
+            return
+        }
         Diag.log("Removed ${apps[key]?.label ?: key} from home (still installed)")
     }
 

@@ -120,13 +120,23 @@ import com.tim.launcher.settings.dockCounts
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import com.tim.launcher.ui.Q
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import com.tim.launcher.settings.FolderIcon
 
 
-/** Tracks the icon being dragged (from a home slot or from the drawer) and where every slot sits on screen. */
+/**
+ * Tracks the app or folder being dragged (from a home slot, the drawer, or out of a folder) and where every slot
+ * sits on screen. Holding it over another icon for a moment arms [folderTarget]: dropping then makes a folder.
+ */
 class DragController {
     var source by mutableStateOf<SlotRef?>(null)
         private set
-    var app by mutableStateOf<AppEntry?>(null)
+    /** The app or folder key being carried. */
+    var key by mutableStateOf<String?>(null)
         private set
     var pointer by mutableStateOf(Offset.Zero)
         private set
@@ -135,12 +145,19 @@ class DragController {
     var fromDrawer by mutableStateOf(false)
         private set
 
+    /** The folder an app is being dragged out of. */
+    var fromFolder by mutableStateOf<String?>(null)
+        private set
+
+    /** The icon held over long enough that dropping makes (or adds to) a folder. */
+    var folderTarget by mutableStateOf<SlotRef?>(null)
+
     val bounds = HashMap<SlotRef, Rect>()
 
     /** Where the "Remove from home" target sits while it's showing. */
     var removeZone: Rect = Rect.Zero
 
-    val active: Boolean get() = app != null
+    val active: Boolean get() = key != null
 
     val overRemove: Boolean
         get() = active && removeZone != Rect.Zero && removeZone.inflate(24f).contains(pointer)
@@ -148,18 +165,25 @@ class DragController {
     val hover: SlotRef?
         get() = if (!active || overRemove) null else bounds.entries.firstOrNull { it.value.contains(pointer) }?.key
 
-    fun start(ref: SlotRef, entry: AppEntry, at: Offset) {
+    fun start(ref: SlotRef, key: String, at: Offset) {
+        begin(key, at)
         source = ref
-        app = entry
-        pointer = at
-        fromDrawer = false
     }
 
-    fun startFromDrawer(entry: AppEntry, at: Offset) {
-        source = null
-        app = entry
-        pointer = at
+    fun startFromDrawer(key: String, at: Offset) {
+        begin(key, at)
         fromDrawer = true
+    }
+
+    fun startFromFolder(folderId: String, key: String, at: Offset) {
+        begin(key, at)
+        fromFolder = folderId
+    }
+
+    private fun begin(key: String, at: Offset) {
+        clear()
+        this.key = key
+        pointer = at
     }
 
     fun moveBy(delta: Offset) {
@@ -167,14 +191,22 @@ class DragController {
     }
 
     fun drop(vm: HomeViewModel) {
-        val entry = app
+        val carried = key
         val from = source
         val to = hover
+        val folder = fromFolder
+        val armed = folderTarget
         when {
-            entry == null -> Unit
-            overRemove -> if (!fromDrawer && from != null) vm.remove(from)
+            carried == null -> Unit
+            overRemove -> when {
+                from != null -> vm.remove(from)
+                folder != null -> vm.takeOutOfFolder(folder, carried)
+                else -> Unit
+            }
             to == null -> Unit
-            fromDrawer -> vm.place(entry.key, to)
+            armed != null && armed == to -> vm.makeFolder(to, carried, from, folder)
+            fromDrawer -> vm.place(carried, to)
+            folder != null -> vm.placeFromFolder(folder, carried, to)
             from != null && from != to -> vm.move(from, to)
         }
         clear()
@@ -184,8 +216,10 @@ class DragController {
 
     private fun clear() {
         source = null
-        app = null
+        key = null
         fromDrawer = false
+        fromFolder = null
+        folderTarget = null
     }
 }
 
@@ -198,6 +232,10 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
     var drawerOpen by remember { mutableStateOf(false) }
     var panelOpen by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
+    var openFolder by remember { mutableStateOf<Pair<String, SlotRef>?>(null) }
+    var lockPrompt by remember { mutableStateOf(false) }
+    // Set while two fingers are down, so a two-finger gesture doesn't also count as a one-finger swipe
+    var multiTouchUntil by remember { mutableStateOf(0L) }
 
     // ---- Settings → home ----
     val scope = when (screen.posture) {
@@ -272,6 +310,11 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         dockLength = store[S.dockLength, scope],
         dockAlign = store[S.dockAlign, scope],
         dockIconAlign = store[S.dockIconAlign, scope],
+        folderIcon = store[S.folderIcon],
+        openFolder = { id, ref -> openFolder = id to ref },
+        onSwipePast = { first ->
+            run(store[S.gesture(if (first) GestureSlot.SWIPE_PAST_LEFT else GestureSlot.SWIPE_PAST_RIGHT)])
+        },
     )
     val deviceType = when {
         screen.foldable -> DeviceType.FOLDABLE
@@ -298,7 +341,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             GestureAction.APP_DRAWER, GestureAction.SEARCH -> drawerOpen = true
             GestureAction.NOTIFICATIONS -> expandNotifications(activity)
             GestureAction.SETTINGS -> SettingsActivity.open(activity)
-            GestureAction.LOCK -> Toast.makeText(activity, "Lock needs Accessibility access, which comes later", Toast.LENGTH_SHORT).show()
+            GestureAction.LOCK -> if (!LockService.lock()) lockPrompt = true
             GestureAction.SWAP_DOCK -> Diag.log("Swap dock side arrives with dock layouts")
         }
     }
@@ -310,16 +353,34 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         drawerOpen = false
         panelOpen = false
         menuOpen = false
+        openFolder = null
     }
     BackHandler {
         drawerOpen = false
         panelOpen = false
         menuOpen = false
+        openFolder = null
+    }
+
+    // Hold a dragged icon over another for a moment to make a folder
+    val haptics = LocalHapticFeedback.current
+    val hoverRef = drag.hover
+    LaunchedEffect(hoverRef, drag.key) {
+        drag.folderTarget = null
+        val target = hoverRef ?: return@LaunchedEffect
+        val carried = drag.key ?: return@LaunchedEffect
+        val existing = vm.keyAt(target) ?: return@LaunchedEffect
+        if (isFolderKey(carried) || target == drag.source || existing == carried) return@LaunchedEffect
+        if (vm.folderFor(existing)?.id == drag.fromFolder && drag.fromFolder != null) return@LaunchedEffect
+        delay(550)
+        drag.folderTarget = target
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
     }
 
     // Log every posture change and time how long the new layout took to reach the screen.
     LaunchedEffect(screen.posture, screen.widthDp, screen.heightDp) {
         Diag.log("Posture: ${screen.posture.label}, ${screen.widthDp}×${screen.heightDp}dp, display ${screen.displayId}")
+        openFolder = null
         if (drag.active) {
             drag.cancel()
             Diag.log("Drag interrupted by the fold change; icon stayed in its spot")
@@ -342,7 +403,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
                     onDragStart = { travel = 0f },
                     onDragEnd = {
                         val threshold = 80.dp.toPx()
-                        if (!drag.active && !drawerOpen) {
+                        if (!drag.active && !drawerOpen && openFolder == null && SystemClock.uptimeMillis() > multiTouchUntil) {
                             if (travel < -threshold) run(store[S.gesture(GestureSlot.SWIPE_UP)])
                             if (travel > threshold) run(store[S.gesture(GestureSlot.SWIPE_DOWN)])
                         }
@@ -351,6 +412,40 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
                     onDragCancel = { travel = 0f },
                     onVerticalDrag = { _, dy -> travel += dy },
                 )
+            }
+            .pointerInput(Unit) {
+                // Two-finger gestures: pinch, and two-finger swipe down. Watches without taking touches from anything.
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    var startDist = -1f
+                    var startCenter = Offset.Zero
+                    var lastDist = 0f
+                    var lastCenter = Offset.Zero
+                    do {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val down = event.changes.filter { it.pressed }
+                        if (down.size >= 2) {
+                            multiTouchUntil = SystemClock.uptimeMillis() + 400
+                            val a = down[0].position
+                            val b = down[1].position
+                            val dist = (a - b).getDistance()
+                            val center = (a + b) / 2f
+                            if (startDist < 0f) {
+                                startDist = dist
+                                startCenter = center
+                            }
+                            lastDist = dist
+                            lastCenter = center
+                        }
+                    } while (event.changes.any { it.pressed })
+                    if (startDist > 0f && !drag.active && !drawerOpen && openFolder == null) {
+                        val dy = lastCenter.y - startCenter.y
+                        when {
+                            lastDist < startDist * 0.65f -> run(store[S.gesture(GestureSlot.PINCH)])
+                            dy > 100.dp.toPx() && lastDist > startDist * 0.7f -> run(store[S.gesture(GestureSlot.TWO_FINGER_DOWN)])
+                        }
+                    }
+                }
             }
             .pointerInput(Unit) {
                 detectTapGestures(
@@ -376,13 +471,44 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             AppDrawer(vm, drag, drawerCols.coerceAtLeast(1), onClose = { drawerOpen = false })
         }
 
+        openFolder?.let { (id, ref) ->
+            val folder = vm.folders[id]
+            if (folder == null) {
+                LaunchedEffect(id) { openFolder = null }
+            } else {
+                val anchor = drag.bounds[ref]
+                val w = screen.widthPx.toFloat()
+                val h = screen.heightPx.toFloat()
+                // On the unfolded screen a folder opens within its own half
+                val region = if (screen.posture == Posture.UNFOLDED && screen.widthDp > screen.heightDp && anchor != null) {
+                    val hinge = (screen.hingeCenterPx ?: (screen.widthPx / 2)).toFloat()
+                    if (anchor.center.x < hinge) Rect(0f, 0f, hinge, h) else Rect(hinge, 0f, w, h)
+                } else {
+                    Rect(0f, 0f, w, h)
+                }
+                FolderOverlay(
+                    folder = folder,
+                    vm = vm,
+                    drag = drag,
+                    anchor = anchor,
+                    region = region,
+                    style = store[S.folderOpen],
+                    view = store[S.folderView],
+                    columns = store[S.folderCols],
+                    rowDirection = store[S.folderRow],
+                    onClose = { openFolder = null },
+                )
+            }
+        }
+
         if (drag.active) RemoveZone(drag)
 
         // The icon under your finger while dragging
-        drag.app?.let { app ->
+        drag.key?.let { carried ->
             val sizePx = with(LocalDensity.current) { 64.dp.toPx() }
-            AppIcon(
-                app = app,
+            ItemIcon(
+                key = carried,
+                vm = vm,
                 size = 64.dp,
                 showLabel = false,
                 modifier = Modifier
@@ -420,6 +546,27 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
 
         AnimatedVisibility(visible = panelOpen, enter = fadeIn(), exit = fadeOut()) {
             TestPanel(activity, vm, screen, onClose = { panelOpen = false })
+        }
+
+        if (lockPrompt) {
+            AlertDialog(
+                onDismissRequest = { lockPrompt = false },
+                title = { Text("Turn on Quartz Lock") },
+                text = {
+                    Text(
+                        "To lock your screen with a gesture, Android needs you to turn on Quartz Lock in " +
+                            "Accessibility settings. It can only lock the screen: it can't read your screen or " +
+                            "anything you type.",
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        lockPrompt = false
+                        LockService.openSettings(activity)
+                    }) { Text("Open settings") }
+                },
+                dismissButton = { TextButton(onClick = { lockPrompt = false }) { Text("Not now") } },
+            )
         }
       }
     }
@@ -524,6 +671,10 @@ data class HomeLook(
     val dockLength: DockLength = DockLength.FULL,
     val dockAlign: DockAlign = DockAlign.END,
     val dockIconAlign: DockAlign = DockAlign.CENTER,
+    val folderIcon: FolderIcon = FolderIcon.GRID2,
+    val openFolder: (String, SlotRef) -> Unit = { _, _ -> },
+    /** Swiping past the first (true) or last (false) page. */
+    val onSwipePast: (Boolean) -> Unit = {},
 )
 
 val LocalHomeLook = compositionLocalOf { HomeLook() }
@@ -539,16 +690,21 @@ internal fun Cell(
     modifier: Modifier,
 ) {
     val app = key?.let { vm.apps[it] }
+    val folder = vm.folderFor(key)
     val haptics = LocalHapticFeedback.current
+    val look = LocalHomeLook.current
 
     DisposableEffect(ref) {
         onDispose { drag.bounds.remove(ref) }
     }
 
-    val gestures = if (app == null) Modifier else Modifier
+    val gestures = if (key == null || (app == null && folder == null)) Modifier else Modifier
         .pointerInput(ref, key) {
             detectTapGestures(
-                onTap = { vm.launch(app, drag.bounds[ref]?.toAndroidRect()) },
+                onTap = {
+                    if (folder != null) look.openFolder(folder.id, ref)
+                    else if (app != null) vm.launch(app, drag.bounds[ref]?.toAndroidRect())
+                },
                 onLongPress = { }, // long press belongs to dragging
             )
         }
@@ -559,7 +715,7 @@ internal fun Cell(
                     val origin = drag.bounds[ref]?.topLeft ?: Offset.Zero
                     // bounds are measured outside the 2.dp padding; `local` is inside it
                     val pad = 2.dp.toPx()
-                    drag.start(ref, app, origin + Offset(pad, pad) + local)
+                    drag.start(ref, key, origin + Offset(pad, pad) + local)
                 },
                 onDrag = { change, amount ->
                     change.consume()
@@ -571,21 +727,35 @@ internal fun Cell(
         }
 
     val hovered = drag.hover == ref && drag.source != ref
+    val folderArmed = drag.folderTarget == ref
     Box(
         modifier
             .onGloballyPositioned { drag.bounds[ref] = it.boundsInRoot() }
             .padding(2.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(if (hovered) Color.White.copy(alpha = 0.18f) else Color.Transparent)
+            .background(
+                when {
+                    folderArmed -> Q.Accent.copy(alpha = 0.45f)
+                    hovered -> Color.White.copy(alpha = 0.18f)
+                    else -> Color.Transparent
+                },
+            )
             .then(gestures),
         contentAlignment = Alignment.Center,
     ) {
-        if (app != null) {
-            AppIcon(
-                app = app,
+        if (key != null && (app != null || folder != null)) {
+            ItemIcon(
+                key = key,
+                vm = vm,
                 size = iconSize,
                 showLabel = showLabel,
-                modifier = Modifier.alpha(if (drag.source == ref) 0f else 1f),
+                modifier = Modifier
+                    .alpha(if (drag.source == ref) 0f else 1f)
+                    .graphicsLayer {
+                        val s = if (folderArmed) 1.12f else 1f
+                        scaleX = s
+                        scaleY = s
+                    },
             )
         }
     }
@@ -727,7 +897,7 @@ private fun DrawerItem(
                         } else if (travel.getDistance() > carryAfter) {
                             carrying = true
                             onPickUp()
-                            drag.startFromDrawer(app, startAt + travel)
+                            drag.startFromDrawer(app.key, startAt + travel)
                         }
                     },
                     onDragEnd = {

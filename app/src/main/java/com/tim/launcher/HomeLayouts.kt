@@ -57,6 +57,11 @@ import com.tim.launcher.settings.DockLength
 import com.tim.launcher.settings.DockPosition
 import com.tim.launcher.ui.Q
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import kotlinx.coroutines.flow.drop
 
 /*
@@ -433,9 +438,30 @@ private fun HomePager(
         }
     }
 
+    // Swiping past the first or last page triggers its gesture (see Settings › Gestures)
+    val onSwipePast = LocalHomeLook.current.onSwipePast
+    val pastModifier = Modifier.pointerInput(count, last) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val startPage = state.currentPage
+            var dx = 0f
+            var multi = false
+            do {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                if (event.changes.count { it.pressed } > 1) multi = true
+                event.changes.firstOrNull { it.id == down.id }?.let { dx += it.positionChangeIgnoreConsumed().x }
+            } while (event.changes.any { it.pressed })
+            val threshold = 90.dp.toPx()
+            if (!multi && !drag.active && state.currentPage == startPage) {
+                if (dx > threshold && startPage == 0) onSwipePast(true)
+                if (dx < -threshold && startPage >= last) onSwipePast(false)
+            }
+        }
+    }
+
     HorizontalPager(
         state = state,
-        modifier = modifier,
+        modifier = modifier.then(pastModifier),
         pageSize = pageSize,
         pageSpacing = pageSpacing,
         beyondViewportPageCount = count,

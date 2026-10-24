@@ -1,6 +1,20 @@
 # Quartz Launcher
 
-Phase 2: the layout engine. Phase 1 (settings, setup wizard, design system) sits on top of it.
+Phase 3: folders and gestures, on the phase 2 layout engine and phase 1 settings.
+
+## Phase 3: what's new
+
+- **Folders:** drag an app onto another and hold for a moment (the target lights up), then let go. Drop more apps onto a folder the same way. Works on the home screen and in the dock. New folders are named from the apps' shared category when Android knows it.
+- **Folder icons:** plain folder, folder with a badge (16 to choose from), or a 2×2 / 3×3 preview of the apps inside.
+- **Opening:** full screen, floating box, pop-up above or below the folder (grid or list, with a grid size), or an expanding row (sideways or up and down). On the unfolded Fold, folders open within their own half.
+- **Inside a folder:** tap the name to rename it; the ⋯ menu has Rename, Badge and Remove folder. Long-press an app and drag it out onto the home screen or dock. A folder left with one app turns back into that app.
+- **Gestures:** swipe past the first or last page, pinch, and two-finger swipe down now work, along with swipe up/down and double-tap.
+- **Quartz Lock:** "Lock screen" gestures work once Quartz Lock is turned on in Accessibility settings (you're asked the first time). It can only lock the screen.
+- **Profiles** now carry folders too.
+
+## Phase 2
+
+The layout engine: dock on any edge, per-device grids, grid flip on rotation, positions kept on grid changes, rotation lock, layout in profiles.
 
 ## Phase 2: what's new
 
