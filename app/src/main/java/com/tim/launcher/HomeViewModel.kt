@@ -52,6 +52,17 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var wallpaperMode by mutableStateOf(prefs.getString(Prefs.WP_MODE, "matched") ?: "matched")
         private set
+    var pages by mutableIntStateOf(prefs.getInt(Prefs.PAGES, 3))
+        private set
+    /** "paired": each cover page has its own inner half. "strip": unfolded shows two cover pages side by side. */
+    var pageMode by mutableStateOf(prefs.getString(Prefs.PAGE_MODE, "paired") ?: "paired")
+        private set
+
+    /** The cover page you're on; kept across fold and unfold. */
+    var currentPage by mutableIntStateOf(0)
+
+    /** Slots per page. Home lists are flat: page p holds indices p*perPage until (p+1)*perPage. */
+    val perPage: Int get() = cols * rows
 
     val cover = mutableStateListOf<String?>()
     val extra = mutableStateListOf<String?>()
@@ -123,8 +134,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private fun restoreLayout() {
         fun read(key: String): List<String?> =
             prefs.getString(key, null)?.split("|")?.map { it.ifEmpty { null } } ?: emptyList()
-        fill(cover, read(Prefs.L_COVER), cols * rows)
-        fill(extra, read(Prefs.L_EXTRA), cols * rows)
+        fill(cover, read(Prefs.L_COVER), pages * cols * rows)
+        fill(extra, read(Prefs.L_EXTRA), pages * cols * rows)
         fill(dockCover, read(Prefs.L_DOCK_COVER), cols)
         fill(dockExtra, read(Prefs.L_DOCK_EXTRA), cols)
     }
@@ -157,6 +168,42 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             .putString(Prefs.L_DOCK_COVER, join(dockCover))
             .putString(Prefs.L_DOCK_EXTRA, join(dockExtra))
             .apply()
+    }
+
+    fun keyAt(ref: SlotRef): String? = list(ref.area).getOrNull(ref.index)
+
+    fun remove(ref: SlotRef) {
+        val target = list(ref.area)
+        val key = target.getOrNull(ref.index) ?: return
+        target[ref.index] = null
+        save()
+        Diag.log("Removed ${apps[key]?.label ?: key} from home (still installed)")
+    }
+
+    fun clearLayout() {
+        listOf(cover, extra, dockCover, dockExtra).forEach { list -> list.indices.forEach { list[it] = null } }
+        save()
+        Diag.log("Cleared the home screen")
+    }
+
+    fun setPageCount(count: Int) {
+        val n = count.coerceIn(1, 5)
+        if (n == pages) return
+        val size = n * perPage
+        val lost = (cover.drop(size) + extra.drop(size)).count { it != null }
+        fill(cover, cover.toList(), size)
+        fill(extra, extra.toList(), size)
+        pages = n
+        currentPage = currentPage.coerceAtMost(n - 1)
+        prefs.edit().putInt(Prefs.PAGES, n).apply()
+        save()
+        Diag.log("Pages: $n" + if (lost > 0) " ($lost apps on removed pages taken off home)" else "")
+    }
+
+    fun choosePageMode(mode: String) {
+        pageMode = mode
+        prefs.edit().putString(Prefs.PAGE_MODE, mode).apply()
+        Diag.log("Unfolded pages: " + if (mode == "strip") "side by side (strip)" else "paired with inner pages")
     }
 
     fun move(from: SlotRef, to: SlotRef) {
@@ -197,14 +244,14 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val r = newRows.coerceIn(4, 9)
         if (c == cols && r == rows) return
         fun resized(list: List<String?>, size: Int) = list.filterNotNull().take(size)
-        val coverItems = resized(cover, c * r)
-        val extraItems = resized(extra, c * r)
+        val coverItems = resized(cover, pages * c * r)
+        val extraItems = resized(extra, pages * c * r)
         val dockItems = resized(dockCover, c)
         val dockExtraItems = resized(dockExtra, c)
         cols = c
         rows = r
-        fill(cover, coverItems, c * r)
-        fill(extra, extraItems, c * r)
+        fill(cover, coverItems, pages * c * r)
+        fill(extra, extraItems, pages * c * r)
         fill(dockCover, dockItems, c)
         fill(dockExtra, dockExtraItems, c)
         prefs.edit().putInt(Prefs.COLS, c).putInt(Prefs.ROWS, r).apply()

@@ -98,6 +98,18 @@ fun TestPanel(activity: Activity, vm: HomeViewModel, screen: ScreenState, onClos
             Section("Cover grid (unfolded doubles the columns)") {
                 Stepper("Columns", vm.cols, onMinus = { vm.setGrid(vm.cols - 1, vm.rows) }, onPlus = { vm.setGrid(vm.cols + 1, vm.rows) })
                 Stepper("Rows", vm.rows, onMinus = { vm.setGrid(vm.cols, vm.rows - 1) }, onPlus = { vm.setGrid(vm.cols, vm.rows + 1) })
+                Stepper("Pages", vm.pages, onMinus = { vm.setPageCount(vm.pages - 1) }, onPlus = { vm.setPageCount(vm.pages + 1) })
+            }
+
+            Section("Pages when unfolded") {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PanelButton("Paired", Modifier.weight(1f), selected = vm.pageMode != "strip") { vm.choosePageMode("paired") }
+                    PanelButton("Side by side", Modifier.weight(1f), selected = vm.pageMode == "strip") { vm.choosePageMode("strip") }
+                }
+                Hint(
+                    "Paired: each cover page gets its own inner half, and swiping moves both together. " +
+                        "Side by side: unfolding shows two cover pages at once, like an open book; there's no separate inner layout.",
+                )
             }
 
             Section("Test wallpaper") {
@@ -118,6 +130,8 @@ fun TestPanel(activity: Activity, vm: HomeViewModel, screen: ScreenState, onClos
                     PanelButton(if (isDefaultHome) "Default home ✓" else "Set as default home", Modifier.weight(1f)) { requestDefaultHome(activity) }
                     PanelButton("Reset layout", Modifier.weight(1f)) { vm.resetLayout() }
                 }
+                PanelButton("Clear home screen", Modifier.fillMaxWidth()) { vm.clearLayout() }
+                Hint("To take one app off home, long-press it and drag it to “Remove from home” at the top.")
             }
 
             Section("Report") {

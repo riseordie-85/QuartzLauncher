@@ -7,7 +7,10 @@ A bare-bones test launcher. It isn't pretty on purpose: its only job is to prove
 - Can be set as the default home app.
 - **Cover screen / phone:** one grid (default 4×6) plus a dock.
 - **Unfolded / tablet:** the same grid doubled horizontally (4×6 → 8×6). The cover layout lands on the left or right half, split at the hinge position the phone reports.
-- Long-press an icon and drag it to any slot, including across halves and into the dock.
+- Long-press an icon and drag it to any slot, including across halves and into the dock. Drag to **Remove from home** at the top to take it off (it stays installed).
+- Several home pages (default 3). Swipe left/right; while dragging, hold an icon at the screen edge to flip pages.
+- Unfolded page modes (test panel): **Paired** (each cover page has its own inner half) or **Side by side** (unfolding shows two cover pages at once, like an open book).
+- Rotated unfolded: the apps reflow into one grid sized for the tall screen, iPad style. Rotate back and everything is where it was.
 - Swipe up for a simple app drawer. Long-press an app there and drag it to a spot on the home screen.
 - Long-press empty space for the **test panel**: what the device reports, cover side, grid size, test wallpaper, default home, copy report, event log.
 - A **test live wallpaper** that labels which screen, size, and display it is drawing on.

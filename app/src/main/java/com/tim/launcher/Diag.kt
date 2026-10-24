@@ -50,6 +50,8 @@ object Prefs {
     const val WP_MODE = "wp_mode"           // "matched", "independent", "separate"
     const val FOLDABLE = "foldable"
     const val HINT_SEEN = "hint_seen"
+    const val PAGES = "pages"
+    const val PAGE_MODE = "page_mode"       // "paired" or "strip"
 
     const val LAYOUT_READY = "layout_ready"
     const val L_COVER = "layout_cover"

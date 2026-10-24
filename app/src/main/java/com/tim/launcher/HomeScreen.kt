@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package com.tim.launcher
 
 import android.app.Activity
@@ -74,6 +76,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlin.math.roundToInt
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PageSize
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.delay
 
 private val PanelShape = RoundedCornerShape(28.dp)
 private val DockGlass = Color.White.copy(alpha = 0.14f)
@@ -95,10 +102,16 @@ class DragController {
 
     val bounds = HashMap<SlotRef, Rect>()
 
+    /** Where the "Remove from home" target sits while it's showing. */
+    var removeZone: Rect = Rect.Zero
+
     val active: Boolean get() = app != null
 
+    val overRemove: Boolean
+        get() = active && removeZone != Rect.Zero && removeZone.inflate(24f).contains(pointer)
+
     val hover: SlotRef?
-        get() = if (!active) null else bounds.entries.firstOrNull { it.value.contains(pointer) }?.key
+        get() = if (!active || overRemove) null else bounds.entries.firstOrNull { it.value.contains(pointer) }?.key
 
     fun start(ref: SlotRef, entry: AppEntry, at: Offset) {
         source = ref
@@ -123,7 +136,9 @@ class DragController {
         val from = source
         val to = hover
         when {
-            entry == null || to == null -> Unit
+            entry == null -> Unit
+            overRemove -> if (!fromDrawer && from != null) vm.remove(from)
+            to == null -> Unit
             fromDrawer -> vm.place(entry.key, to)
             from != null && from != to -> vm.move(from, to)
         }
@@ -201,7 +216,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         if (screen.posture.split) {
             SplitLayout(screen, vm, drag)
         } else {
-            SingleLayout(vm, drag, showHint = !hintSeen)
+            SingleLayout(screen, vm, drag, showHint = !hintSeen)
         }
 
         AnimatedVisibility(
@@ -212,6 +227,8 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             val drawerCols = if (screen.posture.split) vm.cols * 2 else vm.cols
             AppDrawer(vm, drag, drawerCols, onClose = { drawerOpen = false })
         }
+
+        if (drag.active) RemoveZone(drag)
 
         // The icon under your finger while dragging
         drag.app?.let { app ->
@@ -241,9 +258,9 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
     }
 }
 
-/** Phone or Fold cover screen: one grid plus the dock. */
+/** Phone or Fold cover screen: swipeable pages of one grid, plus the dock. */
 @Composable
-private fun SingleLayout(vm: HomeViewModel, drag: DragController, showHint: Boolean) {
+private fun SingleLayout(screen: ScreenState, vm: HomeViewModel, drag: DragController, showHint: Boolean) {
     Column(
         Modifier
             .fillMaxSize()
@@ -251,7 +268,17 @@ private fun SingleLayout(vm: HomeViewModel, drag: DragController, showHint: Bool
             .padding(horizontal = SIDE_PAD_DP.dp),
     ) {
         if (showHint) HintLine()
-        GridArea(Area.COVER, vm.cover, vm.cols, vm.rows, vm, drag, Modifier.weight(1f).fillMaxWidth())
+        HomePager(
+            count = vm.pages,
+            startPage = vm.currentPage,
+            onSettled = { vm.currentPage = it },
+            screen = screen,
+            drag = drag,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+        ) { page ->
+            GridArea(Area.COVER, page * vm.perPage, vm.cover, vm.cols, vm.rows, vm, drag, Modifier.fillMaxSize())
+        }
+        PageDots(vm.pages, vm.currentPage)
         DockPanel {
             DockRow(Area.DOCK_COVER, vm.dockCover, vm, drag, Modifier.fillMaxWidth())
         }
@@ -259,11 +286,15 @@ private fun SingleLayout(vm: HomeViewModel, drag: DragController, showHint: Bool
 }
 
 /**
- * Unfolded Fold or tablet: the cover grid doubled horizontally. The cover layout lands on the chosen half,
- * split at the real hinge position when the device reports one.
+ * Unfolded Fold or tablet. Book orientation: the cover grid doubled horizontally, split at the hinge, in either
+ * paired or strip page mode. Rotated (taller than wide): one reflowed grid, iPad style.
  */
 @Composable
 private fun SplitLayout(screen: ScreenState, vm: HomeViewModel, drag: DragController) {
+    if (screen.heightDp > screen.widthDp) {
+        ReflowLayout(screen, vm, drag)
+        return
+    }
     Column(
         Modifier
             .fillMaxSize()
@@ -272,12 +303,26 @@ private fun SplitLayout(screen: ScreenState, vm: HomeViewModel, drag: DragContro
     ) {
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val (leftW, rightW) = halfWidths(screen, maxWidth)
-            Row(Modifier.fillMaxSize()) {
-                HalfGrid(isCover = vm.coverLeft, screen, vm, drag, Modifier.width(leftW).fillMaxHeight())
-                Spacer(Modifier.width(HINGE_GAP_DP.dp))
-                HalfGrid(isCover = !vm.coverLeft, screen, vm, drag, Modifier.width(rightW).fillMaxHeight())
+            if (vm.pageMode == "strip") {
+                StripPages(screen, vm, drag, leftW)
+            } else {
+                HomePager(
+                    count = vm.pages,
+                    startPage = vm.currentPage,
+                    onSettled = { vm.currentPage = it },
+                    screen = screen,
+                    drag = drag,
+                    modifier = Modifier.fillMaxSize(),
+                ) { page ->
+                    Row(Modifier.fillMaxSize()) {
+                        HalfGrid(vm.coverLeft, page, coverCaption(screen, vm.coverLeft, page), vm, drag, Modifier.width(leftW).fillMaxHeight())
+                        Spacer(Modifier.width(HINGE_GAP_DP.dp))
+                        HalfGrid(!vm.coverLeft, page, coverCaption(screen, !vm.coverLeft, page), vm, drag, Modifier.width(rightW).fillMaxHeight())
+                    }
+                }
             }
         }
+        PageDots(vm.pages, vm.currentPage)
         DockPanel {
             BoxWithConstraints(Modifier.fillMaxWidth()) {
                 val (leftW, rightW) = halfWidths(screen, maxWidth)
@@ -299,6 +344,220 @@ private fun SplitLayout(screen: ScreenState, vm: HomeViewModel, drag: DragContro
     }
 }
 
+private fun coverCaption(screen: ScreenState, isCover: Boolean, page: Int): String {
+    val n = page + 1
+    return when {
+        screen.posture == Posture.TABLET -> if (isCover) "Phone layout · page $n" else "Other half · page $n"
+        isCover -> "Cover · page $n"
+        else -> "Inner half · page $n"
+    }
+}
+
+/**
+ * Strip mode: cover pages laid out in one continuous row, two visible at a time when unfolded. A blank page pads
+ * the end (cover on the left) or the start (cover on the right) so the page you were on stays on its half.
+ */
+@Composable
+private fun StripPages(screen: ScreenState, vm: HomeViewModel, drag: DragController, halfWidth: Dp) {
+    HomePager(
+        count = vm.pages + 1,
+        startPage = vm.currentPage,
+        onSettled = { vm.currentPage = it.coerceIn(0, vm.pages - 1) },
+        screen = screen,
+        drag = drag,
+        modifier = Modifier.fillMaxSize(),
+        pageSize = PageSize.Fixed(halfWidth),
+        pageSpacing = HINGE_GAP_DP.dp,
+    ) { index ->
+        val page = if (vm.coverLeft) index else index - 1
+        if (page in 0 until vm.pages) {
+            Column(Modifier.fillMaxSize()) {
+                Caption("Page ${page + 1}")
+                GridArea(Area.COVER, page * vm.perPage, vm.cover, vm.cols, vm.rows, vm, drag, Modifier.weight(1f).fillMaxWidth())
+            }
+        } else {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Caption(if (page < 0) "Start" else "End")
+            }
+        }
+    }
+}
+
+/** Rotated unfolded screen: the same apps, in the same order, flowed into one grid sized for the tall screen. */
+@Composable
+private fun ReflowLayout(screen: ScreenState, vm: HomeViewModel, drag: DragController) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.systemBars)
+            .padding(horizontal = SIDE_PAD_DP.dp),
+    ) {
+        Caption(if (vm.pageMode == "strip") "Rotated · reflowed cover page" else "Rotated · cover + inner half, reflowed")
+        HomePager(
+            count = vm.pages,
+            startPage = vm.currentPage,
+            onSettled = { vm.currentPage = it },
+            screen = screen,
+            drag = drag,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+        ) { page ->
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val refs = reflowRefs(vm, page)
+                val capacity = if (vm.pageMode == "strip") vm.perPage else vm.perPage * 2
+                val cols = maxOf(vm.cols, (maxWidth / REFLOW_CELL).toInt())
+                val rowsNeeded = (capacity + cols - 1) / cols
+                val rowsFit = maxOf(1, (maxHeight / REFLOW_CELL).toInt())
+                RefGrid(refs, cols, maxOf(rowsNeeded, rowsFit), vm, drag, Modifier.fillMaxSize())
+            }
+        }
+        PageDots(vm.pages, vm.currentPage)
+        DockPanel {
+            val dock = buildList {
+                val first = if (vm.coverLeft) Area.DOCK_COVER else Area.DOCK_EXTRA
+                val second = if (vm.coverLeft) Area.DOCK_EXTRA else Area.DOCK_COVER
+                vm.list(first).indices.forEach { add(SlotRef(first, it)) }
+                vm.list(second).indices.forEach { add(SlotRef(second, it)) }
+            }.filter { vm.keyAt(it) != null }
+            RefRow(dock, vm, drag, Modifier.fillMaxWidth())
+        }
+    }
+}
+
+private val REFLOW_CELL = 92.dp
+
+/** Filled slots of one page in reading order: row by row across both halves (paired) or one cover page (strip). */
+private fun reflowRefs(vm: HomeViewModel, page: Int): List<SlotRef> {
+    val base = page * vm.perPage
+    val refs = mutableListOf<SlotRef>()
+    for (r in 0 until vm.rows) {
+        val halves = when {
+            vm.pageMode == "strip" -> listOf(Area.COVER)
+            vm.coverLeft -> listOf(Area.COVER, Area.EXTRA)
+            else -> listOf(Area.EXTRA, Area.COVER)
+        }
+        for (area in halves) {
+            for (c in 0 until vm.cols) refs.add(SlotRef(area, base + r * vm.cols + c))
+        }
+    }
+    return refs.filter { vm.keyAt(it) != null }
+}
+
+@Composable
+private fun RefGrid(refs: List<SlotRef>, cols: Int, rows: Int, vm: HomeViewModel, drag: DragController, modifier: Modifier) {
+    BoxWithConstraints(modifier) {
+        val cellW = maxWidth / cols
+        val cellH = maxHeight / rows
+        val iconSize = minOf(cellW * 0.62f, cellH * 0.55f, 72.dp)
+        Column {
+            for (r in 0 until rows) {
+                Row {
+                    for (c in 0 until cols) {
+                        val ref = refs.getOrNull(r * cols + c)
+                        if (ref != null) {
+                            Cell(ref, vm.keyAt(ref), iconSize, true, vm, drag, Modifier.width(cellW).height(cellH))
+                        } else {
+                            Spacer(Modifier.width(cellW).height(cellH))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RefRow(refs: List<SlotRef>, vm: HomeViewModel, drag: DragController, modifier: Modifier) {
+    BoxWithConstraints(modifier) {
+        val count = refs.size.coerceAtLeast(1)
+        val cellW = minOf(maxWidth / count, 88.dp)
+        val iconSize = minOf(cellW * 0.66f, 56.dp)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+            refs.forEach { ref ->
+                Cell(ref, vm.keyAt(ref), iconSize, false, vm, drag, Modifier.width(cellW).height(iconSize + 20.dp))
+            }
+        }
+    }
+}
+
+/**
+ * A horizontal pager for home pages. While an icon is dragged near the left or right edge of the screen, it
+ * flips to the neighboring page. All pages stay composed so a drag survives its page sliding away.
+ */
+@Composable
+private fun HomePager(
+    count: Int,
+    startPage: Int,
+    onSettled: (Int) -> Unit,
+    screen: ScreenState,
+    drag: DragController,
+    modifier: Modifier,
+    pageSize: PageSize = PageSize.Fill,
+    pageSpacing: Dp = 0.dp,
+    content: @Composable (Int) -> Unit,
+) {
+    val state = rememberPagerState(initialPage = startPage.coerceIn(0, maxOf(0, count - 1))) { count }
+    LaunchedEffect(state) {
+        snapshotFlow { state.settledPage }.collect { onSettled(it) }
+    }
+
+    val edgePx = with(LocalDensity.current) { 36.dp.toPx() }
+    val edge = when {
+        !drag.active -> 0
+        drag.pointer.x < edgePx -> -1
+        drag.pointer.x > screen.widthPx - edgePx -> 1
+        else -> 0
+    }
+    LaunchedEffect(edge) {
+        if (edge == 0) return@LaunchedEffect
+        delay(450)
+        while (true) {
+            val target = (state.currentPage + edge).coerceIn(0, count - 1)
+            if (target == state.currentPage) break
+            state.animateScrollToPage(target)
+            delay(650)
+        }
+    }
+
+    HorizontalPager(
+        state = state,
+        modifier = modifier,
+        pageSize = pageSize,
+        pageSpacing = pageSpacing,
+        beyondViewportPageCount = count,
+    ) { index -> content(index) }
+}
+
+@Composable
+private fun PageDots(count: Int, current: Int) {
+    if (count <= 1) return
+    Row(
+        Modifier.fillMaxWidth().padding(top = 4.dp),
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        repeat(count) { i ->
+            Box(
+                Modifier
+                    .padding(horizontal = 4.dp)
+                    .size(if (i == current) 8.dp else 6.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Color.White.copy(alpha = if (i == current) 0.95f else 0.45f)),
+            )
+        }
+    }
+}
+
+@Composable
+private fun Caption(text: String) {
+    Text(
+        text,
+        color = Color.White.copy(alpha = 0.55f),
+        fontSize = 11.sp,
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp),
+        textAlign = TextAlign.Center,
+        style = labelStyle(),
+    )
+}
+
 /** Widths of the two halves inside the padded area, split around the hinge. */
 @Composable
 private fun halfWidths(screen: ScreenState, available: Dp): Pair<Dp, Dp> {
@@ -313,23 +572,12 @@ private fun halfWidths(screen: ScreenState, available: Dp): Pair<Dp, Dp> {
 }
 
 @Composable
-private fun HalfGrid(isCover: Boolean, screen: ScreenState, vm: HomeViewModel, drag: DragController, modifier: Modifier) {
+private fun HalfGrid(isCover: Boolean, page: Int, caption: String, vm: HomeViewModel, drag: DragController, modifier: Modifier) {
     Column(modifier) {
-        val caption = when {
-            screen.posture == Posture.TABLET -> if (isCover) "Phone layout half" else "Other half"
-            isCover -> "Cover layout"
-            else -> "Inner half"
-        }
-        Text(
-            caption,
-            color = Color.White.copy(alpha = 0.55f),
-            fontSize = 11.sp,
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp),
-            textAlign = TextAlign.Center,
-            style = labelStyle(),
-        )
+        Caption(caption)
         GridArea(
             area = if (isCover) Area.COVER else Area.EXTRA,
+            base = page * vm.perPage,
             items = if (isCover) vm.cover else vm.extra,
             cols = vm.cols,
             rows = vm.rows,
@@ -343,6 +591,7 @@ private fun HalfGrid(isCover: Boolean, screen: ScreenState, vm: HomeViewModel, d
 @Composable
 private fun GridArea(
     area: Area,
+    base: Int,
     items: List<String?>,
     cols: Int,
     rows: Int,
@@ -358,11 +607,38 @@ private fun GridArea(
             for (r in 0 until rows) {
                 Row {
                     for (c in 0 until cols) {
-                        val index = r * cols + c
+                        val index = base + r * cols + c
                         Cell(SlotRef(area, index), items.getOrNull(index), iconSize, true, vm, drag, Modifier.width(cellW).height(cellH))
                     }
                 }
             }
+        }
+    }
+}
+
+/** Shown at the top while dragging. Dropping a home icon here takes it off the home screen (it stays installed). */
+@Composable
+private fun RemoveZone(drag: DragController) {
+    val hovering = drag.overRemove
+    val label = if (drag.fromDrawer) "Cancel" else "Remove from home"
+    DisposableEffect(Unit) {
+        onDispose { drag.removeZone = Rect.Zero }
+    }
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.systemBars)
+            .padding(top = 8.dp),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Box(
+            Modifier
+                .onGloballyPositioned { drag.removeZone = it.boundsInRoot() }
+                .clip(RoundedCornerShape(24.dp))
+                .background(if (hovering) Color(0xFFD9443B) else Color(0xCC1A1A22))
+                .padding(horizontal = 28.dp, vertical = 14.dp),
+        ) {
+            Text("✕  $label", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
         }
     }
 }
