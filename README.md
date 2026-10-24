@@ -1,6 +1,15 @@
 # Quartz Launcher
 
-Phase 5: dock styling, on the phase 4 wallpaper engine, phase 3 folders and gestures, phase 2 layout engine and phase 1 settings.
+Phase 6: app drawer and search, on phase 5 dock styling, the phase 4 wallpaper engine, phase 3 folders and gestures, phase 2 layout engine and phase 1 settings.
+
+## Phase 6: what's new
+
+- **Drawer styles:** full screen, floating box, side list or bottom popup, with a Size slider (per screen). The dock stays showing while the drawer is open; turn off "Keep the dock showing" to cover it.
+- **Tabs:** My tabs (name, icon, and apps you choose; Quartz suggests apps from what's on the phone and you approve each one) or Automatic (Android's own categories). Names down a sidebar on wide screens, an icon rail with the tab's name as a heading on narrow ones. The tabs sit on the side away from the dock.
+- **Apps:** grid, list or swipeable pages. Columns fit the space on their own, or set your own number. A to Z or newest first, with optional letter or month headings.
+- **Search** at the top of the drawer: apps always, Android settings pages (Wi‑Fi, Bluetooth, battery…), and contacts if you turn it on (Android asks first; read on the phone only). The Search gesture opens the drawer ready to type.
+- **Setup** has a drawer style and tabs step. Profiles carry your tabs.
+- **Later:** a custom drag-to-arrange order. File search isn't offered, because Android would have to let Quartz see all your files.
 
 ## Phase 5: what's new
 
