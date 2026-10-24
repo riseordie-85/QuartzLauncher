@@ -80,6 +80,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -201,7 +202,7 @@ fun FolderOverlay(
     var carried by remember { mutableStateOf(false) }
     val margin = 12.dp
     val reorder = remember(folder.id) { FolderReorder(folder.items) }
-    LaunchedEffect(folder.items) { if (reorder.moving == null) reorder.order = folder.items }
+    LaunchedEffect(folder.items, reorder.moving) { if (reorder.moving == null) reorder.order = folder.items }
 
     Box(
         Modifier
@@ -379,7 +380,6 @@ private fun FolderRowOptions(folder: Folder, vm: HomeViewModel, onClose: () -> U
     if (renaming) {
         var text by remember { mutableStateOf(TextFieldValue(folder.name, TextRange(0, folder.name.length))) }
         val focus = remember { FocusRequester() }
-        LaunchedEffect(Unit) { focus.requestFocus() }
         val done = {
             vm.renameFolder(folder.id, text.text)
             renaming = false
@@ -396,6 +396,8 @@ private fun FolderRowOptions(folder: Folder, vm: HomeViewModel, onClose: () -> U
                     keyboardActions = KeyboardActions(onDone = { done() }),
                     modifier = Modifier.focusRequester(focus),
                 )
+                // Asked from inside the dialog: the dialog is its own window, so outside it the field may not exist yet
+                LaunchedEffect(Unit) { focus.requestFocus() }
             },
             confirmButton = { TextButton(onClick = { done() }) { Text("Save") } },
             dismissButton = { TextButton(onClick = { renaming = false }) { Text("Cancel") } },
@@ -527,8 +529,9 @@ class FolderReorder(initial: List<String>) {
 /** A grid where every app is a direct child, so an app keeps its identity (and its drag) as it moves between rows. */
 @Composable
 private fun FolderGrid(cols: Int, cellW: Dp, cellH: Dp, content: @Composable () -> Unit) {
-    Layout(content) { measurables, _ ->
-        val w = cellW.roundToPx()
+    Layout(content) { measurables, constraints ->
+        // Cells shrink if the columns don't fit across the screen
+        val w = if (constraints.hasBoundedWidth) minOf(cellW.roundToPx(), constraints.maxWidth / cols) else cellW.roundToPx()
         val h = cellH.roundToPx()
         val placeables = measurables.map { it.measure(Constraints.fixed(w, h)) }
         val rows = ((placeables.size + cols - 1) / cols).coerceAtLeast(1)
@@ -554,6 +557,8 @@ private fun FolderItem(
     val app = vm.apps[key] ?: return
     val haptics = LocalHapticFeedback.current
     val bounds = remember { arrayOf(Rect.Zero) }
+    // Real top-left on screen; bounds above is cut down to what's visible when the folder is scrolled
+    val origin = remember { arrayOf(Offset.Zero) }
     DisposableEffect(key) {
         onDispose { reorder.itemBounds.remove(key) }
     }
@@ -562,15 +567,9 @@ private fun FolderItem(
         modifier
             .onGloballyPositioned {
                 bounds[0] = it.boundsInRoot()
+                origin[0] = it.positionInRoot()
                 reorder.itemBounds[key] = bounds[0]
             }
-            .graphicsLayer {
-                val s = if (lifted) 1.12f else 1f
-                scaleX = s
-                scaleY = s
-                alpha = if (lifted) 0.85f else 1f
-            }
-            .clip(RoundedCornerShape(14.dp))
             .pointerInput(key) {
                 detectTapGestures(
                     onTap = {
@@ -587,7 +586,7 @@ private fun FolderItem(
                         reorder.moving = key
                         reorder.handedOff = false
                         reorder.lastOver = null
-                        reorder.pointer = bounds[0].topLeft + local
+                        reorder.pointer = origin[0] + local
                     },
                     onDrag = { change, amount ->
                         change.consume()
@@ -635,7 +634,15 @@ private fun FolderItem(
                         reorder.moving = null
                     },
                 )
-            },
+            }
+            // After the touch handlers, so the lifted app's bigger size doesn't shrink the drag distances they report
+            .graphicsLayer {
+                val s = if (lifted) 1.12f else 1f
+                scaleX = s
+                scaleY = s
+                alpha = if (lifted) 0.85f else 1f
+            }
+            .clip(RoundedCornerShape(14.dp)),
         contentAlignment = if (list) Alignment.CenterStart else Alignment.Center,
     ) {
         if (list) {
