@@ -146,7 +146,7 @@ class IconDraft(val store: SettingsStore) : IconRender.Values {
     /** Saves the changes. Returns true if an icon pack changed (everything drawn so far is out of date). */
     @Suppress("UNCHECKED_CAST")
     fun save(): Boolean {
-        val packChanged = pending.keys.any { it == S.iconPackHome || it == S.iconPackDock || it == S.iconPackDrawer || it == S.iconsMatch }
+        val packChanged = pending.keys.any { it == S.iconPackHome || it == S.iconPackDock || it == S.iconPackDrawer }
         pending.forEach { (k, v) -> store.set(k as Setting<Any>, value = v) }
         pending.clear()
         return packChanged

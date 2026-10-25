@@ -10,6 +10,7 @@ Phase 7: icons and badges, on phase 6 app drawer and search, phase 5 dock stylin
 - **Background:** none, light, dark, or a color you pick, as a plate behind each icon.
 - **Badges** (Appearance › Notification badges): a dot or a count (99+) that changes color at two steps you choose. Folders add up their apps. Needs notification access, which you turn on yourself; Quartz only counts notifications per app and never reads them. Off by default.
 - Icons are drawn in the background and kept, so the home screen never waits; the app's own icon shows until its styled one is ready.
+- **Apply:** icon style changes show in the preview straight away and reach your icons when you tap **Apply** (or **Undo** to drop them). Apply draws every icon in the new style behind a "Styling your icons" popup, then the home screen switches over in one go. Leaving the screen keeps your changes; setup's icons step applies on Next. Icon sizes and badges still apply instantly.
 
 ## Phase 6: what's new
 

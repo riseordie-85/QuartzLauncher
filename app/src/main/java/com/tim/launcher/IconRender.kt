@@ -135,7 +135,7 @@ object IconRender {
 
     // Same size as the apps' own icons, so styled ones are just as sharp
     private const val SIZE = 192
-    private val cache = object : LruCache<String, ImageBitmap>(64 * 1024 * 1024) {
+    private val cache = object : LruCache<String, ImageBitmap>(96 * 1024 * 1024) {
         override fun sizeOf(key: String, value: ImageBitmap) = value.width * value.height * 4
     }
     private val pending = HashSet<String>()
