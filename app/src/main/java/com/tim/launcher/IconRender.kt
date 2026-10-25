@@ -77,7 +77,8 @@ object IconRender {
     var version by mutableIntStateOf(0)
         private set
 
-    private const val SIZE = 160
+    // Same size as the apps' own icons, so styled ones are just as sharp
+    private const val SIZE = 192
     private val cache = object : LruCache<String, ImageBitmap>(40 * 1024 * 1024) {
         override fun sizeOf(key: String, value: ImageBitmap) = value.width * value.height * 4
     }
@@ -101,7 +102,7 @@ object IconRender {
             // Nothing to draw, or it failed: keep the app's own icon, so it isn't tried again on every redraw
             cache.put(key, bmp?.asImageBitmap() ?: app.icon)
             synchronized(pending) { pending.remove(key) }
-            if (bmp != null) main.post { version++ }
+            if (bmp != null) refreshSoon()
         }
         return null
     }
@@ -112,6 +113,20 @@ object IconRender {
         if (IconPacks.isLoaded(pkg)) clear()
         // Otherwise the app's own icon may have changed: drop what was drawn from the old one
         else cache.snapshot().keys.filter { it.contains("|$pkg/") }.forEach { cache.remove(it) }
+    }
+
+    private var refreshQueued = false
+
+    /** Lets icons on screen swap in, once for a batch of newly drawn icons rather than once per icon. */
+    private fun refreshSoon() {
+        main.post {
+            if (refreshQueued) return@post
+            refreshQueued = true
+            main.postDelayed({
+                refreshQueued = false
+                version++
+            }, 60)
+        }
     }
 
     /** Throws away drawn icons (a pack changed). */
