@@ -855,7 +855,7 @@ fun PrivacySettings(ctx: SettingsContext) {
                 onClick = { openHomeSettings(context) },
             ) { StatusText(if (isHome) "On" else "Off") }
             RowDivider()
-            SettingRow("Internet", "Only for weather widgets you add (from Open-Meteo, with a rough location). Nothing else is sent.") { StatusText("Allowed") }
+            SettingRow("Internet", "Only for weather: forecasts from Open-Meteo for a rough location, and city search when you type one. Nothing else is sent.") { StatusText("Allowed") }
             RowDivider()
             SettingRow(
                 "Notification access",

@@ -211,7 +211,7 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
     fun finish() {
         store.set(S.wizardDone, value = true)
         // The widget you picked goes on your home page when it next shows
-        if (path != Path.IMPORT && store[S.widgets].isNotBlank()) {
+        if ((path == Path.RECOMMENDED || Step.WIDGETS in steps) && store[S.widgets].isNotBlank()) {
             Prefs.get(context).edit().putString(Prefs.PENDING_WIDGETS, store[S.widgets]).apply()
         }
         onFinish()

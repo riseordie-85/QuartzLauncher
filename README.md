@@ -1,6 +1,20 @@
 # Quartz Launcher
 
-Phase 7: icons and badges, on phase 6 app drawer and search, phase 5 dock styling, the phase 4 wallpaper engine, phase 3 folders and gestures, phase 2 layout engine and phase 1 settings.
+Phase 8: widgets and weather, on phase 7 icons and badges, phase 6 app drawer and search, phase 5 dock styling, the phase 4 wallpaper engine, phase 3 folders and gestures, phase 2 layout engine and phase 1 settings.
+
+## Phase 8: what's new
+
+- **Widgets:** long-press an empty spot on the home screen and tap **Widgets**. Four to pick from, each on a glass panel that matches your dock (glass, gradient, pattern and edge light):
+  - **Clock:** the time, big, with the date under it in your widget color.
+  - **Flip clock:** two cards that really flip over as the minutes change, with the full date underneath.
+  - **Flip clock and weather:** the flip clock with today's weather under it; the weather icon spills over the panel's edge.
+  - **Weather:** a slim bar with where you are, what it's like, the temperature, and today's high over its low.
+- **Moving and resizing:** hold a widget and drag it (an outline shows where it'll land; icons in the way move to the nearest free spots). Hold and let go for its menu: **Resize** (drag the edge handles; they snap to the grid), **Change style**, **Widget settings**, **Remove**. Icons slide around widgets when you rearrange, and widgets travel with their page when pages move.
+- **Weather:** from Open-Meteo (free, no account, no ads or tracking), only while a weather widget is on your home screen, about every half hour. Choose a city by name, or use this phone's location (coarse, rounded to about 1 km; Android asks first). °F by default, °C in settings. Animated Meteocons icons, with day and night versions.
+- **Settings › Appearance › Widgets:** a live preview, widget color, 24-hour time, motion on or off (flip and icon animation), where the weather is for, units, and when it last updated.
+- **Setup** now offers one widget for your home page; the recommended setup adds a flip clock.
+- On the unfolded screen turned upright (and sideways grids), widgets sit across the top of the page above your icons.
+- Credits: Meteocons by Bas Milius (MIT), Outfit typeface (SIL OFL), Lottie by Airbnb (Apache 2.0), weather data by Open-Meteo.com (CC BY 4.0). Licences are in `app/src/main/assets/licenses`.
 
 ## Phase 7: what's new
 
