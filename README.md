@@ -10,6 +10,8 @@ Phase 9 (in progress): first run and setup polish, on phase 8 widgets and weathe
 - **Setup screens:** dock style and color in one step like Settings › Dock › Style with the dock pinned above; the icon preview pinned on the icons step; moving pictures for which way to swipe, icons or list, how the drawer scrolls and how it opens; and your home page with the widget you pick (columns 3 to 5, rows 1 to 3 on a tablet).
 - **More color control:** gradients for the dock and icon plates run across, down, diagonally or radially (from the middle out); every dock and icon plate color has a See-through slider; the dock and icon patterns have a Size slider with the usual size (100%) in the middle, from about 35% to 280%.
 - **Mouse:** a right click opens menus straight away: an app's menu on an app (home, dock or drawer), a widget's menu on a widget, the home menu on empty space; a folder just opens. Hold the left button to drag things, as with a finger.
+- **Drawer edge light:** the app drawer's panel takes the dock's edge light (hairline, soft or bright), with no separate setting.
+- **Folders wear your icon style:** a folder's tile follows the icon settings of the place it's in (home or dock): shape, background color or gradient, pattern, see-through, edge light and shadow. With no background it keeps its light veil, cut to your shape, and the little app grid moves in on round shapes so it stays inside. The icon preview in Appearance shows a folder too.
 - **App menus:** hold an app and let go (home, dock or drawer) for App info, Uninstall (apps you installed), and Remove from home or Add to home screen. While dragging, an **Uninstall** target sits next to Remove.
 
 ## Phase 8: what's new
