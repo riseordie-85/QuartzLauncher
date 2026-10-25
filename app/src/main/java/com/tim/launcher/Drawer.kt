@@ -134,7 +134,7 @@ fun AppDrawer(vm: HomeViewModel, drag: DragController, look: DrawerLook, startWi
     var carried by remember { mutableStateOf(false) }
     val full = look.style == DrawerStyle.FULL
 
-    CompositionLocalProvider(LocalLabelColor provides ink) {
+    CompositionLocalProvider(LocalLabelColor provides ink, LocalIconSlot provides IconSlot.DRAWER) {
         BoxWithConstraints(
             Modifier
                 .fillMaxSize()
@@ -661,7 +661,7 @@ private fun DrawerItem(
             gestures.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Image(app.icon, contentDescription = null, modifier = Modifier.size(40.dp))
+            Image(styledIcon(app), contentDescription = null, modifier = Modifier.size(40.dp))
             Spacer(Modifier.width(14.dp))
             Text(app.label, color = LocalLabelColor.current, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }

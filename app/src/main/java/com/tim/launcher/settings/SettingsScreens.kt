@@ -725,44 +725,9 @@ fun AppearanceSettings(ctx: SettingsContext) {
             }
         }
 
-        SectionLabel("Icons")
-        GlassPanel {
-            SettingRow("Match everywhere", "Dock, home screen and app drawer use the same style") {
-                Toggle(store[S.iconsMatch]) { store.set(S.iconsMatch, value = it) }
-            }
-            RowDivider()
-            SettingRow("Icon packs", "Up to three at once: home, dock, drawer (phase 7)", enabled = false)
-            RowDivider()
-            SettingRow("Shape", "For icons a pack doesn't cover") {
-                Dropdown(store[S.iconShape], IconShape.entries, { it.label }) { store.set(S.iconShape, value = it) }
-            }
-            RowDivider()
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-                Text("Style", color = Q.Text, fontSize = 16.sp, modifier = Modifier.padding(bottom = 10.dp))
-                Segmented(store[S.iconStyle], IconStyle.entries, { it.label }) { store.set(S.iconStyle, value = it) }
-            }
-            RowDivider()
-            SettingRow("Background") {
-                Dropdown(store[S.iconBackground], IconBackground.entries, { it.label }) { store.set(S.iconBackground, value = it) }
-            }
-        }
+        IconsSection(ctx)
 
-        SectionLabel("Notification badges")
-        GlassPanel {
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-                Segmented(store[S.badgeStyle], BadgeStyle.entries, { it.label }) { store.set(S.badgeStyle, value = it) }
-            }
-            RowDivider()
-            SettingRow("First color change at") {
-                Stepper(store[S.badgeThreshold1], 2..98, format = { "$it+" }) { store.set(S.badgeThreshold1, value = it) }
-            }
-            RowDivider()
-            SettingRow("Second color change at") {
-                Stepper(store[S.badgeThreshold2], 3..99, format = { "$it+" }) { store.set(S.badgeThreshold2, value = it) }
-            }
-            RowDivider()
-            SettingRow("Badges need notification access", "You'll be asked when badges arrive (phase 7)", enabled = false)
-        }
+        BadgesSection(ctx)
 
         SectionLabel("Clock")
         GlassPanel {
@@ -868,7 +833,11 @@ fun PrivacySettings(ctx: SettingsContext) {
             RowDivider()
             SettingRow("Internet", "Weather and things you import only") { StatusText("Allowed") }
             RowDivider()
-            SettingRow("Notification access", "For badges. Not used yet") { StatusText("Not used") }
+            SettingRow(
+                "Notification access",
+                "Only for badges, if you turn them on. Quartz counts notifications per app; it never reads them.",
+                onClick = { com.tim.launcher.Badges.openAccessSettings(context) },
+            ) { StatusText(if (com.tim.launcher.Badges.isAllowed(context)) "On" else "Off") }
             RowDivider()
             SettingRow("Location", "Weather can use a typed city instead") { StatusText("Not asked") }
             RowDivider()

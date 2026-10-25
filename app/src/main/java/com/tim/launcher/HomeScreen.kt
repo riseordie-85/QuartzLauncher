@@ -43,6 +43,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.compose.ui.graphics.luminance
@@ -1010,8 +1012,13 @@ internal fun Cell(
 
 @Composable
 fun AppIcon(app: AppEntry, size: Dp, showLabel: Boolean, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val store = remember { SettingsStore.get(context) }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Image(bitmap = app.icon, contentDescription = app.label, modifier = Modifier.size(size))
+        Box {
+            Image(bitmap = styledIcon(app), contentDescription = app.label, modifier = Modifier.size(size))
+            BadgeOverlay(store, listOf(app.component.packageName), size, Modifier.align(Alignment.TopEnd).offset(x = size * 0.08f, y = -size * 0.08f))
+        }
         if (showLabel) {
             val color = LocalLabelColor.current
             Text(
@@ -1029,6 +1036,16 @@ fun AppIcon(app: AppEntry, size: Dp, showLabel: Boolean, modifier: Modifier = Mo
 }
 
 /** Light labels get a soft dark shadow to lift them off busy wallpapers; dark labels get a faint light one. */
+/** An app's icon as you've styled it for where it's shown (home, dock or drawer); its own icon until that's drawn. */
+@Composable
+fun styledIcon(app: AppEntry): ImageBitmap {
+    val context = LocalContext.current
+    val store = remember { SettingsStore.get(context) }
+    val spec = IconRender.specFor(store, LocalIconSlot.current)
+    @Suppress("UNUSED_VARIABLE") val ready = IconRender.version // redraw when new icons are ready
+    return IconRender.icon(context, app, spec) ?: app.icon
+}
+
 internal fun labelStyle(color: Color = Color.White) = TextStyle(
     shadow = if (color.luminance() > 0.5f) {
         Shadow(color = Color.Black.copy(alpha = 0.6f), offset = Offset(0f, 1f), blurRadius = 4f)

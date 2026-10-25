@@ -51,6 +51,9 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.offset
+import com.tim.launcher.settings.SettingsStore
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
@@ -140,7 +143,10 @@ fun FolderIconView(folder: Folder, vm: HomeViewModel, size: Dp, showLabel: Boole
     // The tile is a light veil on dark backgrounds and a dark one on light backgrounds
     val ink = LocalLabelColor.current
     val light = ink.luminance() > 0.5f
+    val context = LocalContext.current
+    val store = remember { SettingsStore.get(context) }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+      Box {
         Box(
             Modifier
                 .size(size)
@@ -161,7 +167,7 @@ fun FolderIconView(folder: Folder, vm: HomeViewModel, size: Dp, showLabel: Boole
                             Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
                                 for (c in 0 until n) {
                                     val app = folder.items.getOrNull(r * n + c)?.let { vm.apps[it] }
-                                    if (app != null) Image(app.icon, contentDescription = null, modifier = Modifier.size(mini))
+                                    if (app != null) Image(styledIcon(app), contentDescription = null, modifier = Modifier.size(mini))
                                     else Spacer(Modifier.size(mini))
                                 }
                             }
@@ -170,6 +176,14 @@ fun FolderIconView(folder: Folder, vm: HomeViewModel, size: Dp, showLabel: Boole
                 }
             }
         }
+        // The folder's badge adds up its apps'
+        BadgeOverlay(
+            store,
+            folder.items.mapNotNull { vm.apps[it]?.component?.packageName },
+            size,
+            Modifier.align(Alignment.TopEnd).offset(x = size * 0.08f, y = -size * 0.08f),
+        )
+      }
         if (showLabel) {
             val labelColor = LocalLabelColor.current
             Text(
@@ -655,7 +669,7 @@ private fun FolderItem(
     ) {
         if (list) {
             Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Image(app.icon, contentDescription = null, modifier = Modifier.size(40.dp))
+                Image(styledIcon(app), contentDescription = null, modifier = Modifier.size(40.dp))
                 Spacer(Modifier.width(14.dp))
                 Text(app.label, color = LocalLabelColor.current, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }

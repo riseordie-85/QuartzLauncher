@@ -273,7 +273,7 @@ private fun DockBar(
     if (count == 0) { Spacer(modifier.then(inner).onGloballyPositioned { look.onDockBounds(it.boundsInRoot()) }); return }
     val style = look.dock
 
-    CompositionLocalProvider(LocalLabelColor provides look.onPanel) {
+    CompositionLocalProvider(LocalLabelColor provides look.onPanel, LocalIconSlot provides IconSlot.DOCK) {
 
     if (!vertical) {
         BoxWithConstraints(modifier.fillMaxWidth().onGloballyPositioned { look.onDockBounds(it.boundsInRoot()) }, contentAlignment = Alignment.Center) {

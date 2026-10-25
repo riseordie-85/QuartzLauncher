@@ -67,6 +67,9 @@ import com.tim.launcher.settings.IconShape
 import com.tim.launcher.settings.IconStyle
 import com.tim.launcher.settings.Profile
 import com.tim.launcher.settings.S
+import com.tim.launcher.settings.SettingsContext
+import com.tim.launcher.settings.BadgesSection
+import com.tim.launcher.settings.IconsSection
 import com.tim.launcher.settings.TabMode
 import com.tim.launcher.settings.DrawerStyle
 import com.tim.launcher.settings.applyPreset
@@ -645,26 +648,10 @@ private fun ColumnScope.StepContent(
         }
 
         Step.ICONS -> {
-            Text("Should all your icons match (dock, home screen, app drawer)?", color = Q.Text, fontSize = 16.sp, modifier = gap)
-            Segmented(store[S.iconsMatch], listOf(true, false), { if (it) "Yes" else "No" }, gap) { store.set(S.iconsMatch, value = it) }
-            if (!store[S.iconsMatch]) {
-                BodyText("Separate styles for the dock, home screen and drawer arrive with icon packs. For now these apply everywhere.", gap)
-            }
-            GlassPanel {
-                SettingRow("Icon pack", "Coming with phase 7", enabled = false)
-                RowDivider()
-                SettingRow("Shape") {
-                    Dropdown(store[S.iconShape], IconShape.entries, { it.label }) { store.set(S.iconShape, value = it) }
-                }
-                RowDivider()
-                SettingRow("Style") {
-                    Dropdown(store[S.iconStyle], IconStyle.entries, { it.label }) { store.set(S.iconStyle, value = it) }
-                }
-                RowDivider()
-                SettingRow("Background") {
-                    Dropdown(store[S.iconBackground], IconBackground.entries, { it.label }) { store.set(S.iconBackground, value = it) }
-                }
-            }
+            val ctx = remember { SettingsContext(store, type, type.primary, onEditing = {}, go = {}, back = {}) }
+            BodyText("Icon packs, a shape, and one-color or plated icons. \"Match everywhere\" keeps the dock, home screen and drawer the same.")
+            IconsSection(ctx)
+            BadgesSection(ctx)
         }
 
         Step.WIDGETS -> {

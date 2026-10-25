@@ -290,6 +290,8 @@ private fun DrawScope.drawIcon(center: Offset, size: Float, shape: IconShape, co
         IconShape.SQUIRCLE -> size * 0.38f
         IconShape.ROUNDED -> size * 0.24f
         IconShape.SQUARE -> size * 0.06f
+        IconShape.TEARDROP -> size * 0.32f
+        IconShape.HEXAGON -> size * 0.2f
     }
     drawRoundRect(color, Offset(center.x - half, center.y - half), Size(size, size), CornerRadius(corner, corner))
 }

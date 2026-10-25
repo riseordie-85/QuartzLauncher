@@ -173,7 +173,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private val callback = object : LauncherApps.Callback() {
         override fun onPackageRemoved(packageName: String?, user: UserHandle?) = reload()
         override fun onPackageAdded(packageName: String?, user: UserHandle?) = reload()
-        override fun onPackageChanged(packageName: String?, user: UserHandle?) = reload()
+        override fun onPackageChanged(packageName: String?, user: UserHandle?) {
+            IconRender.packageChanged(packageName)
+            reload()
+        }
         override fun onPackagesAvailable(packageNames: Array<out String>?, user: UserHandle?, replacing: Boolean) = reload()
         override fun onPackagesUnavailable(packageNames: Array<out String>?, user: UserHandle?, replacing: Boolean) = reload()
     }

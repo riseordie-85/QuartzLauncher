@@ -105,6 +105,7 @@ enum class DrawerSort(val label: String) { ALPHA("A to Z"), INSTALLED("Newest fi
 enum class TabMode(val label: String) { NONE("No tabs"), CUSTOM("My tabs"), AUTO("Automatic") }
 enum class IconShape(val label: String) {
     SYSTEM("App's own shape"), CIRCLE("Circle"), SQUIRCLE("Squircle"), ROUNDED("Rounded square"), SQUARE("Square"),
+    TEARDROP("Teardrop"), HEXAGON("Hexagon"),
 }
 enum class IconStyle(val label: String) { DEFAULT("Default"), MINIMAL("Minimal") }
 enum class IconBackground(val label: String) { NONE("None"), LIGHT("Light"), DARK("Dark"), COLOR("Color") }
@@ -218,6 +219,16 @@ object S {
     val iconShape = Setting("look.iconShape", IconShape.SYSTEM, EnumCodec(IconShape.entries.toTypedArray()))
     val iconStyle = Setting("look.iconStyle", IconStyle.DEFAULT, EnumCodec(IconStyle.entries.toTypedArray()))
     val iconBackground = Setting("look.iconBackground", IconBackground.NONE, EnumCodec(IconBackground.entries.toTypedArray()))
+    /** The background color when [iconBackground] is "Color". */
+    val iconBgColor = Setting("look.iconBgColor", 0xFF8C6CFF.toInt(), IntCodec)
+    /** Cut every icon to the shape, even ones from an icon pack. */
+    val iconForceShape = Setting("look.iconForceShape", false, BoolCodec)
+    /** Icon pack package names; "" is the apps' own icons. Home is used everywhere when icons match. */
+    val iconPackHome = Setting("look.iconPackHome", "", StringCodec)
+    val iconPackDock = Setting("look.iconPackDock", "", StringCodec)
+    val iconPackDrawer = Setting("look.iconPackDrawer", "", StringCodec)
+    /** Notification badges; needs notification access, which you turn on yourself. */
+    val badgesOn = Setting("look.badgesOn", false, BoolCodec)
     val badgeStyle = Setting("look.badgeStyle", BadgeStyle.DOT, EnumCodec(BadgeStyle.entries.toTypedArray()))
     val badgeThreshold1 = Setting("look.badgeThreshold1", 10, IntCodec)
     val badgeThreshold2 = Setting("look.badgeThreshold2", 50, IntCodec)
