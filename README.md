@@ -1,6 +1,14 @@
 # Quartz Launcher
 
-Phase 8: widgets and weather, on phase 7 icons and badges, phase 6 app drawer and search, phase 5 dock styling, the phase 4 wallpaper engine, phase 3 folders and gestures, phase 2 layout engine and phase 1 settings.
+Phase 9 (in progress): first run and setup polish, on phase 8 widgets and weather, phase 7 icons and badges, phase 6 app drawer and search, phase 5 dock styling, the phase 4 wallpaper engine, phase 3 folders and gestures, phase 2 layout engine and phase 1 settings.
+
+## Phase 9: what's new (so far)
+
+- **A real first home screen:** five everyday apps in the dock (calls, messages, the web, the camera, email; the next ones along on a tablet), a row of useful apps along the bottom of your home page with **Quartz Settings** first, and a **Quartz tips** card with buttons for wallpaper, setup and settings. Everything else is in the drawer. Fixes the empty home screen after a fresh install.
+- Phones and tablets open on the middle of three pages (existing layouts keep their home page). Tablets start with a 7 × 6 grid.
+- **Setup comes back until it's finished**, at the step you were on, whenever the home screen shows (Back gives it a minute's rest). Returning from making Quartz your home screen moves straight on.
+- **Setup screens:** dock style and color in one step like Settings › Dock › Style with the dock pinned above; the icon preview pinned on the icons step; moving pictures for which way to swipe, icons or list, how the drawer scrolls and how it opens; and your home page with the widget you pick (columns 3 to 5, rows 1 to 3 on a tablet).
+- **App menus:** hold an app and let go (home, dock or drawer) for App info, Uninstall (apps you installed), and Remove from home or Add to home screen. While dragging, an **Uninstall** target sits next to Remove.
 
 ## Phase 8: what's new
 
