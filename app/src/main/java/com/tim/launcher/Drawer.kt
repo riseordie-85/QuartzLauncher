@@ -534,7 +534,8 @@ private fun AppsView(
             }
             look.scroll == DrawerScroll.HORIZONTAL -> {
                 // Pages of apps you swipe through sideways; headings don't apply here
-                val rows = (maxHeight / (104.dp * look.iconScale)).toInt().coerceAtLeast(1)
+                // A row is the icon plus its padding and label (104dp at normal size); only the icon part scales
+                val rows = (maxHeight / (52.dp + 52.dp * look.iconScale)).toInt().coerceAtLeast(1)
                 val perPage = (rows * cols).coerceAtLeast(1)
                 val apps = list.filterIsInstance<Entry.App>().map { it.app }
                 val pageCount = (apps.size + perPage - 1) / perPage
