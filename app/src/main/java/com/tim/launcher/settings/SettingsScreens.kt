@@ -40,6 +40,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.runtime.DisposableEffect
 import com.tim.launcher.wallpaper.WallCache
 import com.tim.launcher.wallpaper.PatternStyle
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -722,6 +724,10 @@ fun AppearanceSettings(ctx: SettingsContext) {
         quartzWallpaper = WallCache.isActive(context)
         onPauseOrDispose { }
     }
+    val draft = remember { IconDraft(store) }
+    val apply = rememberIconApply(draft)
+    DisposableEffect(draft) { onDispose { draft.saveQuietly() } }
+    Box(Modifier.fillMaxSize()) {
     ScreenScaffold(ctx) {
         ScreenTitle("Appearance", "Icons, badges and the clock")
         Box(Modifier.fillMaxWidth().padding(top = 16.dp)) {
@@ -736,7 +742,7 @@ fun AppearanceSettings(ctx: SettingsContext) {
             }
         }
 
-        IconsSection(ctx)
+        IconsSection(ctx, draft)
 
         BadgesSection(ctx)
 
@@ -749,6 +755,10 @@ fun AppearanceSettings(ctx: SettingsContext) {
         GlassPanel {
             NavRow("Wallpaper", "Gradients, colors, photos, patterns", Icons.Rounded.Wallpaper) { ctx.go(Route.WALLPAPER) }
         }
+        // Room to scroll the last rows out from under the Apply bar
+        if (draft.dirty) Spacer(Modifier.height(72.dp))
+    }
+    IconApplyBar(draft, apply, Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.navigationBars))
     }
 }
 

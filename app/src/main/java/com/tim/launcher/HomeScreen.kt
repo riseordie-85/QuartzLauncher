@@ -1044,15 +1044,29 @@ fun AppIcon(app: AppEntry, size: Dp, showLabel: Boolean, modifier: Modifier = Mo
  * picture, which spills past [size] so the icon itself stays the same size.
  */
 @Composable
-fun StyledIcon(app: AppEntry, size: Dp, modifier: Modifier = Modifier, contentDescription: String? = null) {
+fun StyledIcon(
+    app: AppEntry,
+    size: Dp,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
+    /** A style to show instead of the saved one (the settings preview). */
+    spec: IconRender.Spec? = null,
+) {
     val context = LocalContext.current
     val store = remember { SettingsStore.get(context) }
-    val spec = IconRender.specFor(store, LocalIconSlot.current)
+    val s = spec ?: IconRender.specFor(store, LocalIconSlot.current)
     @Suppress("UNUSED_VARIABLE") val ready = IconRender.version // redraw when new icons are ready
-    val drawn = IconRender.icon(context, app, spec)
-    val over = if (drawn != null && drawn !== app.icon) spec.overscan else 1f
+    val drawn = IconRender.icon(context, app, s)
+    // While a new style is being drawn, keep showing the last one rather than flashing back to the plain icon
+    val last = remember(app.key) { arrayOfNulls<Pair<ImageBitmap, Float>>(1) }
+    val shown: Pair<ImageBitmap, Float> = when {
+        drawn != null -> drawn to (if (drawn !== app.icon) s.overscan else 1f)
+        s.plain -> app.icon to 1f
+        else -> last[0] ?: (app.icon to 1f)
+    }
+    if (drawn != null || s.plain) last[0] = shown
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
-        Image(drawn ?: app.icon, contentDescription = contentDescription, modifier = Modifier.requiredSize(size * over))
+        Image(shown.first, contentDescription = contentDescription, modifier = Modifier.requiredSize(size * shown.second))
     }
 }
 

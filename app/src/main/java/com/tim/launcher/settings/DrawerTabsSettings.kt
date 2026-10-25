@@ -73,7 +73,7 @@ object EditingTab {
 }
 
 /** Your apps, for picking what goes in a tab. Read on the phone from Android's app list. */
-private fun loadApps(context: Context): List<AppEntry> {
+internal fun loadAppEntries(context: Context): List<AppEntry> {
     val launcherApps = context.getSystemService(LauncherApps::class.java) ?: return emptyList()
     val density = context.resources.displayMetrics.densityDpi
     return launcherApps.getActivityList(null, Process.myUserHandle())
@@ -96,7 +96,7 @@ private fun loadApps(context: Context): List<AppEntry> {
 @Composable
 private fun rememberApps(): List<AppEntry>? {
     val context = LocalContext.current
-    val apps by produceState<List<AppEntry>?>(null) { value = withContext(Dispatchers.IO) { loadApps(context) } }
+    val apps by produceState<List<AppEntry>?>(null) { value = withContext(Dispatchers.IO) { loadAppEntries(context) } }
     return apps
 }
 

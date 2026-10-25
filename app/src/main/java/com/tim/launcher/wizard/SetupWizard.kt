@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -70,6 +71,8 @@ import com.tim.launcher.settings.S
 import com.tim.launcher.settings.SettingsContext
 import com.tim.launcher.settings.BadgesSection
 import com.tim.launcher.settings.IconsSection
+import com.tim.launcher.settings.IconDraft
+import com.tim.launcher.settings.rememberIconApply
 import com.tim.launcher.settings.TabMode
 import com.tim.launcher.settings.DrawerStyle
 import com.tim.launcher.settings.applyPreset
@@ -150,6 +153,8 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
     var customize by remember { mutableStateOf<Boolean?>(null) }
     var forward by remember { mutableStateOf(true) }
     val foldable = type == DeviceType.FOLDABLE
+    val iconDraft = remember { IconDraft(store) }
+    val iconApply = rememberIconApply(iconDraft)
 
     val steps = buildList {
         add(Step.WELCOME)
@@ -265,6 +270,7 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
                     step = s,
                     store = store,
                     type = type,
+                    iconDraft = iconDraft,
                     onPath = { chosen ->
                         path = chosen
                         when (chosen) {
@@ -303,6 +309,10 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
                 Step.PATH, Step.FUNCTION_DONE -> Unit // choosing a card moves on
                 Step.DONE -> PrimaryButton("Go home") { finish() }
                 Step.WELCOME -> PrimaryButton("Let's go") { next() }
+                // Icon changes get applied (with the progress popup) on the way to the next step
+                Step.ICONS -> PrimaryButton(if (iconDraft.dirty) "Apply and next" else "Next") {
+                    if (iconDraft.dirty) iconApply.run { next() } else next()
+                }
                 else -> PrimaryButton("Next") { next() }
             }
         }
@@ -329,6 +339,7 @@ private fun ColumnScope.StepContent(
     step: Step,
     store: SettingsStore,
     type: DeviceType,
+    iconDraft: IconDraft,
     onPath: (Path) -> Unit,
     onCustomize: (Boolean) -> Unit,
 ) {
@@ -650,7 +661,9 @@ private fun ColumnScope.StepContent(
         Step.ICONS -> {
             val ctx = remember { SettingsContext(store, type, type.primary, onEditing = {}, go = {}, back = {}) }
             BodyText("Icon packs, a shape, and one-color or plated icons. \"Match everywhere\" keeps the dock, home screen and drawer the same.")
-            IconsSection(ctx)
+            // Going back keeps changes you haven't applied
+            DisposableEffect(iconDraft) { onDispose { iconDraft.saveQuietly() } }
+            IconsSection(ctx, iconDraft)
             BadgesSection(ctx)
         }
 

@@ -38,6 +38,7 @@ import com.tim.launcher.settings.IconShape
 import com.tim.launcher.settings.IconStyle
 import com.tim.launcher.settings.S
 import com.tim.launcher.settings.SettingsStore
+import com.tim.launcher.settings.Setting
 import com.tim.launcher.settings.orHome
 import java.util.concurrent.Executors
 import kotlin.math.PI
@@ -85,30 +86,46 @@ object IconRender {
     /** Room around an icon for its shadow: the picture is this much bigger than the icon. */
     const val OVERSCAN = 1.25f
 
-    fun specFor(store: SettingsStore, slot: IconSlot): Spec {
+    /** Where icon settings are read from: the saved settings, or changes in settings that haven't been applied yet. */
+    interface Values {
+        fun <T> get(setting: Setting<T>): T
+
+        /** A dock or drawer value, or the home screen's while that place has no value of its own. */
+        fun <T> place(own: Setting<T>?, home: Setting<T>): T
+    }
+
+    private class Saved(private val store: SettingsStore) : Values {
+        override fun <T> get(setting: Setting<T>): T = store[setting]
+        override fun <T> place(own: Setting<T>?, home: Setting<T>): T = store.orHome(own, home)
+    }
+
+    fun specFor(store: SettingsStore, slot: IconSlot): Spec = specFor(Saved(store), slot)
+
+    fun specFor(v: Values, slot: IconSlot): Spec {
+        val match = v.get(S.iconsMatch)
         val pack = when {
-            store[S.iconsMatch] || slot == IconSlot.HOME -> store[S.iconPackHome]
-            slot == IconSlot.DOCK -> store[S.iconPackDock]
-            else -> store[S.iconPackDrawer]
+            match || slot == IconSlot.HOME -> v.get(S.iconPackHome)
+            slot == IconSlot.DOCK -> v.get(S.iconPackDock)
+            else -> v.get(S.iconPackDrawer)
         }
         // Dock and drawer have their own shape and style when icons don't match everywhere
         val place = when {
-            store[S.iconsMatch] || slot == IconSlot.HOME -> null
+            match || slot == IconSlot.HOME -> null
             slot == IconSlot.DOCK -> S.iconsDock
             else -> S.iconsDrawer
         }
         return Spec(
             pack,
-            store.orHome(place?.shape, S.iconShape),
-            store.orHome(place?.force, S.iconForceShape),
-            store.orHome(place?.style, S.iconStyle),
-            store.orHome(place?.background, S.iconBackground),
-            store.orHome(place?.color, S.iconBgColor),
-            store.orHome(place?.color2, S.iconBgColor2),
-            store.orHome(place?.pattern, S.iconPattern),
-            store.orHome(place?.patternStrength, S.iconPatternStrength),
-            store.orHome(place?.edge, S.iconEdge),
-            store.orHome(place?.shadow, S.iconShadow),
+            v.place(place?.shape, S.iconShape),
+            v.place(place?.force, S.iconForceShape),
+            v.place(place?.style, S.iconStyle),
+            v.place(place?.background, S.iconBackground),
+            v.place(place?.color, S.iconBgColor),
+            v.place(place?.color2, S.iconBgColor2),
+            v.place(place?.pattern, S.iconPattern),
+            v.place(place?.patternStrength, S.iconPatternStrength),
+            v.place(place?.edge, S.iconEdge),
+            v.place(place?.shadow, S.iconShadow),
         )
     }
 
@@ -118,7 +135,7 @@ object IconRender {
 
     // Same size as the apps' own icons, so styled ones are just as sharp
     private const val SIZE = 192
-    private val cache = object : LruCache<String, ImageBitmap>(40 * 1024 * 1024) {
+    private val cache = object : LruCache<String, ImageBitmap>(64 * 1024 * 1024) {
         override fun sizeOf(key: String, value: ImageBitmap) = value.width * value.height * 4
     }
     private val pending = HashSet<String>()
@@ -135,6 +152,12 @@ object IconRender {
         }
         val appContext = context.applicationContext
         worker.execute {
+            // Already drawn while this waited (by Apply getting everything ready)
+            if (cache.get(key) != null) {
+                synchronized(pending) { pending.remove(key) }
+                refreshSoon()
+                return@execute
+            }
             val bmp = runCatching { render(appContext, app, spec) }
                 .onFailure { Diag.log("Icon for ${app.label} couldn't be drawn: ${it.message}") }
                 .getOrNull()
@@ -144,6 +167,31 @@ object IconRender {
             if (bmp != null) refreshSoon()
         }
         return null
+    }
+
+    /**
+     * Draws every app's icon for each of [specs] ahead of time, so the home screen can switch to a new style all at
+     * once. Reports progress on the main thread, then [onDone].
+     */
+    fun prepare(context: Context, apps: List<AppEntry>, specs: List<Spec>, onProgress: (Int, Int) -> Unit, onDone: () -> Unit) {
+        val appContext = context.applicationContext
+        worker.execute {
+            val jobs = specs.filterNot { it.plain }.distinctBy { it.key }
+                .flatMap { spec -> apps.map { spec to it } }
+                .filter { (spec, app) -> cache.get(spec.key + "|" + app.key) == null }
+            jobs.forEachIndexed { i, (spec, app) ->
+                val key = spec.key + "|" + app.key
+                if (cache.get(key) == null) {
+                    val bmp = runCatching { render(appContext, app, spec) }.getOrNull()
+                    cache.put(key, bmp?.asImageBitmap() ?: app.icon)
+                }
+                if (i % 3 == 0 || i == jobs.lastIndex) main.post { onProgress(i + 1, jobs.size) }
+            }
+            main.post {
+                version++
+                onDone()
+            }
+        }
     }
 
     /** An app was updated or removed: redraw everything if it was an icon pack in use, else just its own icons. */
