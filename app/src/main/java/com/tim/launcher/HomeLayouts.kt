@@ -58,6 +58,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tim.launcher.settings.ButtonEnd
@@ -540,6 +541,7 @@ private fun GridArea(
         }
         // Widgets on top of the cells they cover
         WidgetLayer(base, items, cols, cellW, cellH, vm, drag)
+        SideEffect { drag.cellSize = DpSize(cellW, cellH) }
     }
 }
 

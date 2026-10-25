@@ -52,6 +52,24 @@ class HomeActivity : ComponentActivity() {
         private var wizardShown = false
     }
 
+    // App widgets update while the home screen is on screen
+    override fun onStart() {
+        super.onStart()
+        AppWidgets.startListening(this)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        AppWidgets.stopListening(this)
+    }
+
+    @Deprecated("Android's widget setup screens still answer through onActivityResult")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (AppWidgets.onResult(this, requestCode, resultCode)) return
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         if (intent.hasCategory(Intent.CATEGORY_HOME)) homeTick++

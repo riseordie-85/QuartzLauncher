@@ -193,8 +193,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     /** Quartz widgets by id. Each covers a block of cells holding "widget:<id>". Declared before init too. */
     val widgets = mutableStateMapOf<String, HomeWidget>()
 
+    /** Android ids of the app widgets on your pages, as of the last save. Declared before init too. */
+    private val heldAppWidgets = HashSet<Int>()
+
     init {
         restoreLayout()
+        heldAppWidgets += appWidgetIds()
+        AppWidgets.cleanUp(app, heldAppWidgets)
         migratePairedPages()
         currentPage = homePage
         launcherApps.registerCallback(callback, Handler(Looper.getMainLooper()))
@@ -393,7 +398,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         fill(dockExtra, savedExtra, if (savedExtra.isEmpty()) cols else savedExtra.size)
         restoreFolders()
         widgets.clear()
-        WidgetJson.read(prefs.getString(Prefs.L_WIDGETS, null)).forEach { widgets[it.id] = it }
+        WidgetJson.read(prefs.getString(Prefs.L_WIDGETS, null)).forEach { w ->
+            // An app's widget is only kept if Android still has it (not one from another device's profile, or an
+            // app that's gone)
+            if (w.kind == WidgetKind.ANDROID) {
+                val info = AppWidgets.info(getApplication<Application>(), w.appWidgetId)
+                if (info == null || info.provider.flattenToString() != w.provider) return@forEach
+            }
+            widgets[w.id] = w
+        }
         if (normalizeWidgets()) save()
     }
 
@@ -497,7 +510,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             .putString(Prefs.L_DOCK_EXTRA, join(dockExtra))
             .putString(Prefs.L_WIDGETS, WidgetJson.write(widgets.values))
             .apply()
+        // App widgets that are no longer on any page: give their ids back to Android
+        val now = appWidgetIds()
+        (heldAppWidgets - now).forEach { AppWidgets.release(getApplication<Application>(), it) }
+        heldAppWidgets.clear()
+        heldAppWidgets += now
     }
+
+
+    private fun appWidgetIds(): Set<Int> = widgets.values.mapNotNull { w -> w.appWidgetId.takeIf { w.kind == WidgetKind.ANDROID && it > 0 } }.toSet()
 
     fun keyAt(ref: SlotRef): String? = list(ref.area).getOrNull(ref.index)
 
@@ -895,13 +916,55 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         return false
     }
 
+    /**
+     * Where a [w]×[h] widget would go on [page]: the first block of empty cells, top first, trying smaller sizes
+     * down to [minW]×[minH]. Returns the top-left slot and the size, or null if there's no room.
+     */
+    fun findSpace(page: Int, w: Int, h: Int, minW: Int, minH: Int): Triple<Int, Int, Int>? {
+        val p = page.coerceIn(0, pages - 1)
+        for (hh in minOf(h, rows) downTo minOf(minH, rows).coerceAtLeast(1)) {
+            for (ww in minOf(w, cols) downTo minOf(minW, cols).coerceAtLeast(1)) {
+                for (r in 0..rows - hh) {
+                    for (c in 0..cols - ww) {
+                        val anchor = p * perPage + r * cols + c
+                        val cells = cellsOf(anchor, ww, hh) ?: continue
+                        if (cells.all { cover[it] == null }) return Triple(anchor, ww, hh)
+                    }
+                }
+            }
+        }
+        return null
+    }
+
+    /** Puts an app's widget (already given its Android id) on [page]. False if there's no room left for it. */
+    fun addAppWidget(page: Int, appWidgetId: Int, provider: String, spans: AppWidgets.Spans): Boolean {
+        reloadIfChanged()
+        val (anchor, w, h) = findSpace(page, spans.w, spans.h, spans.minW, spans.minH) ?: run {
+            say("No room left on this page for that widget")
+            return false
+        }
+        val id = newWidgetId()
+        widgets[id] = HomeWidget(id, WidgetKind.ANDROID, w, h, appWidgetId = appWidgetId, provider = provider)
+        cellsOf(anchor, w, h)?.forEach { cover[it] = WIDGET_PREFIX + id }
+        save()
+        Diag.log("Added an app widget (${w}×$h) to page ${anchor / perPage + 1}")
+        return true
+    }
+
+    /** A glass panel behind an app's widget, or not. */
+    fun setWidgetGlass(id: String, on: Boolean) {
+        val w = widgets[id] ?: return
+        widgets[id] = w.copy(glass = on)
+        save()
+    }
+
     /** Widgets picked in setup: added to your home page the next time it shows. */
     fun addPendingWidgets() {
         // Wait for the starter layout, which would otherwise clear it
         if (!prefs.getBoolean(Prefs.LAYOUT_READY, false)) return
         val pending = prefs.getString(Prefs.PENDING_WIDGETS, null)?.takeIf { it.isNotEmpty() } ?: return
         prefs.edit().remove(Prefs.PENDING_WIDGETS).apply()
-        pending.split(",").mapNotNull { name -> WidgetKind.entries.firstOrNull { it.name == name } }.forEach { kind ->
+        pending.split(",").mapNotNull { name -> WidgetKind.quartz.firstOrNull { it.name == name } }.forEach { kind ->
             if (widgets.values.none { it.kind == kind } && !addWidget(kind, homePage, makeRoom = true)) {
                 say("No room on your home page for the ${kind.label.lowercase()}. Long-press an empty spot and tap Widgets to add it.")
             }
@@ -971,6 +1034,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     /** Switches a widget to another kind, growing it to that kind's smallest size if it has to. */
     fun changeWidgetKind(id: String, kind: WidgetKind): Boolean {
         val widget = widgets[id] ?: return false
+        // An app's widget is what it is; and a Quartz widget can't become one
+        if (widget.kind == WidgetKind.ANDROID || kind == WidgetKind.ANDROID) return false
         val anchor = widgetSpot(id) ?: return false
         val w = maxOf(widget.w, minOf(kind.minW, cols))
         val h = maxOf(widget.h, minOf(kind.minH, rows))

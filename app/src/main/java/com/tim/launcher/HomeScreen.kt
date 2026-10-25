@@ -72,6 +72,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
@@ -276,12 +277,20 @@ class DragController {
         source = ref
     }
 
-    fun startWidget(ref: SlotRef, key: String, at: Offset, grab: Offset, size: Size) {
+    fun startWidget(ref: SlotRef, key: String, at: Offset, grab: Offset, size: Size, snapshot: ImageBitmap? = null) {
         begin(key, at)
         source = ref
         widgetGrab = grab
         widgetSize = size
+        widgetSnapshot = snapshot
     }
+
+    /** A picture of an app's widget being carried (the live widget can only be shown in one place). */
+    var widgetSnapshot: ImageBitmap? = null
+        private set
+
+    /** The size of a home screen cell, for working out how many cells an app's widget needs. */
+    var cellSize = DpSize(80.dp, 100.dp)
 
     /**
      * For a carried widget: the slot its top-left cell would land on (the cell under its top-left corner, pulled in
@@ -852,6 +861,21 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
                         Toast.makeText(activity, "No room on this page for the ${kind.label.lowercase()}. Make some space, or try another page.", Toast.LENGTH_LONG).show()
                     }
                 },
+                onPickApp = { info ->
+                    val cell = drag.cellSize
+                    val spans = AppWidgets.spans(activity, info, cell.width.value, cell.height.value, vm.cols, vm.rows)
+                    val page = vm.currentPage
+                    if (vm.findSpace(page, spans.w, spans.h, spans.minW, spans.minH) == null) {
+                        Toast.makeText(activity, "No room on this page for that widget. Make some space, or try another page.", Toast.LENGTH_LONG).show()
+                    } else {
+                        widgetPicker = false
+                        AppWidgets.add(activity, info) { id -> vm.addAppWidget(page, id, info.provider.flattenToString(), spans) }
+                    }
+                },
+                sizeOf = { info ->
+                    val cell = drag.cellSize
+                    AppWidgets.spans(activity, info, cell.width.value, cell.height.value, vm.cols, vm.rows)
+                },
                 onDismiss = { widgetPicker = false },
             )
         }
@@ -883,6 +907,11 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
                         vm.removeWidget(id)
                     },
                     onDismiss = { drag.widgetMenu = null },
+                    onReconfigure = {
+                        drag.widgetMenu = null
+                        AppWidgets.reconfigure(activity, widget.appWidgetId)
+                    },
+                    onGlass = { vm.setWidgetGlass(id, it) },
                 )
             }
         }

@@ -163,6 +163,8 @@ fun WidgetView(kind: WidgetKind, modifier: Modifier = Modifier, sample: Boolean 
                 WidgetCard(Modifier.at(0.dp, u.top + u(40f), w, u(160f)))
                 WeatherRow(weather, unit, ink, motion, u, w, rowTop = u.top + u(40f), rowHeight = u(160f), iconSize = u(340f), iconTop = u.top - u(85f))
             }
+
+            WidgetKind.ANDROID -> Unit // drawn by its app (see AppWidgetBox)
         }
     }
     }
@@ -177,7 +179,7 @@ private class Plan(w: Dp, h: Dp, pw: Float, ph: Float) {
 
 /** The glass card behind a widget: your dock's glass, color, pattern and edge light, as a rounded panel. */
 @Composable
-private fun WidgetCard(modifier: Modifier) {
+internal fun WidgetCard(modifier: Modifier) {
     val look = LocalHomeLook.current
     val style = look.dock.copy(background = true, outline = DockOutline.STRAIGHT, floating = true, radius = look.dock.radius.coerceIn(14, 36))
     Box(modifier.dockSurface(style, look.panel, DockPosition.BOTTOM, look.onPanel))

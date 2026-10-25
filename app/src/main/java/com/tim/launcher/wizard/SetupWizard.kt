@@ -677,12 +677,12 @@ private fun ColumnScope.StepContent(
         }
 
         Step.WIDGETS -> {
-            val chosen = WidgetKind.entries.firstOrNull { it.name == store[S.widgets] }
+            val chosen = WidgetKind.quartz.firstOrNull { it.name == store[S.widgets] }
             BodyText("Pick one for your home page. Later you can add more, move them and resize them: long-press an empty spot and tap Widgets.")
             Spacer(Modifier.height(12.dp))
             if (chosen != null) WidgetPreview(store, chosen)
             ChoiceCard("No widget for now", null, chosen == null, gap) { store.set(S.widgets, value = "") }
-            WidgetKind.entries.forEach { kind ->
+            WidgetKind.quartz.forEach { kind ->
                 ChoiceCard(kind.label, kind.about, chosen == kind, gap) { store.set(S.widgets, value = kind.name) }
             }
             if (chosen?.weather == true) {

@@ -39,6 +39,10 @@
         <intent>
             <action android:name="com.teslacoilsw.launcher.THEME" />
         </intent>
+        <!-- Lets Quartz list the widgets your apps offer for the home screen -->
+        <intent>
+            <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        </intent>
     </queries>
 
     <application
