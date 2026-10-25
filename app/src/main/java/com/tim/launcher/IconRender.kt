@@ -278,8 +278,12 @@ object IconRender {
     private fun drawIcon(context: Context, app: AppEntry, spec: Spec, outline: Path): Bitmap? {
         val density = context.resources.displayMetrics.densityDpi
         val launcherApps = context.getSystemService(LauncherApps::class.java)
-        val info = launcherApps?.resolveActivity(Intent().setComponent(app.component), Process.myUserHandle())
-        val own: Drawable? = info?.getIcon(density)
+        // Quartz Settings isn't a launcher activity, so Android won't resolve it: it wears Quartz's own icon
+        val own: Drawable? = if (app.key == StarterApps.QUARTZ_SETTINGS) {
+            runCatching { context.packageManager.getApplicationIcon(context.packageName) }.getOrNull()
+        } else {
+            launcherApps?.resolveActivity(Intent().setComponent(app.component), Process.myUserHandle())?.getIcon(density)
+        }
         val theme = IconPacks.theme(context, spec.pack)
         val packIcon = theme?.let { IconPacks.iconFor(it, app.component) }
         // Nothing to draw from (the app was just removed): leave its own icon showing

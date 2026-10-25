@@ -28,10 +28,11 @@ object StarterApps {
         fun handler(intent: Intent): String? {
             val default = runCatching { pm.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY) }.getOrNull()
                 ?.activityInfo?.packageName
-            // "android" is the chooser: no default set, so take the first app that can
-            val pkg = default?.takeIf { it != "android" }
-                ?: runCatching { pm.queryIntentActivities(intent, 0) }.getOrNull()?.firstOrNull()?.activityInfo?.packageName
-            return pkg?.let { byPackage[it]?.firstOrNull()?.key }
+            // No default set gives the chooser ("android", or the phone maker's own): take the first app that can
+            // and has an icon to show
+            default?.let { byPackage[it]?.firstOrNull()?.key }?.let { return it }
+            return runCatching { pm.queryIntentActivities(intent, 0) }.getOrNull().orEmpty()
+                .firstNotNullOfOrNull { info -> byPackage[info.activityInfo.packageName]?.firstOrNull()?.key }
         }
 
         fun category(cat: String) = handler(Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, cat))

@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -169,7 +170,8 @@ private fun DrawerPanel(view: DrawerView, modifier: Modifier, rows: Int = 6, off
             .padding(8.dp)
             .clipToBounds(),
     ) {
-        Column(Modifier.offset(y = (-offsetRows * 22).dp)) {
+        // Measured at full height (not squeezed into the panel), so rows scrolled up into view are really there
+        Column(Modifier.wrapContentHeight(Alignment.Top, unbounded = true).offset(y = (-offsetRows * 22).dp)) {
             repeat(rows) { r ->
                 if (view == DrawerView.ICONS) {
                     Row(Modifier.fillMaxWidth().height(22.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {

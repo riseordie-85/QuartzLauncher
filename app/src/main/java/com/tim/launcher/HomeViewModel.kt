@@ -209,9 +209,22 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         heldAppWidgets += appWidgetIds()
         AppWidgets.cleanUp(app, heldAppWidgets)
         migratePairedPages()
+        keepOldHomePage()
         currentPage = homePage
         launcherApps.registerCallback(callback, Handler(Looper.getMainLooper()))
         reload()
+    }
+
+    /**
+     * Phones and tablets used to open on the first page (the middle one is new). A layout made before then keeps
+     * the home page it had, rather than opening on a page that may be empty. Runs once.
+     */
+    private fun keepOldHomePage() {
+        if (prefs.getBoolean(Prefs.HOME_MIDDLE, false)) return
+        if (!foldable && homePageChoice !in 0 until pages && prefs.getBoolean(Prefs.LAYOUT_READY, false)) {
+            setHomePage(if (coverLeft) 0 else minOf(1, pages - 1))
+        }
+        prefs.edit().putBoolean(Prefs.HOME_MIDDLE, true).apply()
     }
 
     override fun onCleared() {
@@ -232,8 +245,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val loaded = withContext(Dispatchers.Default) { loadApps() }
             apps = loaded.associateBy { it.key }
             sortedApps = loaded
-            if (!prefs.getBoolean(Prefs.LAYOUT_READY, false) && loaded.isNotEmpty()) fillDefaults()
-            else if (loaded.isNotEmpty()) dropMissingApps()
+            // Quartz Settings is always listed, so only a list with real apps in it counts as loaded (an empty
+            // answer from Android mid-update must not clear the layout or make a starter one)
+            val real = loaded.any { it.key != StarterApps.QUARTZ_SETTINGS }
+            if (!prefs.getBoolean(Prefs.LAYOUT_READY, false) && real) fillDefaults()
+            else if (real) dropMissingApps()
             addPendingWidgets()
         }
     }
@@ -553,7 +569,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         pages = prefs.getInt(Prefs.PAGES, pages)
         restoreLayout()
         migratePairedPages()
-        if (apps.isNotEmpty()) dropMissingApps()
+        if (apps.keys.any { it != StarterApps.QUARTZ_SETTINGS }) dropMissingApps()
         currentPage = homePage
         Diag.log("Loaded an imported layout")
     }
@@ -929,7 +945,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun resetLayout() {
         prefs.edit().putBoolean(Prefs.LAYOUT_READY, false).apply()
-        if (sortedApps.isNotEmpty()) fillDefaults()
+        if (sortedApps.any { it.key != StarterApps.QUARTZ_SETTINGS }) fillDefaults()
     }
 
     // ---- Widgets ----

@@ -155,15 +155,18 @@ private enum class Step(val title: String, val preview: Boolean = true) {
 @Composable
 fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
     val context = LocalContext.current
-    // Pick up where you left off (setup comes back until it's finished)
+    // Pick up where you left off (setup comes back until it's finished). Run again after finishing ("Restart
+    // setup", the tips card), it starts from the beginning and doesn't leave a step behind for next time.
+    val resuming = remember { !store[S.wizardDone] }
     var step by remember {
-        val saved = Step.entries.firstOrNull { it.name == store[S.wizardStep] } ?: Step.WELCOME
+        val saved = Step.entries.firstOrNull { resuming && it.name == store[S.wizardStep] } ?: Step.WELCOME
         // Back from making Quartz the home screen: that's done, so on to the next question
         mutableStateOf(if (saved == Step.HOME_APP && isDefaultHome(context)) Step.PATH else saved)
     }
-    var path by remember { mutableStateOf(Path.entries.firstOrNull { it.name == store[S.wizardPath] } ?: Path.WIZARD) }
-    var customize by remember { mutableStateOf(store[S.wizardCustomize].toBooleanStrictOrNull()) }
+    var path by remember { mutableStateOf(Path.entries.firstOrNull { resuming && it.name == store[S.wizardPath] } ?: Path.WIZARD) }
+    var customize by remember { mutableStateOf(if (resuming) store[S.wizardCustomize].toBooleanStrictOrNull() else null) }
     LaunchedEffect(step, path, customize) {
+        if (!resuming || store[S.wizardDone]) return@LaunchedEffect
         store.set(S.wizardStep, value = step.name)
         store.set(S.wizardPath, value = path.name)
         store.set(S.wizardCustomize, value = customize?.toString() ?: "")

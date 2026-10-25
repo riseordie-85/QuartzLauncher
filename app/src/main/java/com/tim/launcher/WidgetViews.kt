@@ -4,7 +4,9 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -38,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -414,11 +417,23 @@ private fun TipsCard(w: Dp, h: Dp, ink: Color, accent: Color, live: Boolean) {
                         .height(base * 0.2f)
                         .clip(androidx.compose.foundation.shape.CircleShape)
                         .background(accent.copy(alpha = 0.85f))
-                        .then(if (live) Modifier.clickable { open() } else Modifier),
+                        .then(if (live) Modifier.quickTap(open) else Modifier),
                     contentAlignment = Alignment.Center,
                 ) { WText(label, base * 0.085f, Color.White, FontWeight.Medium) }
             }
         }
+    }
+}
+
+/**
+ * A tap that leaves holding to the widget around it: a press held past the long-press time (the widget's menu, or
+ * moving it) or dragged away doesn't count, and nothing is consumed, so the widget still sees the whole gesture.
+ */
+private fun Modifier.quickTap(onTap: () -> Unit): Modifier = pointerInput(onTap) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        val up = waitForUpOrCancellation() ?: return@awaitEachGesture
+        if (up.uptimeMillis - down.uptimeMillis < viewConfiguration.longPressTimeoutMillis) onTap()
     }
 }
 

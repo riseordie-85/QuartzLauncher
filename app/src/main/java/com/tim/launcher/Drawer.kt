@@ -590,8 +590,8 @@ private fun AppsView(
 }
 
 /**
- * One app in the drawer: tap to open, long-press and move your finger to carry it to the home screen or dock. A
- * long-press without moving (touching to stop a fast scroll) does nothing.
+ * One app in the drawer: tap to open, long-press and move your finger to carry it to the home screen or dock.
+ * Long-press and let go without carrying it off for its menu (app info, uninstall, add to home).
  */
 @Composable
 private fun DrawerItem(

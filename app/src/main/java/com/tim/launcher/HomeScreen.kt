@@ -842,7 +842,10 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             }
         }
 
-        if (drag.active) RemoveZone(drag, canUninstall = vm.canUninstall(drag.key))
+        // Asked once per pick-up, not on every frame of the drag
+        val carriedKey = drag.key
+        val canUninstallCarried = remember(carriedKey) { vm.canUninstall(carriedKey) }
+        if (drag.active) RemoveZone(drag, canUninstall = canUninstallCarried)
 
         // A widget being moved: where it would land, and the widget under your finger
         drag.key?.let { carried -> vm.widgetFor(carried)?.let { CarriedWidget(it, vm, drag) } }
@@ -984,7 +987,8 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
                     },
                     onRemove = {
                         drag.appMenu = null
-                        ref?.let { vm.remove(it) }
+                        // Only if it's still there (the layout may have changed while the menu was open)
+                        ref?.takeIf { vm.keyAt(it) == key }?.let { vm.remove(it) }
                     },
                     onAddToHome = {
                         drag.appMenu = null

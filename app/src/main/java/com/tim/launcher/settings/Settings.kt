@@ -415,7 +415,8 @@ class SettingsStore private constructor(context: Context) {
         var count = 0
         val edit = prefs.edit()
         data.keys().forEach { k ->
-            if (k.endsWith("/" + S.wizardDone.id)) return@forEach
+            // Setup's own progress belongs to this device
+            if (listOf(S.wizardDone, S.wizardStep, S.wizardPath, S.wizardCustomize).any { k.endsWith("/" + it.id) }) return@forEach
             val v = data.getString(k)
             values[k] = v
             edit.putString(k, v)
