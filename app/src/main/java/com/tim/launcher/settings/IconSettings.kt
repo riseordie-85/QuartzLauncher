@@ -124,7 +124,12 @@ private fun sampleApps(context: Context): List<AppEntry> {
 class IconDraft(val store: SettingsStore) : IconRender.Values {
     private val pending = mutableStateMapOf<Setting<*>, Any>()
 
-    val dirty: Boolean get() = pending.isNotEmpty()
+    /**
+     * True when the changes would make any icon look different. Picking something and then picking the old value
+     * again (or turning "Match everywhere" off and back on) leaves nothing to apply.
+     */
+    val dirty: Boolean
+        get() = pending.isNotEmpty() && IconSlot.entries.any { IconRender.specFor(this, it) != IconRender.specFor(store, it) }
 
     @Suppress("UNCHECKED_CAST")
     override fun <T> get(setting: Setting<T>): T = if (pending.containsKey(setting)) pending[setting] as T else store[setting]
@@ -149,7 +154,9 @@ class IconDraft(val store: SettingsStore) : IconRender.Values {
 
     /** Leaving with changes still waiting: keep them rather than lose them. Icons switch over as they're drawn. */
     fun saveQuietly() {
-        if (dirty && save()) IconRender.clear()
+        if (pending.isEmpty()) return
+        val changesIcons = dirty
+        if (save() && changesIcons) IconRender.clear()
     }
 }
 
@@ -166,7 +173,8 @@ class IconApply internal constructor(private val context: Context, private val s
         if (draft.save()) IconRender.clear()
         val specs = IconSlot.entries.map { IconRender.specFor(draft.store, it) }
         scope.launch {
-            val apps = withContext(Dispatchers.IO) { loadAppEntries(context) }
+            // If the app list can't be read, there's just nothing to draw ahead: the popup still closes
+            val apps = withContext(Dispatchers.IO) { runCatching { loadAppEntries(context) }.getOrDefault(emptyList()) }
             IconRender.prepare(context, apps, specs, onProgress = { done, total -> progress = done to total }) {
                 scope.launch {
                     // Let the gem turn for a moment even when there was little to draw, rather than flash

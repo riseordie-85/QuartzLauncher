@@ -142,11 +142,17 @@ object IconRender {
     private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "quartz-icons").apply { priority = Thread.NORM_PRIORITY - 1 } }
     private val main = Handler(Looper.getMainLooper())
 
+    /**
+     * Kept for an icon that couldn't be drawn, so it isn't tried again on every redraw. [icon] hands back the
+     * caller's own icon for it (not whichever copy happened to be loaded when it failed), so callers can tell.
+     */
+    private val FAILED = ImageBitmap(1, 1)
+
     /** The styled icon for [app], or null while it's being drawn (or when there's nothing to change). */
     fun icon(context: Context, app: AppEntry, spec: Spec): ImageBitmap? {
         if (spec.plain) return null
         val key = spec.key + "|" + app.key
-        cache.get(key)?.let { return it }
+        cache.get(key)?.let { return if (it === FAILED) app.icon else it }
         synchronized(pending) {
             if (!pending.add(key)) return null
         }
@@ -162,7 +168,7 @@ object IconRender {
                 .onFailure { Diag.log("Icon for ${app.label} couldn't be drawn: ${it.message}") }
                 .getOrNull()
             // Nothing to draw, or it failed: keep the app's own icon, so it isn't tried again on every redraw
-            cache.put(key, bmp?.asImageBitmap() ?: app.icon)
+            cache.put(key, bmp?.asImageBitmap() ?: FAILED)
             synchronized(pending) { pending.remove(key) }
             if (bmp != null) refreshSoon()
         }
@@ -176,20 +182,28 @@ object IconRender {
     fun prepare(context: Context, apps: List<AppEntry>, specs: List<Spec>, onProgress: (Int, Int) -> Unit, onDone: () -> Unit) {
         val appContext = context.applicationContext
         worker.execute {
-            val jobs = specs.filterNot { it.plain }.distinctBy { it.key }
-                .flatMap { spec -> apps.map { spec to it } }
-                .filter { (spec, app) -> cache.get(spec.key + "|" + app.key) == null }
-            jobs.forEachIndexed { i, (spec, app) ->
-                val key = spec.key + "|" + app.key
-                if (cache.get(key) == null) {
-                    val bmp = runCatching { render(appContext, app, spec) }.getOrNull()
-                    cache.put(key, bmp?.asImageBitmap() ?: app.icon)
+            // Whatever happens, say it's done, so the progress popup can't be left up
+            try {
+                val jobs = specs.filterNot { it.plain }.distinctBy { it.key }
+                    .flatMap { spec -> apps.map { spec to it } }
+                    .filter { (spec, app) -> cache.get(spec.key + "|" + app.key) == null }
+                jobs.forEachIndexed { i, (spec, app) ->
+                    val key = spec.key + "|" + app.key
+                    if (cache.get(key) == null) {
+                        val bmp = runCatching { render(appContext, app, spec) }
+                            .onFailure { Diag.log("Icon for ${app.label} couldn't be drawn: ${it.message}") }
+                            .getOrNull()
+                        cache.put(key, bmp?.asImageBitmap() ?: FAILED)
+                    }
+                    if (i % 3 == 0 || i == jobs.lastIndex) main.post { onProgress(i + 1, jobs.size) }
                 }
-                if (i % 3 == 0 || i == jobs.lastIndex) main.post { onProgress(i + 1, jobs.size) }
-            }
-            main.post {
-                version++
-                onDone()
+            } catch (t: Throwable) {
+                Diag.log("Icons couldn't all be drawn ahead: ${t.message}")
+            } finally {
+                main.post {
+                    version++
+                    onDone()
+                }
             }
         }
     }
