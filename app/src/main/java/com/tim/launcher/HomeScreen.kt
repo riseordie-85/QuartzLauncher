@@ -742,6 +742,12 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
                     }
                 }
             }
+            .onRightClick(behind = true) {
+                if (!drawerOpen && openFolder == null && !overviewOpen && !menuOpen && !widgetPicker && drag.widgetMenu == null && drag.appMenu == null) {
+                    drag.resizing = null
+                    menuOpen = true
+                }
+            }
             .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = { drag.resizing = null },
@@ -1279,6 +1285,16 @@ internal fun Cell(
                     folderArmed -> Q.Accent.copy(alpha = 0.45f)
                     hovered -> Color.White.copy(alpha = 0.18f)
                     else -> Color.Transparent
+                },
+            )
+            // A right click opens an app's menu at once (a folder just opens)
+            .then(
+                if (app != null || folder != null) {
+                    Modifier.onRightClick {
+                        if (folder != null) look.openFolder(folder.id, ref) else if (app != null) drag.appMenu = app.key to ref
+                    }
+                } else {
+                    Modifier
                 },
             )
             .then(gestures),

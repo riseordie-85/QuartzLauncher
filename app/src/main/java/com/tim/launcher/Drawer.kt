@@ -611,6 +611,8 @@ private fun DrawerItem(
     val gestures = Modifier
         .onGloballyPositioned { placed[0] = it }
         .clip(RoundedCornerShape(16.dp))
+        // A mouse's right click opens the app's menu at once
+        .onRightClick { drag.appMenu = app.key to null }
         .pointerInput(app.key) {
             detectTapGestures(
                 onTap = {

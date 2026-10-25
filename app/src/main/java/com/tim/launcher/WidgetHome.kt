@@ -224,6 +224,7 @@ private fun WidgetOnGrid(widget: HomeWidget, anchor: Int, block: Block, cellW: D
                 boxSize = Size(it.size.width.toFloat(), it.size.height.toFloat())
             }
             .alpha(if (carried) 0f else 1f)
+            .then(if (resizing) Modifier else Modifier.onRightClick { drag.widgetMenu = widget.id })
             .then(gestures),
     ) {
         if (appWidget) {
@@ -374,7 +375,7 @@ internal fun WidgetOnFlow(widget: HomeWidget, width: Dp, height: Dp, drag: DragC
     if (widget.kind == WidgetKind.ANDROID) {
         AppWidgetBox(
             widget,
-            Modifier.width(width).height(height).padding(WIDGET_PAD),
+            Modifier.width(width).height(height).onRightClick { drag.widgetMenu = widget.id }.padding(WIDGET_PAD),
             holdEnabled = true,
             onHold = { _, _, _ -> drag.widgetMenu = widget.id },
             onMove = { _, _ -> },
@@ -387,6 +388,7 @@ internal fun WidgetOnFlow(widget: HomeWidget, width: Dp, height: Dp, drag: DragC
         Modifier
             .width(width)
             .height(height)
+            .onRightClick { drag.widgetMenu = widget.id }
             .pointerInput(widget.id, widget.kind) {
                 detectTapGestures(
                     onTap = { widgetTap(context, widget.kind) },
