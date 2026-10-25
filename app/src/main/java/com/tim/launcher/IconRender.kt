@@ -179,14 +179,15 @@ object IconRender {
 
     /** The icon, then its rim of light and its shadow. */
     private fun render(context: Context, app: AppEntry, spec: Spec): Bitmap? {
-        val icon = drawIcon(context, app, spec) ?: return null
-        val shape = path(if (spec.shape == IconShape.SYSTEM) IconShape.SQUIRCLE else spec.shape, SIZE.toFloat())
-        drawEdge(Canvas(icon), shape, SIZE.toFloat(), spec.edge, isLight(plateColor(spec) ?: 0xFF000000.toInt()))
+        // The outline the rim follows: your shape, or the system's mask when the icon is left as the app drew it
+        val outline = path(if (spec.shape == IconShape.SYSTEM) IconShape.SQUIRCLE else spec.shape, SIZE.toFloat())
+        val icon = drawIcon(context, app, spec, outline) ?: return null
+        drawEdge(Canvas(icon), outline, SIZE.toFloat(), spec.edge, isLight(plateColor(spec) ?: 0xFF000000.toInt()))
         if (spec.shadow == IconShadow.NONE) return icon
         return withShadow(icon, spec.shadow)
     }
 
-    private fun drawIcon(context: Context, app: AppEntry, spec: Spec): Bitmap? {
+    private fun drawIcon(context: Context, app: AppEntry, spec: Spec, outline: Path): Bitmap? {
         val density = context.resources.displayMetrics.densityDpi
         val launcherApps = context.getSystemService(LauncherApps::class.java)
         val info = launcherApps?.resolveActivity(Intent().setComponent(app.component), Process.myUserHandle())
@@ -235,6 +236,8 @@ object IconRender {
             val icon = packIcon ?: own ?: return out
             icon.setBounds(0, 0, SIZE, SIZE)
             icon.draw(canvas)
+            // Android's own mask (a circle on many phones), scaled to the bounds just set
+            (icon as? AdaptiveIconDrawable)?.let { outline.set(it.iconMask) }
             return out
         }
 
