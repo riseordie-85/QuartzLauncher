@@ -989,31 +989,72 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Puts a widget at [anchor], [w]×[h]. Apps and folders in the way move to the nearest empty spots on that page;
-     * another widget in the way, or not enough empty spots, and nothing changes (false).
+     * What the page would look like with widget [id] at [anchor], [w]×[h]: other widgets in the way move to the
+     * nearest block that fits them, and apps and folders in the way take the nearest empty spots. Null if there
+     * isn't room for everything on that page. Nothing changes until it's applied.
      */
-    fun placeWidget(id: String, anchor: Int, w: Int, h: Int): Boolean {
-        val widget = widgets[id] ?: return false
+    fun planWidget(id: String, anchor: Int, w: Int, h: Int): DropPlan? {
+        if (widgets[id] == null) return null
         val key = WIDGET_PREFIX + id
-        val cells = cellsOf(anchor, w, h) ?: return false
-        if (cells.any { isWidgetKey(cover[it]) && cover[it] != key }) return false
+        val cells = cellsOf(anchor, w, h) ?: return null
         val page = anchor / perPage
         val range = page * perPage until (page + 1) * perPage
-        val bumped = cells.filter { cover[it] != null && cover[it] != key }
-        val free = range.filter { it !in cells && (cover[it] == null || cover[it] == key) }
-        if (bumped.size > free.size) return false
-        val moving = bumped.map { it to cover[it]!! }
-        cover.indices.forEach { if (cover[it] == key) cover[it] = null }
-        cells.forEach { cover[it] = key }
-        // Each app or folder in the way takes the nearest free spot to where it was
-        val open = free.toMutableList()
-        moving.forEach { (from, k) ->
-            val fr = (from % perPage) / cols
-            val fc = (from % perPage) % cols
-            val spot = open.minBy { s -> abs((s % perPage) / cols - fr) * 2 + abs((s % perPage) % cols - fc) }
-            open.remove(spot)
-            cover[spot] = k
+        val items = cover.toMutableList()
+        fun lift(k: String) = items.indices.forEach { if (items[it] == k) items[it] = null }
+        lift(key)
+        // Widgets in the way are picked up too, and set down again nearby
+        val hit = cells.mapNotNull { items[it]?.takeIf { k -> isWidgetKey(k) } }.distinct()
+        val displaced = hit.mapNotNull { k -> widgetFor(k)?.let { it to items.indexOf(k) } }
+        hit.forEach { lift(it) }
+        val bumped = ArrayList<Pair<Int, String>>()
+        cells.forEach { i -> items[i]?.let { bumped += i to it } }
+        cells.forEach { items[it] = key }
+        fun row(i: Int) = (i % perPage) / cols
+        fun col(i: Int) = (i % perPage) % cols
+        displaced.forEach { (other, from) ->
+            // The nearest block with no widget in it, preferring one with fewer apps to move
+            var best: List<Int>? = null
+            var bestScore = Int.MAX_VALUE
+            for (r in 0..rows - other.h) {
+                for (c in 0..cols - other.w) {
+                    val block = cellsOf(page * perPage + r * cols + c, other.w, other.h) ?: continue
+                    if (block.any { isWidgetKey(items[it]) }) continue
+                    val score = (abs(r - row(from)) + abs(c - col(from))) * 4 + block.count { items[it] != null } * 3
+                    if (score < bestScore) {
+                        bestScore = score
+                        best = block
+                    }
+                }
+            }
+            val block = best ?: return null
+            block.forEach { i -> items[i]?.let { bumped += i to it } }
+            block.forEach { items[it] = WIDGET_PREFIX + other.id }
         }
+        // Each app or folder in the way takes the nearest empty spot to where it was
+        val open = range.filter { items[it] == null }.toMutableList()
+        if (bumped.size > open.size) return null
+        bumped.forEach { (from, k) ->
+            val spot = open.minBy { s -> abs(row(s) - row(from)) * 2 + abs(col(s) - col(from)) }
+            open.remove(spot)
+            items[spot] = k
+        }
+        return DropPlan(Area.COVER, items, anchor, null)
+    }
+
+    /** Where a carried widget would land with its corner over [index], and everything moved out of its way. */
+    fun planWidgetMove(id: String, index: Int): DropPlan? {
+        val w = widgets[id] ?: return null
+        val spot = clampWidgetSpot(id, index) ?: return null
+        if (spot == widgetSpot(id)) return null
+        return planWidget(id, spot, w.w, w.h)
+    }
+
+    /** Puts a widget at [anchor], [w]×[h], moving whatever's in the way (see [planWidget]). False if it won't fit. */
+    fun placeWidget(id: String, anchor: Int, w: Int, h: Int): Boolean {
+        val widget = widgets[id] ?: return false
+        val plan = planWidget(id, anchor, w, h) ?: return false
+        if (plan.items.size != cover.size) return false
+        plan.items.forEachIndexed { i, k -> if (cover[i] != k) cover[i] = k }
         widgets[id] = widget.copy(w = w, h = h)
         save()
         return true

@@ -612,11 +612,12 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
     LaunchedEffect(hoverAt, drag.key, overRemove) {
         drag.folderTarget = null
         val carried = drag.key ?: return@LaunchedEffect
-        // A widget being moved doesn't make folders or push icons around until it's dropped
-        if (overRemove || isWidgetKey(carried)) {
+        if (overRemove) {
             drag.plan = null
             return@LaunchedEffect
         }
+        // A widget being moved doesn't make folders; what it pushes aside is worked out below
+        if (isWidgetKey(carried)) return@LaunchedEffect
         val (target, zone) = hoverAt ?: return@LaunchedEffect
         val existing = drag.shown(vm, target)
         val canFolder = existing != null && existing != carried && !isFolderKey(carried) && !isWidgetKey(existing) &&
@@ -629,6 +630,24 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             delay(180)
             drag.plan = drag.planFor(vm, target, zone)
         }
+    }
+
+    // Carrying a widget: pause over a spot and everything in the way (icons, other widgets) moves aside to show
+    // where it would all go; dropping keeps it like that
+    val widgetSpot by remember { derivedStateOf { if (isWidgetKey(drag.key) && !drag.overRemove) drag.widgetDrop(vm) else null } }
+    LaunchedEffect(widgetSpot, drag.key) {
+        val carried = drag.key?.takeIf { isWidgetKey(it) } ?: return@LaunchedEffect
+        val spot = widgetSpot
+        if (spot == null) {
+            drag.plan = null
+            return@LaunchedEffect
+        }
+        delay(150)
+        drag.plan = vm.planWidgetMove(carried.removePrefix(WIDGET_PREFIX), spot)
+    }
+    // Done resizing: the page shows what was saved again
+    LaunchedEffect(drag.resizing) {
+        if (drag.resizing == null && !drag.active) drag.plan = null
     }
 
     // Log every posture change and time how long the new layout took to reach the screen.

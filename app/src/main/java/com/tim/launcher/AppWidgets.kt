@@ -208,6 +208,40 @@ class QuartzWidgetHostView(context: Context) : AppWidgetHostView(context) {
     /** Off while resizing, so holding does nothing. */
     var holdEnabled = true
 
+    /**
+     * Where the app's widget actually draws inside this view (left, top, right, bottom, px). Many widgets are
+     * shorter than the space they're given, so a glass panel can hug what's really there.
+     */
+    var onContent: ((l: Int, t: Int, r: Int, b: Int) -> Unit)? = null
+    private val content = IntArray(4)
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        var l = Int.MAX_VALUE
+        var t = Int.MAX_VALUE
+        var r = Int.MIN_VALUE
+        var b = Int.MIN_VALUE
+        for (i in 0 until childCount) {
+            val c = getChildAt(i)
+            if (c.visibility == GONE || c.width == 0 || c.height == 0) continue
+            l = minOf(l, c.left)
+            t = minOf(t, c.top)
+            r = maxOf(r, c.right)
+            b = maxOf(b, c.bottom)
+        }
+        if (l >= r || t >= b) return
+        if (content[0] != l || content[1] != t || content[2] != r || content[3] != b) {
+            content[0] = l
+            content[1] = t
+            content[2] = r
+            content[3] = b
+            onContent?.invoke(l, t, r, b)
+        }
+    }
+
+    /** The last content bounds seen, for a new listener. */
+    fun content(): IntArray? = if (content[2] > content[0]) content.copyOf() else null
+
     private val slop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
     private var downX = 0f
     private var downY = 0f
@@ -259,6 +293,7 @@ class QuartzWidgetHostView(context: Context) : AppWidgetHostView(context) {
         onMove = null
         onLetGo = null
         onCancelHold = null
+        onContent = null
     }
 
     /**

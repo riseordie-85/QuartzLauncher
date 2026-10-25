@@ -4,6 +4,16 @@ import android.content.Context
 import android.content.Intent
 import android.provider.AlarmClock
 import android.widget.Toast
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateDpAsState
 import android.appwidget.AppWidgetProviderInfo
 import android.os.Bundle
 import android.util.SizeF
@@ -122,8 +132,18 @@ private fun WidgetOnGrid(widget: HomeWidget, anchor: Int, block: Block, cellW: D
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
     val resizing = drag.resizing == widget.id
-    var edit by remember(widget, anchor, resizing) { mutableStateOf(block) }
+    // Where it really is (while resizing, the page may be showing a preview with things moved around it)
+    val home = if (resizing) {
+        vm.widgetSpot(widget.id)?.let { i -> Block((i % vm.perPage) % vm.cols, (i % vm.perPage) / vm.cols, widget.w, widget.h) } ?: block
+    } else {
+        block
+    }
+    var edit by remember(widget, resizing) { mutableStateOf(home) }
     val shown = if (resizing) edit else block
+    // Pushed aside by another widget, or set down somewhere new: slide over rather than jump
+    val glide = !resizing && !(drag.active && drag.key == key)
+    val x by animateDpAsState(cellW * shown.c, if (glide) spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow) else snap(), label = "x")
+    val y by animateDpAsState(cellH * shown.r, if (glide) spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow) else snap(), label = "y")
     var origin by remember { mutableStateOf(Offset.Zero) }
     val carried = drag.active && drag.key == key
 
@@ -168,7 +188,7 @@ private fun WidgetOnGrid(widget: HomeWidget, anchor: Int, block: Block, cellW: D
 
     Box(
         Modifier
-            .offset(cellW * shown.c, cellH * shown.r)
+            .offset(x, y)
             .width(cellW * shown.w)
             .height(cellH * shown.h)
             .onGloballyPositioned {
@@ -210,7 +230,7 @@ private fun WidgetOnGrid(widget: HomeWidget, anchor: Int, block: Block, cellW: D
             val spans = info?.let { AppWidgets.spans(context, it, cellW.value, cellH.value, vm.cols, vm.rows) }
             val (across, upDown) = if (appWidget) AppWidgets.resizable(info) else true to true
             ResizeFrame(
-                start = block,
+                start = home,
                 cols = vm.cols,
                 rows = vm.rows,
                 minW = minOf(spans?.minW ?: widget.kind.minW, vm.cols),
@@ -219,11 +239,17 @@ private fun WidgetOnGrid(widget: HomeWidget, anchor: Int, block: Block, cellW: D
                 upDown = upDown,
                 cellW = cw,
                 cellH = ch,
-                onChange = { edit = it },
+                onChange = { b ->
+                    edit = b
+                    // Show what would move out of the way at this size
+                    val page = (vm.widgetSpot(widget.id) ?: anchor) / vm.perPage
+                    drag.plan = vm.planWidget(widget.id, page * vm.perPage + b.r * vm.cols + b.c, b.w, b.h)
+                },
                 onDone = { b ->
-                    val page = anchor / vm.perPage
+                    val page = (vm.widgetSpot(widget.id) ?: anchor) / vm.perPage
                     val ok = vm.resizeWidget(widget.id, page * vm.perPage + b.r * vm.cols + b.c, b.w, b.h)
-                    if (!ok) edit = block
+                    drag.plan = null
+                    if (!ok) edit = home
                 },
             )
         }
@@ -360,9 +386,39 @@ private fun AppWidgetBox(
 ) {
     // Android sends a widget the size it has, in dp, so it can pick the layout that fits
     val lastSize = remember(widget.appWidgetId) { arrayOfNulls<SizeF>(1) }
+    // Where the app's widget really draws inside its view (px); many are shorter than the room they're given
+    var content by remember(widget.appWidgetId) { mutableStateOf<IntArray?>(null) }
+    val look = LocalHomeLook.current
+    val density = LocalDensity.current
     BoxWithConstraints(modifier) {
-        if (widget.glass) WidgetCard(Modifier.fillMaxSize())
-        val size = SizeF(maxWidth.value, maxHeight.value)
+        val glass = widget.glass
+        // With glass, the widget sits inside the panel with an even margin all round, centered, and its corners are
+        // rounded to follow the panel's
+        val inset = if (glass) 10.dp else 0.dp
+        val viewW = with(density) { (maxWidth - inset * 2).roundToPx() }
+        val viewH = with(density) { (maxHeight - inset * 2).roundToPx() }
+        val c = content?.takeIf { glass }
+        val cw = c?.let { it[2] - it[0] } ?: viewW
+        val ch = c?.let { it[3] - it[1] } ?: viewH
+        val dx = c?.let { (viewW - cw) / 2 - it[0] } ?: 0
+        val dy = c?.let { (viewH - ch) / 2 - it[1] } ?: 0
+        if (glass) {
+            Box(
+                Modifier
+                    .align(Alignment.Center)
+                    .size(
+                        with(density) { cw.toDp() + inset * 2 }.coerceAtMost(maxWidth),
+                        with(density) { ch.toDp() + inset * 2 }.coerceAtMost(maxHeight),
+                    ),
+            ) { WidgetCard(Modifier.fillMaxSize()) }
+        }
+        val radius = with(density) { (look.dock.radius.coerceIn(14, 36).dp - inset).coerceAtLeast(6.dp).toPx() }
+        val clip = if (c == null) Modifier else Modifier.clip(object : Shape {
+            override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density) = Outline.Rounded(
+                RoundRect(c[0].toFloat(), c[1].toFloat(), c[2].toFloat(), c[3].toFloat(), CornerRadius(radius)),
+            )
+        })
+        val size = SizeF((maxWidth - inset * 2).value, (maxHeight - inset * 2).value)
         AndroidView(
             factory = { ctx ->
                 AppWidgets.createView(ctx, widget.appWidgetId) ?: android.widget.TextView(ctx).apply {
@@ -371,7 +427,11 @@ private fun AppWidgetBox(
                     gravity = android.view.Gravity.CENTER
                 }
             },
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(inset)
+                .offset { IntOffset(dx, dy) }
+                .then(clip),
             // Android keeps the last view made for each widget, so let go of the home screen's callbacks
             onRelease = { v -> (v as? QuartzWidgetHostView)?.release() },
             update = { v ->
@@ -381,6 +441,8 @@ private fun AppWidgetBox(
                 host.onMove = onMove
                 host.onLetGo = onLetGo
                 host.onCancelHold = onCancel
+                host.onContent = { l, t, r, b -> content = intArrayOf(l, t, r, b) }
+                if (content == null) host.content()?.let { content = it }
                 if (lastSize[0] != size) {
                     lastSize[0] = size
                     runCatching { host.updateAppWidgetSize(Bundle(), listOf(size)) }
