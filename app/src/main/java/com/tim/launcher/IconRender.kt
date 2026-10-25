@@ -12,6 +12,8 @@ import android.graphics.BlurMaskFilter
 import android.graphics.Rect
 import android.graphics.Shader
 import android.graphics.LinearGradient
+import com.tim.launcher.settings.GradientDirection
+import android.graphics.RadialGradient
 import android.graphics.Canvas
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
@@ -75,12 +77,13 @@ object IconRender {
         val patternStrength: Float = 0.3f,
         val edge: DockEdge = DockEdge.NONE,
         val shadow: IconShadow = IconShadow.NONE,
-        val patternSize: Float = 0.3f,
+        val patternSize: Float = 0.5f,
+        val gradient: GradientDirection = GradientDirection.DIAGONAL,
     ) {
         /** Nothing to change: the app's own icon is used as it is. */
         val plain get() = pack.isEmpty() && shape == IconShape.SYSTEM && style == IconStyle.DEFAULT &&
             background == IconBackground.NONE && edge == DockEdge.NONE && shadow == IconShadow.NONE
-        val key get() = "$pack|$shape|$force|$style|$background|$color|$color2|$pattern|$patternStrength|$edge|$shadow|$patternSize"
+        val key get() = "$pack|$shape|$force|$style|$background|$color|$color2|$pattern|$patternStrength|$edge|$shadow|$patternSize|$gradient"
 
         /** How much bigger than the icon its picture is drawn, to leave room for the shadow. */
         val overscan get() = if (shadow == IconShadow.NONE) 1f else OVERSCAN
@@ -130,6 +133,7 @@ object IconRender {
             v.place(place?.edge, S.iconEdge),
             v.place(place?.shadow, S.iconShadow),
             patternSize = v.place(place?.patternSize, S.iconPatternSize),
+            gradient = v.place(place?.gradient, S.iconGradient),
         )
     }
 
@@ -372,7 +376,12 @@ object IconRender {
     private fun fillPlate(canvas: Canvas, spec: Spec, s: Float) {
         val base = plateColor(spec) ?: return
         if (spec.background == IconBackground.GRADIENT) {
-            platePaint.shader = LinearGradient(0f, 0f, s, s, base, spec.color2, Shader.TileMode.CLAMP)
+            platePaint.shader = when (spec.gradient) {
+                GradientDirection.HORIZONTAL -> LinearGradient(0f, 0f, s, 0f, base, spec.color2, Shader.TileMode.CLAMP)
+                GradientDirection.VERTICAL -> LinearGradient(0f, 0f, 0f, s, base, spec.color2, Shader.TileMode.CLAMP)
+                GradientDirection.DIAGONAL -> LinearGradient(0f, 0f, s, s, base, spec.color2, Shader.TileMode.CLAMP)
+                GradientDirection.RADIAL -> RadialGradient(s / 2f, s / 2f, s * 0.6f, base, spec.color2, Shader.TileMode.CLAMP)
+            }
             canvas.drawRect(0f, 0f, s, s, platePaint)
             platePaint.shader = null
         } else {

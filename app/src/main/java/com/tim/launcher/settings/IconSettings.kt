@@ -317,6 +317,13 @@ fun IconsSection(
                 ColorEditor("Gradient to", draft.place(place?.color2, S.iconBgColor2), colorOpen == "to", {
                     colorOpen = if (colorOpen == "to") null else "to"
                 }, alpha = true) { set(S.iconBgColor2, place?.color2, it) }
+                Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+                    Text("Direction", color = Q.Text, fontSize = 16.sp, modifier = Modifier.padding(bottom = 10.dp))
+                    Segmented(draft.place(place?.gradient, S.iconGradient), GradientDirection.entries, { it.label }) {
+                        set(S.iconGradient, place?.gradient, it)
+                    }
+                }
+                RowDivider()
             }
         }
         if (background != IconBackground.NONE) {
@@ -330,7 +337,7 @@ fun IconsSection(
                     set(S.iconPatternStrength, place?.patternStrength, it)
                 }
                 val size = draft.place(place?.patternSize, S.iconPatternSize)
-                SliderRow("Pattern size", size, 0f..1f, "${(size * 100).roundToInt()}%") {
+                SliderRow("Pattern size", size, 0f..1f, patternSizeLabel(size)) {
                     set(S.iconPatternSize, place?.patternSize, it)
                 }
             }

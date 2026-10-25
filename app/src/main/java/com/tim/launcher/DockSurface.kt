@@ -63,8 +63,8 @@ data class DockStyle(
     val color2: Int = 0xFF2546A8.toInt(),
     val pattern: PatternStyle = PatternStyle.NONE,
     val patternStrength: Float = 0.3f,
-    val patternSize: Float = 0.3f,
-    val gradientDirection: GradientDirection = GradientDirection.ALONG,
+    val patternSize: Float = 0.5f,
+    val gradientDirection: GradientDirection = GradientDirection.HORIZONTAL,
     val edge: DockEdge = DockEdge.SOFT,
     /** Extra room across the dock (above and below a bottom dock's icons), in dp. */
     val padding: Int = 0,
@@ -255,10 +255,11 @@ fun Modifier.dockSurface(style: DockStyle, tint: Color, edge: DockPosition, ink:
                 val second = Color(style.color2).let { it.copy(alpha = it.alpha * tint.alpha) }
                 val colors = listOf(tint, second)
                 val brush = when (style.gradientDirection) {
-                    GradientDirection.ALONG -> if (vertical) Brush.verticalGradient(colors) else Brush.horizontalGradient(colors)
                     GradientDirection.HORIZONTAL -> Brush.horizontalGradient(colors)
                     GradientDirection.VERTICAL -> Brush.verticalGradient(colors)
                     GradientDirection.DIAGONAL -> Brush.linearGradient(colors, start = Offset.Zero, end = Offset(size.width, size.height))
+                    // From the middle out to the far ends
+                    GradientDirection.RADIAL -> Brush.radialGradient(colors, center = center, radius = maxOf(size.width, size.height) / 2f)
                 }
                 drawRect(brush)
             } else {

@@ -157,9 +157,18 @@ object WallRenderer {
      * so the pattern's size and placement match the wallpaper's; [clip] is the part to draw.
      */
     @Synchronized
-    fun drawPatternOnly(canvas: Canvas, w: Float, h: Float, clip: Rect, style: PatternStyle, strength: Float, size: Float = 0.3f) {
-        val c = WallConfig(pattern = style, patternStrength = strength, patternSize = size.coerceIn(0f, 1f), patternColor = Color.WHITE)
-        if (style.faceted) Facets.draw(canvas, w, h, clip, c) else drawPattern(canvas, w, h, c)
+    /**
+     * A pattern on its own (the dock's, an icon's). [scale] runs 0–1 with 0.5 the usual size: lower is finer, down
+     * to about a third, higher is bolder, up to about three times.
+     */
+    fun drawPatternOnly(canvas: Canvas, w: Float, h: Float, clip: Rect, style: PatternStyle, strength: Float, scale: Float = 0.5f) {
+        val c = WallConfig(pattern = style, patternStrength = strength, patternSize = 0.3f, patternColor = Color.WHITE)
+        val f = Math.pow(2.0, ((scale.coerceIn(0f, 1f) - 0.5f) * 3f).toDouble()).toFloat()
+        canvas.save()
+        canvas.scale(f, f)
+        val r = Rect((clip.left / f).toInt(), (clip.top / f).toInt(), (clip.right / f).toInt() + 1, (clip.bottom / f).toInt() + 1)
+        if (style.faceted) Facets.draw(canvas, w / f, h / f, r, c) else drawPattern(canvas, w / f, h / f, c)
+        canvas.restore()
     }
 
     /** A small copy of a screen's wallpaper ([scale] of full size), for glass, previews and colors. */

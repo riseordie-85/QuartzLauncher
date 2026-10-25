@@ -67,6 +67,7 @@ import com.tim.launcher.ui.LinkState
 import com.tim.launcher.ui.NavRow
 import com.tim.launcher.ui.PanelColors
 import com.tim.launcher.ui.Q
+import com.tim.launcher.IconSlot
 import com.tim.launcher.ui.RowDivider
 import com.tim.launcher.ui.ScreenTitle
 import com.tim.launcher.ui.SectionLabel
@@ -537,7 +538,12 @@ fun DockColorControls(store: SettingsStore) {
         }
     }
     RowDivider()
-    ColorEditor(if (gradient) "Gradient from" else "Color", store[S.panelColor], open == "from", { toggle("from") }) {
+    // The main color's see-through is the glass's (the same slider as below)
+    ColorEditor(
+        if (gradient) "Gradient from" else "Color", store[S.panelColor], open == "from", { toggle("from") },
+        seeThrough = 1f - store[S.panelOpacity],
+        onSeeThrough = { store.set(S.panelOpacity, value = (1f - it).coerceAtLeast(0.05f)) },
+    ) {
         store.set(S.panelColor, value = it)
     }
     if (gradient) {
@@ -561,7 +567,7 @@ fun DockColorControls(store: SettingsStore) {
         val p = store[S.dockPatternStrength]
         SliderRow("Pattern strength", p, 0.05f..0.6f, "${(p * 100).roundToInt()}%") { store.set(S.dockPatternStrength, value = it) }
         val size = store[S.dockPatternSize]
-        SliderRow("Pattern size", size, 0f..1f, "${(size * 100).roundToInt()}%") { store.set(S.dockPatternSize, value = it) }
+        SliderRow("Pattern size", size, 0f..1f, patternSizeLabel(size)) { store.set(S.dockPatternSize, value = it) }
     }
 }
 
@@ -736,9 +742,11 @@ fun AppearanceSettings(ctx: SettingsContext) {
     }
     val draft = remember { IconDraft(store) }
     val apply = rememberIconApply(draft)
+    // The icon preview stays at the top while you scroll through the icon settings
+    val iconTab = remember { mutableStateOf(IconSlot.HOME) }
     DisposableEffect(draft) { onDispose { draft.saveQuietly() } }
     Box(Modifier.fillMaxSize()) {
-    ScreenScaffold(ctx) {
+    ScreenScaffold(ctx, pinned = { IconDraftPreview(draft, iconTab.value) }) {
         ScreenTitle("Appearance", "Icons, badges and widgets")
         Box(Modifier.fillMaxWidth().padding(top = 16.dp)) {
             DevicePreview(previewLook(store, ctx.type), height = 130.dp)
@@ -752,7 +760,7 @@ fun AppearanceSettings(ctx: SettingsContext) {
             }
         }
 
-        IconsSection(ctx, draft)
+        IconsSection(ctx, draft, tabState = iconTab, showPreview = false)
 
         BadgesSection(ctx)
 

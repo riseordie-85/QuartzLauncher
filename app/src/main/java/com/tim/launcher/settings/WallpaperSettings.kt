@@ -468,6 +468,9 @@ fun ColorEditor(
     onToggle: () -> Unit,
     /** Also offer how see-through the color is (the dock's gradient, icon plates). */
     alpha: Boolean = false,
+    /** A see-through kept somewhere else (the dock's main color uses the glass's), shown and set here too. */
+    seeThrough: Float? = null,
+    onSeeThrough: (Float) -> Unit = {},
     onChange: (Int) -> Unit,
 ) {
     // The color's see-through stays as it is while you pick a hue or a swatch
@@ -521,7 +524,9 @@ fun ColorEditor(
             SliderRow("Hue", hsv[0], 0f..360f, "${hsv[0].roundToInt()}°") { set(0, it) }
             SliderRow("Saturation", hsv[1], 0f..1f, "${(hsv[1] * 100).roundToInt()}%") { set(1, it) }
             SliderRow("Brightness", hsv[2], 0f..1f, "${(hsv[2] * 100).roundToInt()}%") { set(2, it) }
-            if (alpha) {
+            if (seeThrough != null) {
+                SliderRow("See-through", seeThrough, 0f..1f, "${(seeThrough * 100).roundToInt()}%") { onSeeThrough(it) }
+            } else if (alpha) {
                 // 0% is solid, like the glass's see-through slider
                 val clear = 1f - a / 255f
                 SliderRow("See-through", clear, 0f..1f, "${(clear * 100).roundToInt()}%") { v ->
