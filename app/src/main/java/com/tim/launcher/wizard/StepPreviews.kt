@@ -225,9 +225,11 @@ fun ScrollPreview(type: DeviceType, scroll: DrawerScroll) {
             val slide = if (local < 0.7f) 0f else (local - 0.7f) / 0.3f
             BoxWithConstraints(Modifier.fillMaxSize().padding(10.dp)) {
                 val w = maxWidth
+                // Read here: inside the Row below, the box's size isn't in reach
+                val h = maxHeight
                 Row(Modifier.wrapContentWidth(Alignment.Start, unbounded = true).offset(x = -(w * (page + slide))).width(w * (pages + 1))) {
                     repeat(pages + 1) { i ->
-                        DrawerPanel(DrawerView.ICONS, Modifier.width(w).height(maxHeight - 14.dp).padding(horizontal = 2.dp), rows = 5, cols = cols, offsetRows = (i % pages) * 0.5f)
+                        DrawerPanel(DrawerView.ICONS, Modifier.width(w).height(h - 14.dp).padding(horizontal = 2.dp), rows = 5, cols = cols, offsetRows = (i % pages) * 0.5f)
                     }
                 }
                 Row(Modifier.align(Alignment.BottomCenter), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
