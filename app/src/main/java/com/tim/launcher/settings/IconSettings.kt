@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideOutVertically
@@ -197,6 +198,13 @@ fun rememberIconApply(draft: IconDraft): IconApply {
     return apply
 }
 
+/** The icon preview for setup, pinned above the icon settings: the open tab's style as you change it. */
+@Composable
+fun IconDraftPreview(draft: IconDraft, tab: IconSlot) {
+    val slot = if (draft.get(S.iconsMatch)) IconSlot.HOME else tab
+    IconPreview(slot, IconRender.specFor(draft, slot))
+}
+
 /** Your apps drawn in [spec], over a wallpaper strip. */
 @Composable
 private fun IconPreview(slot: IconSlot, spec: IconRender.Spec) {
@@ -226,11 +234,18 @@ private fun IconPreview(slot: IconSlot, spec: IconRender.Spec) {
  * (below) apply straight away.
  */
 @Composable
-fun IconsSection(ctx: SettingsContext, draft: IconDraft) {
+fun IconsSection(
+    ctx: SettingsContext,
+    draft: IconDraft,
+    /** Which place's tab is open, when someone else shows the preview (setup pins it at the top). */
+    tabState: MutableState<IconSlot>? = null,
+    showPreview: Boolean = true,
+) {
     val store = ctx.store
     val context = LocalContext.current
     val packs by produceState(emptyList<IconPacks.Pack>()) { value = withContext(Dispatchers.IO) { IconPacks.installed(context) } }
-    var tab by remember { mutableStateOf(IconSlot.HOME) }
+    val ownTab = remember { mutableStateOf(IconSlot.HOME) }
+    var tab by (tabState ?: ownTab)
     var colorOpen by remember { mutableStateOf<String?>(null) }
     val match = draft.get(S.iconsMatch)
     val slot = if (match) IconSlot.HOME else tab
@@ -257,7 +272,7 @@ fun IconsSection(ctx: SettingsContext, draft: IconDraft) {
                 Tabs(tab, IconSlot.entries, { slotName(it) }) { tab = it }
             }
         }
-        IconPreview(slot, IconRender.specFor(draft, slot))
+        if (showPreview) IconPreview(slot, IconRender.specFor(draft, slot))
         Spacer(Modifier.height(8.dp))
         RowDivider()
         val options = listOf("") + packs.map { it.pkg }

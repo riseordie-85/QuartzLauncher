@@ -101,7 +101,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
      * the right half it's page 2, so the unfolded screen opens on pages 1 | 2 either way.
      */
     val homePage: Int
-        get() = if (homePageChoice in 0 until pages) homePageChoice else if (coverLeft) 0 else minOf(1, pages - 1)
+        get() = when {
+            homePageChoice in 0 until pages -> homePageChoice
+            // One screen (phones, tablets): the middle page, with a page either side
+            !foldable -> (pages - 1) / 2
+            coverLeft -> 0
+            else -> minOf(1, pages - 1)
+        }
+
+    private val foldable = com.tim.launcher.settings.detectDeviceType(app) == com.tim.launcher.settings.DeviceType.FOLDABLE
 
     /** True when you've picked your home page yourself (in the page overview). */
     val homePageChosen: Boolean get() = homePageChoice in 0 until pages
@@ -247,10 +255,77 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }.getOrNull()
             }
+            .plus(quartzSettings(context))
             .sortedBy { it.label.lowercase() }
     }
 
+    /** Quartz Settings as an app you can put on the home screen or dock (Quartz itself isn't listed otherwise). */
+    private fun quartzSettings(context: Application): AppEntry {
+        val icon = runCatching { context.packageManager.getApplicationIcon(context.packageName).toBitmap(ICON_PX, ICON_PX).asImageBitmap() }
+            .getOrElse { android.graphics.Bitmap.createBitmap(ICON_PX, ICON_PX, android.graphics.Bitmap.Config.ARGB_8888).asImageBitmap() }
+        return AppEntry(
+            key = StarterApps.QUARTZ_SETTINGS,
+            label = "Quartz Settings",
+            icon = icon,
+            component = ComponentName(context, com.tim.launcher.settings.SettingsActivity::class.java),
+        )
+    }
+
+    /** Android's info page for an app (storage, permissions, notifications…). */
+    fun appInfo(app: AppEntry) {
+        if (app.key == StarterApps.QUARTZ_SETTINGS) {
+            runCatching {
+                getApplication<Application>().startActivity(
+                    android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + app.component.packageName))
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }
+            return
+        }
+        runCatching { launcherApps.startAppDetailsActivity(app.component, Process.myUserHandle(), null, null) }
+            .onFailure { Diag.log("Couldn't open app info for ${app.label}: ${it.message}") }
+    }
+
+    /** False for apps that came with the phone (they can only be turned off, in app info) and for Quartz itself. */
+    fun canUninstall(key: String?): Boolean {
+        val app = apps[key ?: return false] ?: return false
+        if (app.key == StarterApps.QUARTZ_SETTINGS) return false
+        val info = runCatching { getApplication<Application>().packageManager.getApplicationInfo(app.component.packageName, 0) }.getOrNull() ?: return false
+        val system = info.flags and ApplicationInfo.FLAG_SYSTEM != 0 && info.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP == 0
+        return !system
+    }
+
+    /** Asks Android to uninstall an app (Android shows its own confirmation). Its spots clear once it's gone. */
+    fun uninstall(key: String) {
+        val app = apps[key] ?: return
+        if (!canUninstall(key)) {
+            say("${app.label} came with this device. You can turn it off in its app info.")
+            return
+        }
+        runCatching {
+            getApplication<Application>().startActivity(
+                android.content.Intent(android.content.Intent.ACTION_DELETE, android.net.Uri.parse("package:" + app.component.packageName))
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }.onFailure { say("Couldn't start uninstalling ${app.label}") }
+    }
+
+    /** Puts an app from the drawer on the page you're on (first empty spot there, then anywhere). */
+    fun addToHome(key: String) {
+        val current = currentPage * perPage
+        if (putInFirstEmpty(key, Area.COVER to (current until current + perPage))) {
+            save()
+            say("Added ${apps[key]?.label ?: "it"} to your home screen")
+        } else {
+            say("No room on your home screen")
+        }
+    }
+
     fun launch(app: AppEntry, sourceBounds: android.graphics.Rect?) {
+        if (app.key == StarterApps.QUARTZ_SETTINGS) {
+            com.tim.launcher.settings.SettingsActivity.open(getApplication<Application>())
+            return
+        }
         runCatching {
             launcherApps.startMainActivity(app.component, Process.myUserHandle(), sourceBounds, null)
         }.onFailure { Diag.log("Couldn't open ${app.label}: ${it.message}") }
@@ -488,18 +563,34 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         repeat(size) { target.add(items.getOrNull(it)) }
     }
 
+    /**
+     * A brand new home screen: your everyday apps in the dock (calls, messages, the web, the camera, email), a row
+     * of useful ones along the bottom of your home page with Quartz Settings first, and a tips card above them.
+     * The rest of your apps are in the drawer. The top of the page is left for a widget picked in setup.
+     */
     private fun fillDefaults() {
         listOf(cover, extra, dockCover, dockExtra).forEach { list -> list.indices.forEach { list[it] = null } }
         widgets.clear()
-        val keys = sortedApps.map { it.key }.iterator()
-        fun take(list: SnapshotStateList<String?>, count: Int) {
-            for (i in 0 until minOf(count, list.size)) if (keys.hasNext()) list[i] = keys.next()
+        val context = getApplication<Application>()
+        val picks = StarterApps.pick(context, apps, dockSize = minOf(5, dockCover.size), homeSize = cols)
+        picks.dock.forEachIndexed { i, k -> if (i < dockCover.size) dockCover[i] = k }
+        val base = homePage * perPage
+        // Along the bottom row, centered
+        val row = rows - 1
+        val start = (cols - picks.home.size).coerceAtLeast(0) / 2
+        picks.home.forEachIndexed { i, k -> if (start + i < cols) cover[base + row * cols + start + i] = k }
+        // The tips card just above them
+        val tipsW = if (cols >= 6) 3 else minOf(4, cols)
+        val tipsH = minOf(2, (rows - 1).coerceAtLeast(1))
+        val tipsRow = (row - tipsH).coerceAtLeast(0)
+        cellsOf(base + tipsRow * cols + (cols - tipsW) / 2, tipsW, tipsH)?.takeIf { cells -> cells.all { cover[it] == null } }?.let { cells ->
+            val id = newWidgetId()
+            widgets[id] = HomeWidget(id, WidgetKind.TIPS, tipsW, tipsH)
+            cells.forEach { cover[it] = WIDGET_PREFIX + id }
         }
-        take(cover, cols * (rows - 1))
-        take(dockCover, cols)
-        take(dockExtra, cols)
+        prefs.edit().putBoolean(Prefs.LAYOUT_READY, true).apply()
         save()
-        Diag.log("Filled a starter layout with ${sortedApps.size} apps")
+        Diag.log("Starter layout: ${picks.dock.size} apps in the dock, ${picks.home.size} on page ${homePage + 1}, and tips")
     }
 
     private fun save() {
@@ -510,7 +601,6 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             dock.indices.forEach { i -> val k = packed.getOrNull(i); if (dock[i] != k) dock[i] = k }
         }
         prefs.edit()
-            .putBoolean(Prefs.LAYOUT_READY, true)
             .putString(Prefs.L_COVER, join(cover))
             .putString(Prefs.L_EXTRA, join(extra))
             .putString(Prefs.L_DOCK_COVER, join(dockCover))
@@ -971,11 +1061,30 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         if (!prefs.getBoolean(Prefs.LAYOUT_READY, false)) return
         val pending = prefs.getString(Prefs.PENDING_WIDGETS, null)?.takeIf { it.isNotEmpty() } ?: return
         prefs.edit().remove(Prefs.PENDING_WIDGETS).apply()
-        pending.split(",").mapNotNull { name -> WidgetKind.quartz.firstOrNull { it.name == name } }.forEach { kind ->
-            if (widgets.values.none { it.kind == kind } && !addWidget(kind, homePage, makeRoom = true)) {
+        pending.split(",").mapNotNull { name -> WidgetKind.forSetup.firstOrNull { it.name == name } }.forEach { kind ->
+            if (widgets.values.none { it.kind == kind } && !addSetupWidget(kind) && !addWidget(kind, homePage, makeRoom = true)) {
                 say("No room on your home page for the ${kind.label.lowercase()}. Long-press an empty spot and tap Widgets to add it.")
             }
         }
+    }
+
+    /**
+     * The widget picked in setup, across the top of your home page: the middle three columns and top three rows on
+     * a tablet (columns 3 to 5 of 7), the full width on a phone. False if those cells aren't free.
+     */
+    private fun addSetupWidget(kind: WidgetKind): Boolean {
+        val tablet = cols >= 6
+        val w = if (tablet) 3 else minOf(kind.w, cols)
+        val h = minOf(if (tablet && kind == WidgetKind.FLIP_WEATHER) 3 else kind.h, rows)
+        val c = (cols - w) / 2
+        val cells = cellsOf(homePage * perPage + c, w, h) ?: return false
+        if (cells.any { cover[it] != null }) return false
+        val id = newWidgetId()
+        widgets[id] = HomeWidget(id, kind, w, h)
+        cells.forEach { cover[it] = WIDGET_PREFIX + id }
+        save()
+        Diag.log("Added the ${kind.label.lowercase()} from setup to your home page")
+        return true
     }
 
     /** Where a widget's top-left would go when dropped with its corner over [index]: pulled in so it stays on the page. */

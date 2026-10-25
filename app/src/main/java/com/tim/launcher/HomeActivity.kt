@@ -17,6 +17,9 @@ import androidx.compose.runtime.setValue
 import com.tim.launcher.settings.S
 import com.tim.launcher.settings.SettingsActivity
 import com.tim.launcher.settings.SettingsStore
+import com.tim.launcher.settings.SetupNag
+import com.tim.launcher.settings.detectDeviceType
+import com.tim.launcher.settings.ensureGridDefaults
 
 class HomeActivity : ComponentActivity() {
 
@@ -29,6 +32,8 @@ class HomeActivity : ComponentActivity() {
         val displayId = runCatching { display?.displayId }.getOrNull() ?: -1
         Diag.log("Home created (#${Diag.activityCreates}) on display $displayId")
 
+        SettingsStore.get(this).ensureGridDefaults(detectDeviceType(this))
+
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
@@ -40,16 +45,18 @@ class HomeActivity : ComponentActivity() {
             }
         }
 
-        // First launch: run setup once
-        if (savedInstanceState == null && !wizardShown && !SettingsStore.get(this)[S.wizardDone]) {
-            wizardShown = true
-            SettingsActivity.open(this, wizard = true)
-        }
     }
 
-    companion object {
-        /** Only offer setup once per launch of the app, even if the home screen is recreated. */
-        private var wizardShown = false
+    override fun onResume() {
+        super.onResume()
+        // Until setup is finished it comes back, at the step you were on (see SetupNag)
+        val store = SettingsStore.get(this)
+        if (!store[S.wizardDone] && SetupNag.due()) {
+            SetupNag.opened()
+            // A setup window left behind (Android brought the home screen forward, say) is replaced, not doubled
+            SetupNag.current?.get()?.takeIf { !it.isFinishing }?.finish()
+            SettingsActivity.open(this, wizard = true)
+        }
     }
 
     // App widgets update while the home screen is on screen

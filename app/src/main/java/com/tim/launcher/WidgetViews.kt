@@ -4,10 +4,12 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -166,6 +168,8 @@ fun WidgetView(kind: WidgetKind, modifier: Modifier = Modifier, sample: Boolean 
             }
 
             WidgetKind.ANDROID -> Unit // drawn by its app (see AppWidgetBox)
+
+            WidgetKind.TIPS -> TipsCard(w, h, ink, accent, live = !sample)
         }
     }
     }
@@ -370,6 +374,51 @@ private fun Face(text: String, color: Color, shade: Float) {
         // Outfit's digits are a little over half as wide as they're tall
         val size = minOf(maxHeight * 0.66f, maxWidth * 0.8f / (0.58f * maxOf(2, text.length)))
         WText(text, size, Color.White, FontWeight.ExtraBold)
+    }
+}
+
+/**
+ * Quartz tips: the card every new home screen starts with, pointing at the long-press menu and its three most
+ * useful places. Remove it from its own hold menu once you know your way around.
+ */
+@Composable
+private fun TipsCard(w: Dp, h: Dp, ink: Color, accent: Color, live: Boolean) {
+    val context = LocalContext.current
+    WidgetCard(Modifier.fillMaxSize())
+    val base = minOf(h, w * 0.5f)
+    val pad = base * 0.1f
+    Column(
+        Modifier.fillMaxSize().padding(horizontal = pad * 1.4f, vertical = pad),
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceEvenly,
+    ) {
+        WText("Welcome to Quartz", base * 0.15f, ink, FontWeight.Medium)
+        Text(
+            "Long-press an empty spot on your home screen any time for widgets, wallpaper, setup and settings.",
+            color = ink.copy(alpha = ink.alpha * 0.8f),
+            fontSize = with(LocalDensity.current) { (base * 0.085f).toSp() },
+            lineHeight = with(LocalDensity.current) { (base * 0.11f).toSp() },
+            fontFamily = Outfit,
+            fontWeight = FontWeight.Light,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(pad * 0.6f)) {
+            listOf(
+                "Wallpaper" to { com.tim.launcher.settings.SettingsActivity.open(context, route = com.tim.launcher.settings.Route.WALLPAPER) },
+                "Setup" to { com.tim.launcher.settings.SettingsActivity.open(context, wizard = true) },
+                "Customize" to { com.tim.launcher.settings.SettingsActivity.open(context) },
+            ).forEach { (label, open) ->
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(base * 0.2f)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(accent.copy(alpha = 0.85f))
+                        .then(if (live) Modifier.clickable { open() } else Modifier),
+                    contentAlignment = Alignment.Center,
+                ) { WText(label, base * 0.085f, Color.White, FontWeight.Medium) }
+            }
+        }
     }
 }
 

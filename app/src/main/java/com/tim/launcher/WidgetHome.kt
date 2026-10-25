@@ -561,6 +561,7 @@ private fun QuartzWidgetHostView.snapshot(cropToContent: Boolean): Bitmap {
 
 /** Tapping a widget: the clock opens your alarms; weather that isn't set up yet opens its settings. */
 private fun widgetTap(context: Context, kind: WidgetKind) {
+    if (kind == WidgetKind.TIPS) return // its buttons do the work
     if (kind.weather && Weather.now == null) {
         SettingsActivity.open(context, route = Route.WIDGETS)
         return
@@ -743,7 +744,7 @@ internal fun WidgetMenu(
             }
             MenuRow("Change style", Icons.Rounded.Palette) { styles = !styles }
             if (styles) {
-                WidgetKind.quartz.filter { it != widget.kind }.forEach { kind ->
+                WidgetKind.quartz.filter { it != widget.kind && it != WidgetKind.TIPS }.forEach { kind ->
                     Text(
                         kind.label,
                         color = Q.Text,
@@ -830,6 +831,7 @@ internal fun WidgetPicker(
                         WidgetKind.FLIP_WEATHER -> 1.89f
                         WidgetKind.WEATHER -> 4.16f
                         WidgetKind.ANDROID -> 2f
+                        WidgetKind.TIPS -> 2.4f
                     }
                     // Room above for the parts that rise out of the card
                     Spacer(Modifier.height(if (kind == WidgetKind.WEATHER) 14.dp else 4.dp))

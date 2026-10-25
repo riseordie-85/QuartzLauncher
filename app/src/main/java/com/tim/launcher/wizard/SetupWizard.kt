@@ -32,6 +32,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -71,9 +72,10 @@ import com.tim.launcher.settings.S
 import com.tim.launcher.settings.SettingsContext
 import com.tim.launcher.settings.BadgesSection
 import com.tim.launcher.settings.IconsSection
+import com.tim.launcher.IconSlot
+import com.tim.launcher.settings.IconDraftPreview
 import com.tim.launcher.Prefs
 import com.tim.launcher.WidgetKind
-import com.tim.launcher.settings.WidgetPreview
 import com.tim.launcher.settings.WeatherControls
 import com.tim.launcher.settings.IconDraft
 import com.tim.launcher.settings.rememberIconApply
@@ -138,7 +140,7 @@ private enum class Step(val title: String, val preview: Boolean = true) {
     DRAWER_ICONS("How should the app list scroll?"),
     DRAWER_STYLE("How should your app drawer open up?"),
     FUNCTION_DONE("You've finished the basics", preview = false),
-    DOCK_STYLE("Let's start with the dock"),
+    DOCK_STYLE("Style your dock"),
     WALLPAPER("Pick a wallpaper", preview = false),
     COLOR("What's your favorite color, and can we see through it?"),
     ICONS("You can style your icons"),
@@ -153,12 +155,23 @@ private enum class Step(val title: String, val preview: Boolean = true) {
 @Composable
 fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
     val context = LocalContext.current
-    var step by remember { mutableStateOf(Step.WELCOME) }
-    var path by remember { mutableStateOf(Path.WIZARD) }
-    var customize by remember { mutableStateOf<Boolean?>(null) }
+    // Pick up where you left off (setup comes back until it's finished)
+    var step by remember {
+        val saved = Step.entries.firstOrNull { it.name == store[S.wizardStep] } ?: Step.WELCOME
+        // Back from making Quartz the home screen: that's done, so on to the next question
+        mutableStateOf(if (saved == Step.HOME_APP && isDefaultHome(context)) Step.PATH else saved)
+    }
+    var path by remember { mutableStateOf(Path.entries.firstOrNull { it.name == store[S.wizardPath] } ?: Path.WIZARD) }
+    var customize by remember { mutableStateOf(store[S.wizardCustomize].toBooleanStrictOrNull()) }
+    LaunchedEffect(step, path, customize) {
+        store.set(S.wizardStep, value = step.name)
+        store.set(S.wizardPath, value = path.name)
+        store.set(S.wizardCustomize, value = customize?.toString() ?: "")
+    }
     var forward by remember { mutableStateOf(true) }
     val foldable = type == DeviceType.FOLDABLE
     val iconDraft = remember { IconDraft(store) }
+    val iconTab = remember { mutableStateOf(IconSlot.HOME) }
     val iconApply = rememberIconApply(iconDraft)
 
     val steps = buildList {
@@ -189,7 +202,6 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
             if (customize == true) {
                 add(Step.DOCK_STYLE)
                 add(Step.WALLPAPER)
-                add(Step.COLOR)
                 add(Step.ICONS)
                 add(Step.WIDGETS)
             }
@@ -210,6 +222,10 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
     }
     fun finish() {
         store.set(S.wizardDone, value = true)
+        // Next time it's run, it starts from the beginning
+        store.set(S.wizardStep, value = "")
+        store.set(S.wizardPath, value = "")
+        store.set(S.wizardCustomize, value = "")
         // The widget you picked goes on your home page when it next shows
         if ((path == Path.RECOMMENDED || Step.WIDGETS in steps) && store[S.widgets].isNotBlank()) {
             Prefs.get(context).edit().putString(Prefs.PENDING_WIDGETS, store[S.widgets]).apply()
@@ -249,12 +265,22 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
             }
         }
 
-        if (step.preview) {
-            DevicePreview(
-                previewLook(store, type),
-                height = if (tall) 170.dp else 130.dp,
-                modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
-            )
+        // Pinned above the questions: a picture of what this step changes, kept in view while you scroll
+        when (step) {
+            Step.DOCK_STYLE -> DockSample(store, Modifier.padding(top = 8.dp, bottom = 12.dp))
+            Step.ICONS -> Box(Modifier.widthIn(max = 640.dp).padding(bottom = 8.dp)) { IconDraftPreview(iconDraft, iconTab.value) }
+            Step.DRAWER_SWIPE -> SwipePreview(type, GestureSlotsForDrawer.firstOrNull { store[S.gesture(it)] == GestureAction.APP_DRAWER })
+            Step.DRAWER_VIEW -> DrawerViewPreview(type, store[S.drawerView])
+            Step.DRAWER_ICONS -> ScrollPreview(type, store[S.drawerScroll])
+            Step.DRAWER_STYLE -> OpenStylePreview(type, store[S.drawerStyle, type.primary])
+            Step.WIDGETS -> HomeWidgetPreview(store, type, WidgetKind.forSetup.firstOrNull { it.name == store[S.widgets] })
+            else -> if (step.preview) {
+                DevicePreview(
+                    previewLook(store, type),
+                    height = if (tall) 170.dp else 130.dp,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
+                )
+            }
         }
 
         AnimatedContent(
@@ -280,6 +306,7 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
                     store = store,
                     type = type,
                     iconDraft = iconDraft,
+                    iconTab = iconTab,
                     onPath = { chosen ->
                         path = chosen
                         when (chosen) {
@@ -349,6 +376,7 @@ private fun ColumnScope.StepContent(
     store: SettingsStore,
     type: DeviceType,
     iconDraft: IconDraft,
+    iconTab: androidx.compose.runtime.MutableState<IconSlot>,
     onPath: (Path) -> Unit,
     onCustomize: (Boolean) -> Unit,
 ) {
@@ -618,11 +646,22 @@ private fun ColumnScope.StepContent(
         }
 
         Step.DOCK_STYLE -> {
-            DockSample(store, gap)
+            // The same choices as Settings › Dock › Style: shape, edge light, then color and glass
+            BodyText("Color and glass are shared by the dock and the app drawer, so they match.")
+            Spacer(Modifier.height(12.dp))
             val on = store[S.dockBackground]
             ChoiceCard("Glass", "A frosted panel behind your dock icons", on, gap) { store.set(S.dockBackground, value = true) }
             ChoiceCard("No background", "Icons float on the wallpaper", !on, gap) { store.set(S.dockBackground, value = false) }
-            if (on) GlassPanel(gap) { DockStyleControls(store) }
+            if (on) {
+                GlassPanel(gap) { DockStyleControls(store) }
+                GlassPanel(gap) { DockColorControls(store) }
+            } else {
+                GlassPanel(gap) {
+                    SwatchRow(store[S.panelColor], PanelColors) { store.set(S.panelColor, value = it) }
+                    RowDivider()
+                    GlassSliders(store)
+                }
+            }
         }
 
         Step.WALLPAPER -> {
@@ -672,17 +711,16 @@ private fun ColumnScope.StepContent(
             BodyText("Icon packs, a shape, and one-color or plated icons. \"Match everywhere\" keeps the dock, home screen and drawer the same.")
             // Going back keeps changes you haven't applied
             DisposableEffect(iconDraft) { onDispose { iconDraft.saveQuietly() } }
-            IconsSection(ctx, iconDraft)
+            IconsSection(ctx, iconDraft, tabState = iconTab, showPreview = false)
             BadgesSection(ctx)
         }
 
         Step.WIDGETS -> {
-            val chosen = WidgetKind.quartz.firstOrNull { it.name == store[S.widgets] }
+            val chosen = WidgetKind.forSetup.firstOrNull { it.name == store[S.widgets] }
             BodyText("Pick one for your home page. Later you can add more, move them and resize them: long-press an empty spot and tap Widgets.")
             Spacer(Modifier.height(12.dp))
-            if (chosen != null) WidgetPreview(store, chosen)
             ChoiceCard("No widget for now", null, chosen == null, gap) { store.set(S.widgets, value = "") }
-            WidgetKind.quartz.forEach { kind ->
+            WidgetKind.forSetup.forEach { kind ->
                 ChoiceCard(kind.label, kind.about, chosen == kind, gap) { store.set(S.widgets, value = kind.name) }
             }
             if (chosen?.weather == true) {
@@ -704,6 +742,9 @@ private fun ColumnScope.StepContent(
         }
     }
 }
+
+/** The swipes the app drawer can be opened with, in the order setup offers them. */
+private val GestureSlotsForDrawer = listOf(GestureSlot.SWIPE_UP, GestureSlot.SWIPE_DOWN, GestureSlot.SWIPE_PAST_LEFT, GestureSlot.SWIPE_PAST_RIGHT)
 
 @Composable
 private fun GridSteppers(cols: Int, rows: Int, maxCols: Int = 8, onCols: (Int) -> Unit, onRows: (Int) -> Unit) {

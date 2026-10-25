@@ -649,6 +649,9 @@ private fun DrawerItem(
                     if (carrying) {
                         drag.drop(vm)
                         onClose()
+                    } else {
+                        // Held and let go without carrying it off: its menu (app info, uninstall, add to home)
+                        drag.appMenu = app.key to null
                     }
                 },
                 onDragCancel = {

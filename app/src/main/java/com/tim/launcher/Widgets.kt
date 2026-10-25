@@ -22,6 +22,7 @@ enum class WidgetKind(
     FLIP("Flip clock", "Cards that flip over as the minutes change", 4, 2, 2, 2, false),
     FLIP_WEATHER("Flip clock and weather", "The flip clock with today's weather under it", 4, 3, 3, 2, true),
     WEATHER("Weather", "Today's weather in a slim bar", 4, 1, 2, 1, true),
+    TIPS("Quartz tips", "Where to find wallpaper, setup and customizing", 4, 2, 2, 2, false),
 
     /** A widget from another app (Calendar, Gmail, a music player…), hosted by Quartz. Its sizes come from the app. */
     ANDROID("App widget", "A widget from one of your apps", 2, 2, 1, 1, false);
@@ -29,6 +30,9 @@ enum class WidgetKind(
     companion object {
         /** Quartz's own widgets, for pickers and "Change style". */
         val quartz: List<WidgetKind> get() = entries.filter { it != ANDROID }
+
+        /** The ones to choose from for your home page in setup (tips come with every new home screen anyway). */
+        val forSetup: List<WidgetKind> get() = entries.filter { it != ANDROID && it != TIPS }
     }
 }
 

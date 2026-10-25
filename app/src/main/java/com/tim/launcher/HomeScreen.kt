@@ -267,16 +267,23 @@ class DragController {
 
     val bounds = HashMap<SlotRef, Rect>()
 
-    /** Where the "Remove from home" target sits while it's showing. */
+    /** Where the "Remove from home" and "Uninstall" targets sit while they're showing. */
     var removeZone: Rect = Rect.Zero
+    var uninstallZone: Rect = Rect.Zero
+
+    /** An app held and let go without moving: its menu (and the slot it's in, or null from the drawer). */
+    var appMenu by mutableStateOf<Pair<String, SlotRef?>?>(null)
 
     val active: Boolean get() = key != null
 
     val overRemove: Boolean
         get() = active && removeZone != Rect.Zero && removeZone.inflate(24f).contains(pointer)
 
+    val overUninstall: Boolean
+        get() = active && uninstallZone != Rect.Zero && uninstallZone.inflate(24f).contains(pointer)
+
     val hover: SlotRef?
-        get() = if (!active || overRemove) null else bounds.entries.firstOrNull { it.value.contains(pointer) }?.key
+        get() = if (!active || overRemove || overUninstall) null else bounds.entries.firstOrNull { it.value.contains(pointer) }?.key
 
     fun start(ref: SlotRef, key: String, at: Offset) {
         begin(key, at)
@@ -359,6 +366,8 @@ class DragController {
         if (carried != null) lastSlot.remove(carried)
         when {
             carried == null -> Unit
+            // Dropped on Uninstall: Android asks to confirm; the icon stays put meanwhile
+            overUninstall -> vm.uninstall(carried)
             overRemove -> when {
                 from != null -> vm.remove(from)
                 folder != null -> vm.takeOutOfFolder(folder, carried)
@@ -598,6 +607,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         overviewOpen = false
         widgetPicker = false
         drag.widgetMenu = null
+        drag.appMenu = null
         drag.resizing = null
     }
     BackHandler {
@@ -608,6 +618,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         overviewOpen = false
         widgetPicker = false
         drag.widgetMenu = null
+        drag.appMenu = null
         drag.resizing = null
     }
 
@@ -615,7 +626,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
     // icons slide over to make room for it.
     val haptics = LocalHapticFeedback.current
     val hoverAt by remember { derivedStateOf { drag.hover?.let { it to drag.zone(it) } } }
-    val overRemove by remember { derivedStateOf { drag.overRemove } }
+    val overRemove by remember { derivedStateOf { drag.overRemove || drag.overUninstall } }
     LaunchedEffect(hoverAt, drag.key, overRemove) {
         drag.folderTarget = null
         val carried = drag.key ?: return@LaunchedEffect
@@ -831,7 +842,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             }
         }
 
-        if (drag.active) RemoveZone(drag)
+        if (drag.active) RemoveZone(drag, canUninstall = vm.canUninstall(drag.key))
 
         // A widget being moved: where it would land, and the widget under your finger
         drag.key?.let { carried -> vm.widgetFor(carried)?.let { CarriedWidget(it, vm, drag) } }
@@ -954,6 +965,36 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             }
         }
 
+        drag.appMenu?.let { (key, ref) ->
+            val app = vm.apps[key]
+            if (app == null) {
+                LaunchedEffect(key) { drag.appMenu = null }
+            } else {
+                AppMenu(
+                    app = app,
+                    canUninstall = vm.canUninstall(key),
+                    onHome = ref != null,
+                    onInfo = {
+                        drag.appMenu = null
+                        vm.appInfo(app)
+                    },
+                    onUninstall = {
+                        drag.appMenu = null
+                        vm.uninstall(key)
+                    },
+                    onRemove = {
+                        drag.appMenu = null
+                        ref?.let { vm.remove(it) }
+                    },
+                    onAddToHome = {
+                        drag.appMenu = null
+                        vm.addToHome(key)
+                    },
+                    onDismiss = { drag.appMenu = null },
+                )
+            }
+        }
+
         if (drag.resizing != null) {
             if (drag.resizing?.let { vm.widgets[it] } == null) LaunchedEffect(Unit) { drag.resizing = null }
             ResizeBar(onDone = { drag.resizing = null })
@@ -998,27 +1039,43 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
 
 /** Shown at the top while dragging. Dropping a home icon here takes it off the home screen (it stays installed). */
 @Composable
-private fun RemoveZone(drag: DragController) {
-    val hovering = drag.overRemove
+private fun RemoveZone(drag: DragController, canUninstall: Boolean) {
     val label = if (drag.fromDrawer) "Cancel" else "Remove from home"
     DisposableEffect(Unit) {
-        onDispose { drag.removeZone = Rect.Zero }
+        onDispose {
+            drag.removeZone = Rect.Zero
+            drag.uninstallZone = Rect.Zero
+        }
     }
-    Box(
+    if (!canUninstall) {
+        SideEffect { drag.uninstallZone = Rect.Zero }
+    }
+    Row(
         Modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.systemBars)
             .padding(top = 8.dp),
-        contentAlignment = Alignment.TopCenter,
+        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
     ) {
         Box(
             Modifier
                 .onGloballyPositioned { drag.removeZone = it.boundsInRoot() }
                 .clip(RoundedCornerShape(24.dp))
-                .background(if (hovering) Color(0xFFD9443B) else Color(0xCC1A1A22))
+                .background(if (drag.overRemove) Color(0xFFD9443B) else Color(0xCC1A1A22))
                 .padding(horizontal = 28.dp, vertical = 14.dp),
         ) {
             Text("✕  $label", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+        }
+        if (canUninstall) {
+            Box(
+                Modifier
+                    .onGloballyPositioned { drag.uninstallZone = it.boundsInRoot() }
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(if (drag.overUninstall) Color(0xFFD9443B) else Color(0xCC1A1A22))
+                    .padding(horizontal = 28.dp, vertical = 14.dp),
+            ) {
+                Text("🗑  Uninstall", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            }
         }
     }
 }
@@ -1178,9 +1235,11 @@ internal fun Cell(
             )
         }
         .pointerInput(ref, gestureKey) {
+            var moved = 0f
             detectDragGesturesAfterLongPress(
                 onDragStart = { local ->
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    moved = 0f
                     val origin = drag.bounds[ref]?.topLeft ?: Offset.Zero
                     // bounds are measured outside the 2.dp padding; `local` is inside it
                     val pad = 2.dp.toPx()
@@ -1188,9 +1247,18 @@ internal fun Cell(
                 },
                 onDrag = { change, amount ->
                     change.consume()
+                    moved += amount.getDistance()
                     drag.moveBy(amount)
                 },
-                onDragEnd = { drag.drop(vm) },
+                onDragEnd = {
+                    // Held and let go without moving: an app's menu (app info, uninstall, remove)
+                    if (moved < viewConfiguration.touchSlop * 2 && gestureApp != null) {
+                        drag.cancel()
+                        drag.appMenu = gestureApp.key to ref
+                    } else {
+                        drag.drop(vm)
+                    }
+                },
                 onDragCancel = { drag.cancel() },
             )
         }

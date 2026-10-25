@@ -285,6 +285,10 @@ object S {
 
     // Setup
     val wizardDone = Setting("setup.wizardDone", false, BoolCodec)
+    /** Where you were in setup (a step's name, and the path and customize choices), so it picks up from there. */
+    val wizardStep = Setting("setup.step", "", StringCodec)
+    val wizardPath = Setting("setup.path", "", StringCodec)
+    val wizardCustomize = Setting("setup.customize", "", StringCodec)
 
     fun gesture(slot: GestureSlot) = gestures.getValue(slot)
 
@@ -463,6 +467,37 @@ fun SettingsStore.dockPositionOn(scope: Scope): DockPosition {
         DockPosition.LEFT -> DockPosition.RIGHT
         DockPosition.RIGHT -> DockPosition.LEFT
         DockPosition.NONE -> DockPosition.NONE
+    }
+}
+
+/** A tablet starts with a 7 × 6 grid (set for landscape) until you choose your own. */
+fun SettingsStore.ensureGridDefaults(type: DeviceType) {
+    if (type == DeviceType.TABLET && owner(S.gridCols, Scope.TABLET) == null) {
+        setAt(S.gridCols, Scope.TABLET, 7)
+        setAt(S.gridRows, Scope.TABLET, 6)
+    }
+}
+
+/**
+ * Setup keeps coming back until it's finished: whenever the home screen shows, unless you backed out of it in the
+ * last minute (so you can step away briefly, to answer a message or allow something).
+ */
+object SetupNag {
+    private var lastOpened = 0L
+    private var backedOutAt = -60_000L
+    var current: java.lang.ref.WeakReference<android.app.Activity>? = null
+
+    fun due(): Boolean {
+        val now = android.os.SystemClock.elapsedRealtime()
+        return now - lastOpened > 3_000 && now - backedOutAt > 60_000
+    }
+
+    fun opened() {
+        lastOpened = android.os.SystemClock.elapsedRealtime()
+    }
+
+    fun backedOut() {
+        backedOutAt = android.os.SystemClock.elapsedRealtime()
     }
 }
 

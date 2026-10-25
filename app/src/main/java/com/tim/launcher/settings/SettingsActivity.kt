@@ -50,6 +50,8 @@ class SettingsActivity : ComponentActivity() {
         }
         val store = SettingsStore.get(this).also { it.migrateDockShape() }
         val type = detectDeviceType(this)
+        store.ensureGridDefaults(type)
+        if (start == Route.WIZARD) SetupNag.current = java.lang.ref.WeakReference(this)
 
         setContent {
             QuartzTheme {
@@ -59,7 +61,13 @@ class SettingsActivity : ComponentActivity() {
                     stack = stack + route
                 }
                 fun back() {
-                    if (stack.size > 1) stack = stack.dropLast(1) else finish()
+                    if (stack.size > 1) {
+                        stack = stack.dropLast(1)
+                    } else {
+                        // Backing out of unfinished setup: give it a minute before it comes back
+                        if (start == Route.WIZARD && !store[S.wizardDone]) SetupNag.backedOut()
+                        finish()
+                    }
                 }
                 BackHandler { back() }
 

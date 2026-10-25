@@ -73,7 +73,7 @@ fun WidgetSettings(ctx: SettingsContext) {
     var previewKind by remember { mutableStateOf(WidgetKind.FLIP_WEATHER) }
 
     ScreenScaffold(ctx, pinned = {
-        Tabs(previewKind, WidgetKind.quartz, { shortName(it) }, Modifier.padding(top = 4.dp)) { previewKind = it }
+        Tabs(previewKind, WidgetKind.forSetup, { shortName(it) }, Modifier.padding(top = 4.dp)) { previewKind = it }
         WidgetPreview(store, previewKind)
     }) {
         ScreenTitle("Widgets", "Clocks and weather for your home screen")
@@ -139,6 +139,7 @@ private fun shortName(kind: WidgetKind) = when (kind) {
     WidgetKind.FLIP_WEATHER -> "Flip + weather"
     WidgetKind.WEATHER -> "Weather"
     WidgetKind.ANDROID -> "App"
+    WidgetKind.TIPS -> "Tips"
 }
 
 /** A widget as it'll look on your home screen, with your glass, dock style and colors. */
