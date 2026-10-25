@@ -87,6 +87,7 @@ import androidx.compose.ui.unit.sp
 import com.tim.launcher.settings.DrawerScroll
 import com.tim.launcher.settings.DrawerSort
 import com.tim.launcher.settings.DrawerStyle
+import com.tim.launcher.settings.DockEdge
 import com.tim.launcher.settings.DrawerView
 import com.tim.launcher.settings.Route
 import com.tim.launcher.settings.SettingsActivity
@@ -175,6 +176,8 @@ fun AppDrawer(vm: HomeViewModel, drag: DragController, look: DrawerLook, startWi
             Box(
                 panel
                     .glass(if (full) RectangleShape else PanelShape, home.drawerBg)
+                    // The same edge light as the dock (none when the dock has no background)
+                    .edgeLight(if (full) RectangleShape else PanelShape, if (home.dock.background) home.dock.edge else DockEdge.NONE, ink)
                     // Taps inside don't close it, and long-presses don't reach the home screen underneath
                     .pointerInput(Unit) { detectTapGestures { } }
                     .then(if (full) Modifier.windowInsetsPadding(WindowInsets.systemBars.only(look.edges)) else Modifier),

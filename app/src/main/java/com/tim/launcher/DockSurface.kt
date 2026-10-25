@@ -295,37 +295,49 @@ fun Modifier.dockSurface(style: DockStyle, tint: Color, edge: DockPosition, ink:
                 drawRect(mask, blendMode = BlendMode.DstIn)
                 return@drawBehind
             }
-            val outline = shape.createOutline(size, layoutDirection, this)
-            val px = 1.dp.toPx()
-            val lightGlass = ink.luminance() < 0.5f
-            when (style.edge) {
-                DockEdge.NONE -> Unit
-                DockEdge.HAIRLINE -> drawOutline(outline, ink.copy(alpha = 0.22f), style = Stroke(px * 2f))
-                DockEdge.SOFT, DockEdge.BRIGHT -> {
-                    val bright = style.edge == DockEdge.BRIGHT
-                    val k = if (bright) 1f else 0.55f
-                    // On light glass a faint dark line keeps the edge visible under the white rim
-                    if (lightGlass) drawOutline(outline, Color.Black.copy(alpha = 0.10f), style = Stroke(px * 2f))
-                    fun w(a: Float) = Color.White.copy(alpha = (a * k).coerceIn(0f, 1f))
-                    // Brightest around the top-left corner, a second glint at the bottom right, dimmer between. Runs
-                    // corner to corner, so a long dock gets its light on the curved ends rather than mid-edge.
-                    val rim = Brush.linearGradient(
-                        0f to w(0.95f),
-                        0.3f to w(0.32f),
-                        0.5f to w(0.15f),
-                        0.75f to w(0.30f),
-                        1f to w(0.75f),
-                        start = Offset.Zero,
-                        end = Offset(size.width, size.height),
-                    )
-                    drawOutline(outline, rim, style = Stroke(px * if (bright) 3.2f else 2.4f))
-                    if (bright) {
-                        // A soft sheen along the top, as if the glass were curved
-                        drawRect(
-                            Brush.verticalGradient(0f to Color.White.copy(alpha = 0.14f), 0.45f to Color.Transparent),
-                        )
-                    }
-                }
-            }
+            drawEdgeLight(shape.createOutline(size, layoutDirection, this), style.edge, ink)
         }
 }
+
+
+/**
+ * The edge of a glass panel: a hairline, or a rim of light brightest at the top left with a glint at the bottom
+ * right, like light catching the edge of glass. Shared by the dock and the app drawer, so they always match.
+ */
+fun androidx.compose.ui.graphics.drawscope.DrawScope.drawEdgeLight(outline: Outline, edge: DockEdge, ink: Color) {
+    val px = 1.dp.toPx()
+    val lightGlass = ink.luminance() < 0.5f
+    when (edge) {
+        DockEdge.NONE -> Unit
+        DockEdge.HAIRLINE -> drawOutline(outline, ink.copy(alpha = 0.22f), style = Stroke(px * 2f))
+        DockEdge.SOFT, DockEdge.BRIGHT -> {
+            val bright = edge == DockEdge.BRIGHT
+            val k = if (bright) 1f else 0.55f
+            // On light glass a faint dark line keeps the edge visible under the white rim
+            if (lightGlass) drawOutline(outline, Color.Black.copy(alpha = 0.10f), style = Stroke(px * 2f))
+            fun w(a: Float) = Color.White.copy(alpha = (a * k).coerceIn(0f, 1f))
+            // Brightest around the top-left corner, a second glint at the bottom right, dimmer between. Runs
+            // corner to corner, so a long dock gets its light on the curved ends rather than mid-edge.
+            val rim = Brush.linearGradient(
+                0f to w(0.95f),
+                0.3f to w(0.32f),
+                0.5f to w(0.15f),
+                0.75f to w(0.30f),
+                1f to w(0.75f),
+                start = Offset.Zero,
+                end = Offset(size.width, size.height),
+            )
+            drawOutline(outline, rim, style = Stroke(px * if (bright) 3.2f else 2.4f))
+            if (bright) {
+                // A soft sheen along the top, as if the glass were curved
+                drawRect(
+                    Brush.verticalGradient(0f to Color.White.copy(alpha = 0.14f), 0.45f to Color.Transparent),
+                )
+            }
+        }
+    }
+}
+
+/** The dock's edge light around any panel (the app drawer uses it to match the dock). */
+fun Modifier.edgeLight(shape: Shape, edge: DockEdge, ink: Color): Modifier =
+    if (edge == DockEdge.NONE) this else drawBehind { drawEdgeLight(shape.createOutline(size, layoutDirection, this), edge, ink) }
