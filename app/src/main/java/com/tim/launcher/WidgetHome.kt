@@ -372,6 +372,8 @@ private fun AppWidgetBox(
                 }
             },
             modifier = Modifier.fillMaxSize(),
+            // Android keeps the last view made for each widget, so let go of the home screen's callbacks
+            onRelease = { v -> (v as? QuartzWidgetHostView)?.release() },
             update = { v ->
                 val host = v as? QuartzWidgetHostView ?: return@AndroidView
                 host.holdEnabled = holdEnabled

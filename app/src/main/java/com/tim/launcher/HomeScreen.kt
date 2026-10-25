@@ -4,6 +4,7 @@ package com.tim.launcher
 
 import android.app.Activity
 import android.os.SystemClock
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -100,6 +101,7 @@ import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.delay
 import android.content.pm.ActivityInfo
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.tim.launcher.settings.DockAlign
 import com.tim.launcher.settings.DockLength
@@ -378,6 +380,7 @@ class DragController {
         fromDrawer = false
         fromFolder = null
         folderTarget = null
+        widgetSnapshot = null
     }
 }
 
@@ -869,7 +872,11 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
                         Toast.makeText(activity, "No room on this page for that widget. Make some space, or try another page.", Toast.LENGTH_LONG).show()
                     } else {
                         widgetPicker = false
-                        AppWidgets.add(activity, info) { id -> vm.addAppWidget(page, id, info.provider.flattenToString(), spans) }
+                        AppWidgets.add(activity, info) { home, id ->
+                            // The home screen may have been recreated while Android's screens showed: use the one now
+                            val now = (home as? ComponentActivity)?.let { ViewModelProvider(it).get(HomeViewModel::class.java) } ?: vm
+                            now.addAppWidget(page, id, info.provider.flattenToString(), spans)
+                        }
                     }
                 },
                 sizeOf = { info ->

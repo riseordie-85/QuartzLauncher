@@ -398,12 +398,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         fill(dockExtra, savedExtra, if (savedExtra.isEmpty()) cols else savedExtra.size)
         restoreFolders()
         widgets.clear()
+        val app = getApplication<Application>()
+        val shown = HashSet<Int>()
         WidgetJson.read(prefs.getString(Prefs.L_WIDGETS, null)).forEach { w ->
             // An app's widget is only kept if Android still has it (not one from another device's profile, or an
-            // app that's gone)
-            if (w.kind == WidgetKind.ANDROID) {
-                val info = AppWidgets.info(getApplication<Application>(), w.appWidgetId)
-                if (info == null || info.provider.flattenToString() != w.provider) return@forEach
+            // app that's gone), and only once (Android shows each widget in one place)
+            if (w.kind == WidgetKind.ANDROID && (AppWidgets.gone(app, w.appWidgetId, w.provider) || !shown.add(w.appWidgetId))) {
+                return@forEach
             }
             widgets[w.id] = w
         }
@@ -455,6 +456,12 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         // Folders no slot points to anymore
         val placed = (cover + dockCover + dockExtra).filter { isFolderKey(it) }.map { it!!.removePrefix(FOLDER_PREFIX) }.toSet()
         folders.keys.filter { it !in placed }.forEach { folders.remove(it) }
+        // Widgets of apps that were uninstalled (Android has already taken their ids back); their cells clear below
+        val app = getApplication<Application>()
+        widgets.values.filter { it.kind == WidgetKind.ANDROID && AppWidgets.gone(app, it.appWidgetId, it.provider) }.forEach {
+            widgets.remove(it.id)
+            Diag.log("Removed a widget whose app is gone (${it.provider.substringBefore('/')})")
+        }
         normalizeWidgets()
         saveFolders()
         save()

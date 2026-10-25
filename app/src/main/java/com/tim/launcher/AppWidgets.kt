@@ -11,7 +11,10 @@ import android.os.Bundle
 import android.os.Process
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
+import android.view.View
 import android.view.ViewConfiguration
+import android.view.ViewGroup
+import android.widget.AdapterView
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.hypot
@@ -45,6 +48,19 @@ object AppWidgets {
 
     fun info(context: Context, appWidgetId: Int): AppWidgetProviderInfo? =
         if (appWidgetId <= 0) null else runCatching { manager(context).getAppWidgetInfo(appWidgetId) }.getOrNull()
+
+    /**
+     * True if a placed widget is gone for good: Android no longer holds its id for Quartz (its app was uninstalled,
+     * or it came from another device's layout), or the id now belongs to a different widget. A widget whose app is
+     * only unavailable for a moment (still starting up after a reboot) keeps its id, so it isn't gone.
+     */
+    fun gone(context: Context, appWidgetId: Int, provider: String): Boolean {
+        if (appWidgetId <= 0) return true
+        val info = info(context, appWidgetId)
+        if (info != null) return info.provider.flattenToString() != provider
+        val ids = runCatching { host(context).appWidgetIds }.getOrNull() ?: return false
+        return appWidgetId !in ids
+    }
 
     /** The widget's view, kept up to date by Android. */
     fun createView(context: Context, appWidgetId: Int): QuartzWidgetHostView? {
@@ -101,15 +117,16 @@ object AppWidgets {
 
     // ---- Adding ----
 
-    private class Pending(val id: Int, val info: AppWidgetProviderInfo, val place: (Int) -> Boolean)
+    private class Pending(val id: Int, val info: AppWidgetProviderInfo, val place: (Activity, Int) -> Boolean)
 
     private var pending: Pending? = null
 
     /**
      * Adds [info]'s widget: asks Android for an id and permission, runs the app's setup if it has one, then calls
-     * [place] with the id. If anything is cancelled (or [place] finds no room), the id is given back.
+     * [place] with the id and the home screen as it is then (it may have been recreated while Android's screens
+     * were showing). If anything is cancelled (or [place] finds no room), the id is given back.
      */
-    fun add(activity: Activity, info: AppWidgetProviderInfo, place: (Int) -> Boolean) {
+    fun add(activity: Activity, info: AppWidgetProviderInfo, place: (Activity, Int) -> Boolean) {
         pending?.let { finish(activity, false) }
         val id = runCatching { host(activity).allocateAppWidgetId() }.getOrElse {
             Diag.log("Couldn't get an app widget id: ${it.message}")
@@ -132,7 +149,9 @@ object AppWidgets {
 
     private fun configure(activity: Activity) {
         val p = pending ?: return
-        val optional = p.info.widgetFeatures and AppWidgetProviderInfo.WIDGET_FEATURE_CONFIGURATION_OPTIONAL != 0
+        // Setup can only be skipped when it can be opened again later ("Its settings")
+        val optional = p.info.widgetFeatures and AppWidgetProviderInfo.WIDGET_FEATURE_CONFIGURATION_OPTIONAL != 0 &&
+            reconfigurable(p.info)
         if (p.info.configure == null || optional) {
             finish(activity, true)
             return
@@ -161,11 +180,11 @@ object AppWidgets {
         return true
     }
 
-    private fun finish(context: Context, ok: Boolean) {
+    private fun finish(activity: Activity, ok: Boolean) {
         val p = pending ?: return
         pending = null
-        val placed = ok && runCatching { p.place(p.id) }.getOrDefault(false)
-        if (!placed) release(context, p.id)
+        val placed = ok && runCatching { p.place(activity, p.id) }.getOrDefault(false)
+        if (!placed) release(activity, p.id)
         Diag.log(if (placed) "Added ${p.info.provider.packageName}'s widget" else "Didn't add the app widget")
     }
 }
@@ -197,6 +216,8 @@ class QuartzWidgetHostView(context: Context) : AppWidgetHostView(context) {
     private var moved = 0f
     private var held = false
     private var lastDown = Long.MIN_VALUE
+    /** A finger was lifted while holding: the next move starts from wherever the remaining finger is. */
+    private var resync = false
     private val location = IntArray(2)
 
     private val hold = Runnable {
@@ -209,8 +230,11 @@ class QuartzWidgetHostView(context: Context) : AppWidgetHostView(context) {
     }
 
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
+        // Once held, the touch is Quartz's, including the lift: the button under the finger gets a cancel instead,
+        // so holding and letting go doesn't also tap it
+        val wasHeld = held && ev.actionMasked != MotionEvent.ACTION_DOWN
         track(ev)
-        return held
+        return wasHeld || held
     }
 
     override fun onTouchEvent(ev: MotionEvent): Boolean {
@@ -220,9 +244,21 @@ class QuartzWidgetHostView(context: Context) : AppWidgetHostView(context) {
     }
 
     override fun requestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {
+        // While held the touch stays Quartz's (letting a list inside keep it would lose the move and the lift)
+        if (held) return
         // Something inside (a list scrolling) has taken the touch: it isn't a hold
-        if (disallowIntercept && !held) removeCallbacks(hold)
+        if (disallowIntercept) removeCallbacks(hold)
         super.requestDisallowInterceptTouchEvent(disallowIntercept)
+    }
+
+    /** Stops reporting to the home screen (the view has left it; Android may keep it around until it's replaced). */
+    fun release() {
+        removeCallbacks(hold)
+        held = false
+        onHold = null
+        onMove = null
+        onLetGo = null
+        onCancelHold = null
     }
 
     /**
@@ -239,10 +275,20 @@ class QuartzWidgetHostView(context: Context) : AppWidgetHostView(context) {
                 downY = ev.y
                 lastX = ev.rawX
                 lastY = ev.rawY
+                resync = false
                 removeCallbacks(hold)
                 if (holdEnabled) postDelayed(hold, ViewConfiguration.getLongPressTimeout().toLong())
+                // A widget with a list inside (an inbox, an agenda) scrolls up and down: keep the home screen's
+                // swipes (pages, drawer) from taking the touch first, as Android's own launcher does
+                if (scrolls(this)) parent?.requestDisallowInterceptTouchEvent(true)
             }
             MotionEvent.ACTION_MOVE -> {
+                if (resync) {
+                    resync = false
+                    lastX = ev.rawX
+                    lastY = ev.rawY
+                    return
+                }
                 val dx = ev.rawX - lastX
                 val dy = ev.rawY - lastY
                 lastX = ev.rawX
@@ -269,11 +315,24 @@ class QuartzWidgetHostView(context: Context) : AppWidgetHostView(context) {
                 }
             }
             MotionEvent.ACTION_POINTER_DOWN -> if (!held) removeCallbacks(hold)
+            MotionEvent.ACTION_POINTER_UP -> resync = true
         }
+    }
+
+    private fun scrolls(v: View): Boolean {
+        if (v is AdapterView<*>) return true
+        if (v !is ViewGroup) return false
+        for (i in 0 until v.childCount) if (scrolls(v.getChildAt(i))) return true
+        return false
     }
 
     override fun onDetachedFromWindow() {
         removeCallbacks(hold)
+        // Taken off the screen mid-drag (a page went away): the drag can't finish, so it's called off
+        if (held) {
+            held = false
+            onCancelHold?.invoke()
+        }
         super.onDetachedFromWindow()
     }
 }
