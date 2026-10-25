@@ -38,8 +38,8 @@ internal object Facets {
     private val sparkle = Paint(Paint.ANTI_ALIAS_FLAG)
 
     /** Draws [style] over a [w]×[h] virtual canvas, only where [clip] is on screen. */
-    fun draw(canvas: Canvas, w: Float, h: Float, clip: Rect, c: WallConfig) {
-        val cell = h * (0.03f + c.patternSize.coerceIn(0f, 1f) * 0.09f)
+    fun draw(canvas: Canvas, w: Float, h: Float, clip: Rect, c: WallConfig, cellScale: Float = 1f) {
+        val cell = h * (0.03f + c.patternSize.coerceIn(0f, 1f) * 0.09f) * cellScale
         if (cell < 4f) return
         n = 0
         maxAlpha = c.patternStrength.coerceIn(0f, 1f)

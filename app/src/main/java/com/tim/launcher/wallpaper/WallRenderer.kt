@@ -164,11 +164,8 @@ object WallRenderer {
     fun drawPatternOnly(canvas: Canvas, w: Float, h: Float, clip: Rect, style: PatternStyle, strength: Float, scale: Float = 0.5f) {
         val c = WallConfig(pattern = style, patternStrength = strength, patternSize = 0.3f, patternColor = Color.WHITE)
         val f = Math.pow(2.0, ((scale.coerceIn(0f, 1f) - 0.5f) * 3f).toDouble()).toFloat()
-        canvas.save()
-        canvas.scale(f, f)
-        val r = Rect((clip.left / f).toInt(), (clip.top / f).toInt(), (clip.right / f).toInt() + 1, (clip.bottom / f).toInt() + 1)
-        if (style.faceted) Facets.draw(canvas, w / f, h / f, r, c) else drawPattern(canvas, w / f, h / f, c)
-        canvas.restore()
+        // The shapes themselves get bigger or smaller; the area they cover stays the same
+        if (style.faceted) Facets.draw(canvas, w, h, clip, c, cellScale = f) else drawPattern(canvas, w, h, c, cellScale = f)
     }
 
     /** A small copy of a screen's wallpaper ([scale] of full size), for glass, previews and colors. */
@@ -256,8 +253,8 @@ object WallRenderer {
 
     private val pat = Paint(Paint.ANTI_ALIAS_FLAG)
 
-    private fun drawPattern(canvas: Canvas, w: Float, h: Float, c: WallConfig) {
-        val cell = h * (0.025f + c.patternSize.coerceIn(0f, 1f) * 0.075f)
+    private fun drawPattern(canvas: Canvas, w: Float, h: Float, c: WallConfig, cellScale: Float = 1f) {
+        val cell = h * (0.025f + c.patternSize.coerceIn(0f, 1f) * 0.075f) * cellScale
         if (cell < 2f) return
         val alpha = (c.patternStrength.coerceIn(0f, 1f) * 255).toInt()
         pat.color = (c.patternColor and 0x00FFFFFF) or (alpha shl 24)
