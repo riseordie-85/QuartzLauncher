@@ -1,6 +1,18 @@
 package com.tim.launcher
 
 import androidx.compose.foundation.Image
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.asComposePath
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -140,39 +152,19 @@ fun ItemIcon(key: String, vm: HomeViewModel, size: Dp, showLabel: Boolean, modif
 @Composable
 fun FolderIconView(folder: Folder, vm: HomeViewModel, size: Dp, showLabel: Boolean, modifier: Modifier = Modifier) {
     val style = LocalHomeLook.current.folderIcon
-    // The tile is a light veil on dark backgrounds and a dark one on light backgrounds
-    val ink = LocalLabelColor.current
-    val light = ink.luminance() > 0.5f
     val context = LocalContext.current
     val store = remember { SettingsStore.get(context) }
+    val slot = LocalIconSlot.current
+    val spec by remember(slot) { IconRender.specState(store, slot) }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
       Box {
-        Box(
-            Modifier
-                .size(size)
-                .clip(RoundedCornerShape(size * 0.28f))
-                .background(ink.copy(alpha = if (light) 0.24f else 0.12f))
-                .border(1.dp, ink.copy(alpha = if (light) 0.18f else 0.14f), RoundedCornerShape(size * 0.28f)),
-            contentAlignment = Alignment.Center,
-        ) {
+        FolderTile(spec, size) { ink, inset ->
             when (style) {
                 FolderIcon.PLAIN -> Icon(Icons.Rounded.Folder, contentDescription = null, tint = ink, modifier = Modifier.size(size * 0.56f))
                 FolderIcon.BADGE -> Icon(badgeIcon(folder.badge), contentDescription = null, tint = ink, modifier = Modifier.size(size * 0.52f))
                 FolderIcon.GRID2, FolderIcon.GRID3 -> {
                     val n = if (style == FolderIcon.GRID2) 2 else 3
-                    val gap = size * 0.06f
-                    val mini = (size - gap * (n + 1)) / n
-                    Column(verticalArrangement = Arrangement.spacedBy(gap)) {
-                        for (r in 0 until n) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
-                                for (c in 0 until n) {
-                                    val app = folder.items.getOrNull(r * n + c)?.let { vm.apps[it] }
-                                    if (app != null) StyledIcon(app, mini)
-                                    else Spacer(Modifier.size(mini))
-                                }
-                            }
-                        }
-                    }
+                    FolderGrid(n, folder.items.take(n * n).map { vm.apps[it] }, size * (1f - 2 * inset))
                 }
             }
         }
@@ -196,6 +188,74 @@ fun FolderIconView(folder: Folder, vm: HomeViewModel, size: Dp, showLabel: Boole
                 style = labelStyle(labelColor),
                 modifier = Modifier.padding(top = 4.dp).width(size * 1.6f),
             )
+        }
+    }
+}
+
+/**
+ * A folder's tile, in the icon style of the place it's in (its shape, background, rim and shadow, the same as your
+ * app icons there). [content] is drawn on it, given the ink that reads on the tile and how far in to keep things
+ * so they stay inside rounder shapes.
+ */
+@Composable
+internal fun FolderTile(spec: IconRender.Spec, size: Dp, content: @Composable (ink: Color, inset: Float) -> Unit) {
+    // With no background the tile is a light veil on dark wallpapers and a dark one on light wallpapers
+    val label = LocalLabelColor.current
+    val light = label.luminance() > 0.5f
+    val veil = label.copy(alpha = if (light) 0.24f else 0.12f).toArgb()
+    val line = label.copy(alpha = if (light) 0.18f else 0.14f).toArgb()
+    @Suppress("UNUSED_VARIABLE") val epoch = IconRender.epoch
+    val drawn = IconRender.folderPlate(spec, veil, line)
+    if (drawn == null) {
+        @Suppress("UNUSED_VARIABLE") val ready = IconRender.version
+    }
+    // While a new style is being drawn, keep the last one rather than flashing back to the plain tile
+    val last = remember { arrayOfNulls<Pair<ImageBitmap, Float>>(1) }
+    if (drawn != null) last[0] = drawn to spec.overscan
+    val shown = last[0]
+    val ink = IconRender.folderInk(spec)?.let { Color(it) } ?: label
+    val inset = IconRender.folderInset(spec)
+    val outline = remember(spec.key) { FolderOutline(spec) }
+    Box(
+        Modifier
+            .size(size)
+            .drawBehind {
+                if (shown == null) {
+                    drawRoundRect(Color(veil), cornerRadius = CornerRadius(this.size.width * 0.28f))
+                } else {
+                    val d = this.size.width * shown.second
+                    val o = ((this.size.width - d) / 2f).roundToInt()
+                    drawImage(shown.first, dstOffset = IntOffset(o, o), dstSize = IntSize(d.roundToInt(), d.roundToInt()))
+                }
+            }
+            .clip(outline),
+        contentAlignment = Alignment.Center,
+    ) { content(ink, inset) }
+}
+
+/** The tile's outline, so what's on it stays inside. */
+private class FolderOutline(private val spec: IconRender.Spec) : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        val p = IconRender.folderPath(spec, 100f)
+        p.transform(android.graphics.Matrix().apply { setScale(size.width / 100f, size.height / 100f) })
+        return Outline.Generic(p.asComposePath())
+    }
+}
+
+/** [apps] as an [n]×[n] grid of little icons filling [span]. */
+@Composable
+internal fun FolderGrid(n: Int, apps: List<AppEntry?>, span: Dp, spec: IconRender.Spec? = null) {
+    val gap = span * 0.06f
+    val mini = (span - gap * (n + 1)) / n
+    Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+        for (r in 0 until n) {
+            Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                for (c in 0 until n) {
+                    val app = apps.getOrNull(r * n + c)
+                    if (app != null) StyledIcon(app, mini, spec = spec)
+                    else Spacer(Modifier.size(mini))
+                }
+            }
         }
     }
 }

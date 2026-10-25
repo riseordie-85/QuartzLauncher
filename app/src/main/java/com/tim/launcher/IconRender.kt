@@ -262,6 +262,7 @@ object IconRender {
     /** Throws away drawn icons (a pack changed). */
     fun clear() {
         cache.evictAll()
+        plates.evictAll()
         IconPacks.clear()
         main.post {
             epoch++
@@ -409,7 +410,11 @@ object IconRender {
     private val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_ATOP) }
 
     /** The rim around an icon: a hairline, or light catching the edge (brightest top left, a glint bottom right). */
-    private fun drawEdge(canvas: Canvas, shape: Path, s: Float, edge: DockEdge, lightPlate: Boolean) {
+    private fun drawEdge(canvas: Canvas, shape: Path, s: Float, edge: DockEdge, lightPlate: Boolean, atop: Boolean = true) {
+        // On its own layer (a folder's tile), the rim is drawn whole and trimmed to the shape afterwards
+        val mode = if (atop) PorterDuffXfermode(PorterDuff.Mode.SRC_ATOP) else null
+        rimPaint.xfermode = mode
+        sheenPaint.xfermode = mode
         when (edge) {
             DockEdge.NONE -> return
             DockEdge.HAIRLINE -> {
@@ -440,6 +445,105 @@ object IconRender {
             }
         }
     }
+
+    // ---- Folders ----
+
+    private val plates = LruCache<String, ImageBitmap>(16)
+
+    /**
+     * The outline of a folder's tile. Your icon shape; left as the system's, it's a rounded square (or the squircle
+     * your icons use once they have a background).
+     */
+    fun folderPath(spec: Spec, s: Float): Path = when {
+        spec.shape != IconShape.SYSTEM -> path(spec.shape, s)
+        plateColor(spec) != null -> path(IconShape.SQUIRCLE, s)
+        else -> Path().apply { addRoundRect(RectF(0f, 0f, s, s), s * 0.28f, s * 0.28f, Path.Direction.CW) }
+    }
+
+    /** How far in from the tile's edge a folder's little app grid sits, so it stays inside rounder shapes. */
+    fun folderInset(spec: Spec): Float = when (if (spec.shape == IconShape.SYSTEM && plateColor(spec) != null) IconShape.SQUIRCLE else spec.shape) {
+        IconShape.CIRCLE, IconShape.TEARDROP -> 0.11f
+        IconShape.HEXAGON -> 0.16f
+        IconShape.SQUIRCLE -> 0.04f
+        else -> 0f
+    }
+
+    /** Ink for the folder glyph on the tile's background, or null to use the label color (no background). */
+    fun folderInk(spec: Spec): Int? = plateColor(spec)?.let { if (isLight(it)) 0xFF1E1D24.toInt() else 0xFFFFFFFF.toInt() }
+
+    /**
+     * A folder's tile drawn in your icon style: its shape, background (color, gradient, pattern, see-through), rim
+     * of light and shadow. With no background it's a [veil] with a faint [line] round it, as before. Drawn
+     * [Spec.overscan] times the tile's size when it has a shadow.
+     */
+    fun folderPlate(spec: Spec, veil: Int, line: Int): ImageBitmap? {
+        val key = "folder|${spec.key}|$veil|$line"
+        plates.get(key)?.let { return if (it === FAILED) null else it }
+        synchronized(pending) {
+            if (!pending.add(key)) return null
+        }
+        // Drawn alongside the icons, on their thread (they share the brushes)
+        worker.execute {
+            val bmp = runCatching { renderFolder(spec, veil, line) }
+                .onFailure { Diag.log("A folder tile couldn't be drawn: ${it.message}") }
+                .getOrNull()
+            plates.put(key, bmp?.asImageBitmap() ?: FAILED)
+            synchronized(pending) { pending.remove(key) }
+            if (bmp != null) refreshSoon()
+        }
+        return null
+    }
+
+    private fun renderFolder(spec: Spec, veil: Int, line: Int): Bitmap {
+        val s = SIZE.toFloat()
+        val shape = folderPath(spec, s)
+        val plate = plateColor(spec)
+        val mask = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888)
+        fillShape(Canvas(mask), shape, 0xFF000000.toInt())
+
+        val body = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(body)
+        if (plate != null) paintPlate(canvas, shape, spec, s) else fillShape(canvas, shape, veil)
+
+        // The rim goes on its own layer, then is trimmed to the shape: on a see-through tile it still shows
+        val rim = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888)
+        val rc = Canvas(rim)
+        if (spec.edge != DockEdge.NONE) {
+            drawEdge(rc, shape, s, spec.edge, isLight(plate ?: 0xFF000000.toInt()), atop = false)
+        } else if (plate == null) {
+            linePaint.color = line
+            linePaint.strokeWidth = s * 0.036f
+            rc.drawPath(shape, linePaint)
+        }
+        rc.drawBitmap(mask, 0f, 0f, keepPaint)
+        canvas.drawBitmap(rim, 0f, 0f, null)
+        rim.recycle()
+
+        val out = if (spec.shadow == IconShadow.NONE) body else {
+            val big = (SIZE * OVERSCAN).toInt()
+            val framed = Bitmap.createBitmap(big, big, Bitmap.Config.ARGB_8888)
+            val fc = Canvas(framed)
+            val strong = spec.shadow == IconShadow.STRONG
+            val offset = IntArray(2)
+            val blur = Paint().apply { maskFilter = BlurMaskFilter(SIZE * if (strong) 0.07f else 0.05f, BlurMaskFilter.Blur.NORMAL) }
+            val alpha = mask.extractAlpha(blur, offset)
+            val margin = (big - SIZE) / 2f
+            val drop = SIZE * if (strong) 0.05f else 0.035f
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = if (strong) 0x8C000000.toInt() else 0x59000000 }
+            fc.drawBitmap(alpha, margin + offset[0], margin + offset[1] + drop, paint)
+            alpha.recycle()
+            // No shadow under the tile itself, so a see-through tile stays clear rather than going murky
+            fc.drawBitmap(mask, margin, margin, maskPaint)
+            fc.drawBitmap(body, margin, margin, null)
+            body.recycle()
+            framed
+        }
+        mask.recycle()
+        return out
+    }
+
+    private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val keepPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN) }
 
     /** The icon on a bigger picture with a blurred shadow under it, falling slightly down. */
     private fun withShadow(icon: Bitmap, shadow: IconShadow): Bitmap {

@@ -84,6 +84,8 @@ import com.tim.launcher.IconSlot
 import com.tim.launcher.LocalIconSlot
 import com.tim.launcher.Prefs
 import com.tim.launcher.StyledIcon
+import com.tim.launcher.FolderTile
+import com.tim.launcher.FolderGrid
 import com.tim.launcher.ui.BodyText
 import com.tim.launcher.ui.Dropdown
 import com.tim.launcher.ui.GlassPanel
@@ -221,7 +223,12 @@ private fun IconPreview(slot: IconSlot, spec: IconRender.Spec) {
     ) {
         CompositionLocalProvider(LocalIconSlot provides slot) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                apps.forEach { app -> StyledIcon(app, 52.dp, contentDescription = app.label, spec = spec) }
+                // Folders on the home screen and dock wear the same style; the drawer has none
+                val folder = slot != IconSlot.DRAWER && apps.size >= 4
+                (if (folder) apps.take(4) else apps).forEach { app -> StyledIcon(app, 52.dp, contentDescription = app.label, spec = spec) }
+                if (folder) {
+                    FolderTile(spec, 52.dp) { _, inset -> FolderGrid(2, apps.reversed().take(4), 52.dp * (1f - 2 * inset), spec) }
+                }
             }
         }
     }
