@@ -8,7 +8,8 @@ Phase 9 (in progress): first run and setup polish, on phase 8 widgets and weathe
 - Phones and tablets open on the middle of three pages (existing layouts keep their home page). Tablets start with a 7 × 6 grid.
 - **Setup comes back until it's finished**, at the step you were on, whenever the home screen shows (Back gives it a minute's rest). Returning from making Quartz your home screen moves straight on.
 - **Setup screens:** dock style and color in one step like Settings › Dock › Style with the dock pinned above; the icon preview pinned on the icons step; moving pictures for which way to swipe, icons or list, how the drawer scrolls and how it opens; and your home page with the widget you pick (columns 3 to 5, rows 1 to 3 on a tablet).
-- **More color control:** the dock's gradient can run along the dock, across, down or diagonally; the dock's second gradient color and icon plate colors have a See-through slider; the dock and icon patterns have a Size slider.
+- **More color control:** gradients for the dock and icon plates run across, down, diagonally or radially (from the middle out); every dock and icon plate color has a See-through slider; the dock and icon patterns have a Size slider with the usual size (100%) in the middle, from about 35% to 280%.
+- **Mouse:** a right click on the home screen works like holding your finger down (the menus), and right-click-drag moves icons and widgets.
 - **App menus:** hold an app and let go (home, dock or drawer) for App info, Uninstall (apps you installed), and Remove from home or Add to home screen. While dragging, an **Uninstall** target sits next to Remove.
 
 ## Phase 8: what's new
