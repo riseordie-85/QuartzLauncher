@@ -271,9 +271,10 @@ private fun FlipCard(text: String, color: Color, motion: Boolean, modifier: Modi
             turn.snapTo(1f)
             return@LaunchedEffect
         }
+        // Start the turn before swapping numbers, so no frame shows the new number without its flap over it
+        turn.snapTo(0f)
         shown = next // an earlier turn cut short finishes where it was going
         next = text
-        turn.snapTo(0f)
         turn.animateTo(1f, tween(640, easing = FastOutSlowInEasing))
         shown = text
     }
@@ -286,7 +287,9 @@ private fun FlipCard(text: String, color: Color, motion: Boolean, modifier: Modi
             Column {
                 // The new value's top shows behind the falling flap; the old bottom stays until the flap covers it
                 Half(top = true, full = h) { Face(next, color, shade = if (p < 0.5f) 0.35f * (1f - p * 2f) else 0f) }
-                Half(top = false, full = h) { Face(shown, color, shade = if (p < 0.5f) 0.22f * p * 2f else 0f) }
+                // Once the flap has landed the bottom is the new number too. (The turn ends a frame before the code
+                // after it runs, and showing the old bottom for that frame flashed the old number.)
+                Half(top = false, full = h) { Face(if (p >= 1f) next else shown, color, shade = if (p < 0.5f) 0.22f * p * 2f else 0f) }
             }
             if (p < 0.5f) {
                 Half(
