@@ -98,16 +98,20 @@ object IconRender {
             val bmp = runCatching { render(appContext, app, spec) }
                 .onFailure { Diag.log("Icon for ${app.label} couldn't be drawn: ${it.message}") }
                 .getOrNull()
-            if (bmp != null) cache.put(key, bmp.asImageBitmap())
+            // Nothing to draw, or it failed: keep the app's own icon, so it isn't tried again on every redraw
+            cache.put(key, bmp?.asImageBitmap() ?: app.icon)
             synchronized(pending) { pending.remove(key) }
             if (bmp != null) main.post { version++ }
         }
         return null
     }
 
-    /** An app was installed, updated or removed: redraw icons if it was an icon pack in use. */
+    /** An app was updated or removed: redraw everything if it was an icon pack in use, else just its own icons. */
     fun packageChanged(pkg: String?) {
-        if (pkg != null && IconPacks.isLoaded(pkg)) clear()
+        if (pkg == null) return
+        if (IconPacks.isLoaded(pkg)) clear()
+        // Otherwise the app's own icon may have changed: drop what was drawn from the old one
+        else cache.snapshot().keys.filter { it.contains("|$pkg/") }.forEach { cache.remove(it) }
     }
 
     /** Throws away drawn icons (a pack changed). */
@@ -119,13 +123,15 @@ object IconRender {
 
     // ---- Drawing ----
 
-    private fun render(context: Context, app: AppEntry, spec: Spec): Bitmap {
+    private fun render(context: Context, app: AppEntry, spec: Spec): Bitmap? {
         val density = context.resources.displayMetrics.densityDpi
         val launcherApps = context.getSystemService(LauncherApps::class.java)
         val info = launcherApps?.resolveActivity(Intent().setComponent(app.component), Process.myUserHandle())
         val own: Drawable? = info?.getIcon(density)
         val theme = IconPacks.theme(context, spec.pack)
         val packIcon = theme?.let { IconPacks.iconFor(it, app.component) }
+        // Nothing to draw from (the app was just removed): leave its own icon showing
+        if (own == null && packIcon == null) return null
 
         val out = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(out)
@@ -169,9 +175,10 @@ object IconRender {
             return out
         }
 
-        // Cut to your shape, on your background if you picked one
-        canvas.save()
-        canvas.clipPath(shape)
+        // Cut to your shape, on your background if you picked one. The shape goes down first and the icon is drawn
+        // into it, so the edge comes out smooth (a clipPath edge is jagged)
+        fillShape(canvas, shape, 0xFF000000.toInt())
+        val layer = canvas.saveLayer(null, cutPaint)
         val adaptive = own as? AdaptiveIconDrawable
         when {
             packIcon != null -> {
@@ -188,7 +195,7 @@ object IconRender {
                 drawInset(canvas, own, s, 0.7f)
             }
         }
-        canvas.restore()
+        canvas.restoreToCount(layer)
         return out
     }
 
@@ -207,6 +214,9 @@ object IconRender {
     }
 
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    /** Keeps only what lands inside the shape already drawn underneath. */
+    private val cutPaint = Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN) }
 
     private fun fillShape(canvas: Canvas, shape: Path, color: Int) {
         fill.color = color

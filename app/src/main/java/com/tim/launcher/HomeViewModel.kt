@@ -171,7 +171,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     val dockExtra = mutableStateListOf<String?>()
 
     private val callback = object : LauncherApps.Callback() {
-        override fun onPackageRemoved(packageName: String?, user: UserHandle?) = reload()
+        override fun onPackageRemoved(packageName: String?, user: UserHandle?) {
+            IconRender.packageChanged(packageName) // an icon pack in use may be gone
+            reload()
+        }
         override fun onPackageAdded(packageName: String?, user: UserHandle?) = reload()
         override fun onPackageChanged(packageName: String?, user: UserHandle?) {
             IconRender.packageChanged(packageName)

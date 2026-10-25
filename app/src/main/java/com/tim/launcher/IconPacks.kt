@@ -52,14 +52,14 @@ object IconPacks {
     private val themes = HashMap<String, Theme?>()
 
     /** The pack's theme, read once and kept. Null if it isn't installed or can't be read. */
-    @Synchronized
     fun theme(context: Context, pkg: String): Theme? {
         if (pkg.isEmpty()) return null
-        if (themes.containsKey(pkg)) return themes[pkg]
+        synchronized(this) { if (themes.containsKey(pkg)) return themes[pkg] }
+        // Read without holding the lock: a big pack takes a moment, and the main thread checks isLoaded and clear
         val t = runCatching { load(context, pkg) }
             .onFailure { Diag.log("Icon pack $pkg couldn't be read: ${it.message}") }
             .getOrNull()
-        themes[pkg] = t
+        synchronized(this) { themes[pkg] = t }
         return t
     }
 

@@ -1035,7 +1035,6 @@ fun AppIcon(app: AppEntry, size: Dp, showLabel: Boolean, modifier: Modifier = Mo
     }
 }
 
-/** Light labels get a soft dark shadow to lift them off busy wallpapers; dark labels get a faint light one. */
 /** An app's icon as you've styled it for where it's shown (home, dock or drawer); its own icon until that's drawn. */
 @Composable
 fun styledIcon(app: AppEntry): ImageBitmap {
@@ -1046,6 +1045,7 @@ fun styledIcon(app: AppEntry): ImageBitmap {
     return IconRender.icon(context, app, spec) ?: app.icon
 }
 
+/** Light labels get a soft dark shadow to lift them off busy wallpapers; dark labels get a faint light one. */
 internal fun labelStyle(color: Color = Color.White) = TextStyle(
     shadow = if (color.luminance() > 0.5f) {
         Shadow(color = Color.Black.copy(alpha = 0.6f), offset = Offset(0f, 1f), blurRadius = 4f)

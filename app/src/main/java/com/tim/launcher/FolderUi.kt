@@ -179,7 +179,7 @@ fun FolderIconView(folder: Folder, vm: HomeViewModel, size: Dp, showLabel: Boole
         // The folder's badge adds up its apps'
         BadgeOverlay(
             store,
-            folder.items.mapNotNull { vm.apps[it]?.component?.packageName },
+            folder.items.mapNotNull { vm.apps[it]?.component?.packageName }.distinct(), // two apps from one package count once
             size,
             Modifier.align(Alignment.TopEnd).offset(x = size * 0.08f, y = -size * 0.08f),
         )
