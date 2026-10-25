@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -188,13 +189,19 @@ fun PageOverview(vm: HomeViewModel, onAddPage: () -> Unit, onPagesChanged: () ->
     }
 
     confirmDelete?.let { page ->
-        val count = (page * vm.perPage until (page + 1) * vm.perPage).count { vm.cover.getOrNull(it) != null }
+        val count = (page * vm.perPage until (page + 1) * vm.perPage).count { vm.cover.getOrNull(it) != null && !isWidgetKey(vm.cover.getOrNull(it)) }
+        val widgetCount = vm.widgetsOn(page).size
         AlertDialog(
             onDismissRequest = { confirmDelete = null },
             title = { Text("Delete page ${page + 1}?") },
             text = {
                 Text(
-                    if (count == 0) "It's empty." else "Its $count apps and folders move to empty spots on your other pages. Nothing is uninstalled.",
+                    when {
+                        count == 0 && widgetCount == 0 -> "It's empty."
+                        count == 0 -> "Its widgets go with it."
+                        else -> "Its $count apps and folders move to empty spots on your other pages. Nothing is uninstalled." +
+                            if (widgetCount > 0) " Its widgets go with it." else ""
+                    },
                 )
             },
             confirmButton = {
@@ -242,16 +249,30 @@ private fun PageCard(
                 .pointerInput(page) { detectTapGestures(onTap = { onOpen() }) },
             contentAlignment = Alignment.Center,
         ) {
-            Column {
-                for (r in 0 until rows) {
-                    Row {
-                        for (c in 0 until cols) {
-                            val key = vm.cover.getOrNull(base + r * cols + c)
-                            Box(Modifier.size(cell, height / rows), contentAlignment = Alignment.Center) {
-                                MiniIcon(key, vm, cell * 0.62f)
+            Box(Modifier.size(width, height)) {
+                Column {
+                    for (r in 0 until rows) {
+                        Row {
+                            for (c in 0 until cols) {
+                                val key = vm.cover.getOrNull(base + r * cols + c)
+                                Box(Modifier.size(cell, height / rows), contentAlignment = Alignment.Center) {
+                                    MiniIcon(key, vm, cell * 0.62f)
+                                }
                             }
                         }
                     }
+                }
+                // Widgets as soft tiles over the cells they cover
+                vm.widgetsOn(page).forEach { (w, anchor) ->
+                    val i = anchor - base
+                    Box(
+                        Modifier
+                            .offset(cell * (i % cols), height / rows * (i / cols))
+                            .size(cell * w.w, height / rows * w.h)
+                            .padding(3.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color.White.copy(alpha = 0.26f)),
+                    )
                 }
             }
         }

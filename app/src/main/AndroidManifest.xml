@@ -1,7 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Privacy: Quartz never sends anything about you anywhere. -->
+    <!-- Privacy: Quartz never sends anything about you anywhere. The one thing that goes out is a weather request,
+         and only if you put a weather widget on your home screen: Open-Meteo gets a rough location (about 1 km). -->
+
+    <!-- Weather for weather widgets (Open-Meteo), and finding a city by name. Nothing else uses the network. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Only if a weather widget uses this phone's location (Android asks first). Coarse only; a city works instead. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <!-- Lets "swipe down" open the notification shade -->
     <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />

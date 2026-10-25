@@ -12,7 +12,7 @@ object Profile {
     // The wallpaper travels too (its photo doesn't: a new device shows the backup color until you pick one there)
     private val layoutKeys = listOf(
         Prefs.L_COVER, Prefs.L_DOCK_COVER, Prefs.L_DOCK_EXTRA, Prefs.L_FOLDERS, Prefs.WP_MAIN, Prefs.WP_COVER, Prefs.WP_MODE,
-        Prefs.DRAWER_TABS,
+        Prefs.DRAWER_TABS, Prefs.L_WIDGETS,
     )
 
     fun export(context: Context): String {

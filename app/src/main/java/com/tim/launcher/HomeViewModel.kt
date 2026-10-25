@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.Process
 import android.os.UserHandle
+import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -134,11 +135,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     fun deletePage(page: Int) {
         if (pages <= 1 || page !in 0 until pages) return
         val per = perPage
-        val moving = cover.subList(page * per, (page + 1) * per).filterNotNull()
+        // Widgets on the page go with it; apps and folders move to your other pages
+        val moving = cover.subList(page * per, (page + 1) * per).filterNotNull().filterNot { isWidgetKey(it) }
         val kept = (0 until pages).filter { it != page }.flatMap { p -> cover.subList(p * per, (p + 1) * per).toList() }
         pages -= 1
         fill(cover, kept, pages * per)
         fill(extra, emptyList(), pages * per)
+        normalizeWidgets()
         prefs.edit().putInt(Prefs.PAGES, pages).apply()
         val lost = moving.count { key ->
             val slot = cover.indexOfFirst { it == null }
@@ -187,6 +190,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     /** Folders by id. Declared before init, which reads them. */
     val folders = mutableStateMapOf<String, Folder>()
 
+    /** Quartz widgets by id. Each covers a block of cells holding "widget:<id>". Declared before init too. */
+    val widgets = mutableStateMapOf<String, HomeWidget>()
+
     init {
         restoreLayout()
         migratePairedPages()
@@ -215,6 +221,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             sortedApps = loaded
             if (!prefs.getBoolean(Prefs.LAYOUT_READY, false) && loaded.isNotEmpty()) fillDefaults()
             else if (loaded.isNotEmpty()) dropMissingApps()
+            addPendingWidgets()
         }
     }
 
@@ -296,7 +303,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         if (isFolderKey(key) || target == source) return
         val slots = list(target.area)
         val existing = slots.getOrNull(target.index) ?: return
-        if (existing == key) return
+        if (existing == key || isWidgetKey(existing) || isWidgetKey(key)) return
         val folder = folderFor(existing)
         if (folder != null) {
             if (folder.id == fromFolder) return
@@ -385,6 +392,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         fill(dockCover, savedDock, if (savedDock.isEmpty()) cols else savedDock.size)
         fill(dockExtra, savedExtra, if (savedExtra.isEmpty()) cols else savedExtra.size)
         restoreFolders()
+        widgets.clear()
+        WidgetJson.read(prefs.getString(Prefs.L_WIDGETS, null)).forEach { widgets[it.id] = it }
+        if (normalizeWidgets()) save()
     }
 
     /** Apps placed in the old "paired" inner pages move onto empty spots of your pages. */
@@ -415,7 +425,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         listOf(cover, extra, dockCover, dockExtra).forEach { list ->
             list.indices.forEach { i ->
                 val key = list[i] ?: return@forEach
-                if (isFolderKey(key)) {
+                if (isWidgetKey(key)) {
+                    return@forEach // checked below
+                } else if (isFolderKey(key)) {
                     val f = folderFor(key)
                     when {
                         f == null || f.items.isEmpty() -> { list[i] = null; f?.let { folders.remove(it.id) } }
@@ -430,6 +442,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         // Folders no slot points to anymore
         val placed = (cover + dockCover + dockExtra).filter { isFolderKey(it) }.map { it!!.removePrefix(FOLDER_PREFIX) }.toSet()
         folders.keys.filter { it !in placed }.forEach { folders.remove(it) }
+        normalizeWidgets()
         saveFolders()
         save()
         if (removed > 0) Diag.log("Cleared $removed spots for apps that aren't installed")
@@ -457,6 +470,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun fillDefaults() {
         listOf(cover, extra, dockCover, dockExtra).forEach { list -> list.indices.forEach { list[it] = null } }
+        widgets.clear()
         val keys = sortedApps.map { it.key }.iterator()
         fun take(list: SnapshotStateList<String?>, count: Int) {
             for (i in 0 until minOf(count, list.size)) if (keys.hasNext()) list[i] = keys.next()
@@ -481,6 +495,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             .putString(Prefs.L_EXTRA, join(extra))
             .putString(Prefs.L_DOCK_COVER, join(dockCover))
             .putString(Prefs.L_DOCK_EXTRA, join(dockExtra))
+            .putString(Prefs.L_WIDGETS, WidgetJson.write(widgets.values))
             .apply()
     }
 
@@ -489,6 +504,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     fun remove(ref: SlotRef) {
         val target = list(ref.area)
         val key = target.getOrNull(ref.index) ?: return
+        widgetFor(key)?.let { removeWidget(it.id); return }
         target[ref.index] = null
         save()
         val folder = folderFor(key)
@@ -503,6 +519,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearLayout() {
         listOf(cover, extra, dockCover, dockExtra).forEach { list -> list.indices.forEach { list[it] = null } }
+        widgets.clear()
         save()
         Diag.log("Cleared the home screen")
     }
@@ -512,9 +529,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val n = count.coerceIn(1, MAX_PAGES)
         if (n == pages) return
         val size = n * perPage
-        val moving = (cover.drop(size) + extra.drop(size)).filterNotNull()
+        // Widgets on removed pages go with them
+        val moving = (cover.drop(size) + extra.drop(size)).filterNotNull().filterNot { isWidgetKey(it) }
         fill(cover, cover.toList(), size)
         fill(extra, extra.toList(), size)
+        normalizeWidgets()
         pages = n
         currentPage = currentPage.coerceAtMost(n - 1)
         val dropped = moving.count { !putInFirstEmpty(it, Area.COVER to ((n - 1) * perPage until size)) }
@@ -539,19 +558,22 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val items = list(target.area).toMutableList()
         val t = target.index
         if (t !in items.indices) return null
+        // Widgets stay put: nothing lands on one, and icons slide around them
+        if (isWidgetKey(items[t]) || isWidgetKey(key)) return null
         if (source != null && source.area == target.area && items.getOrNull(source.index) == key) items[source.index] = null
         var overflow: String? = null
         if (items[t] != null) {
-            val range = screenRange(target).second.filter { it in items.indices }
-            val empty = range.filter { items[it] == null }.minWithOrNull(compareBy({ abs(it - t) }, { if (it > t) 0 else 1 }))
+            val range = screenRange(target).second.filter { it in items.indices && !isWidgetKey(items[it]) }
+            val at = range.indexOf(t)
+            val empty = range.indices.filter { items[range[it]] == null }.minWithOrNull(compareBy({ abs(it - at) }, { if (it > at) 0 else 1 }))
             when {
                 empty == null -> {
-                    val last = range.last()
-                    overflow = items[last]
-                    for (i in last downTo t + 1) items[i] = items[i - 1]
+                    val last = range.lastIndex
+                    overflow = items[range[last]]
+                    for (p in last downTo at + 1) items[range[p]] = items[range[p - 1]]
                 }
-                empty > t -> for (i in empty downTo t + 1) items[i] = items[i - 1]
-                else -> for (i in empty until t) items[i] = items[i + 1]
+                empty > at -> for (p in empty downTo at + 1) items[range[p]] = items[range[p - 1]]
+                else -> for (p in empty until at) items[range[p]] = items[range[p + 1]]
             }
         }
         items[t] = key
@@ -626,6 +648,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val a = list(from.area)
         val b = list(to.area)
         if (from.index !in a.indices || to.index !in b.indices) return
+        if (isWidgetKey(a[from.index]) || isWidgetKey(b[to.index])) return
         val moving = a[from.index]
         a[from.index] = b[to.index]
         b[to.index] = moving
@@ -638,7 +661,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun place(key: String, to: SlotRef) {
         val target = list(to.area)
-        if (to.index !in target.indices) return
+        if (to.index !in target.indices || isWidgetKey(target[to.index])) return
         val label = apps[key]?.label ?: key
         val bumped = target[to.index]
         target[to.index] = key
@@ -699,7 +722,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 val key = cover.getOrNull(p * oldPer + i) ?: continue
                 val row = i / oldCols
                 val col = i % oldCols
-                if (row < r && col < c) next[p * newPer + row * c + col] = key else overflow += p to key
+                if (row < r && col < c) next[p * newPer + row * c + col] = key
+                else if (!isWidgetKey(key)) overflow += p to key
             }
         }
         var lost = 0
@@ -712,6 +736,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         rows = r
         fill(cover, next, pages * newPer)
         fill(extra, emptyList(), pages * newPer)
+        normalizeWidgets()
         prefs.edit().putInt(Prefs.COLS, c).putInt(Prefs.ROWS, r).apply()
         save()
         Diag.log("Grid set to ${c}×$r" + if (overflow.isNotEmpty()) " (moved ${overflow.size - lost} apps that no longer fit)" else "")
@@ -761,6 +786,231 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     fun resetLayout() {
         prefs.edit().putBoolean(Prefs.LAYOUT_READY, false).apply()
         if (sortedApps.isNotEmpty()) fillDefaults()
+    }
+
+    // ---- Widgets ----
+
+    fun widgetFor(key: String?): HomeWidget? = if (isWidgetKey(key)) widgets[key!!.removePrefix(WIDGET_PREFIX)] else null
+
+    /** The slot of a widget's top-left cell, or null if it isn't on a page. */
+    fun widgetSpot(id: String): Int? = cover.indexOf(WIDGET_PREFIX + id).takeIf { it >= 0 }
+
+    /** Widgets whose top-left cell is on [page], in reading order, with that cell's slot. */
+    fun widgetsOn(page: Int): List<Pair<HomeWidget, Int>> {
+        val range = page * perPage until (page + 1) * perPage
+        return range.mapNotNull { i ->
+            val w = widgetFor(cover.getOrNull(i)) ?: return@mapNotNull null
+            if (cover.indexOf(WIDGET_PREFIX + w.id) == i) w to i else null
+        }
+    }
+
+    /** The cells a [w]×[h] block covers with its top-left at [anchor], or null if it runs off the page. */
+    private fun cellsOf(anchor: Int, w: Int, h: Int): List<Int>? {
+        if (anchor !in cover.indices || w < 1 || h < 1) return null
+        val page = anchor / perPage
+        val c = (anchor % perPage) % cols
+        val r = (anchor % perPage) / cols
+        if (c + w > cols || r + h > rows) return null
+        return (0 until h).flatMap { dr -> (0 until w).map { dc -> page * perPage + (r + dr) * cols + c + dc } }
+    }
+
+    /**
+     * Adds a widget to [page] where a block of empty cells fits it, top first. If its usual size doesn't fit
+     * anywhere, smaller sizes are tried down to its smallest. False if there's no room at all.
+     */
+    fun addWidget(kind: WidgetKind, page: Int, makeRoom: Boolean = false): Boolean {
+        reloadIfChanged()
+        val p = page.coerceIn(0, pages - 1)
+        val sizes = buildList {
+            for (h in minOf(kind.h, rows) downTo minOf(kind.minH, rows)) {
+                for (w in minOf(kind.w, cols) downTo minOf(kind.minW, cols)) add(w to h)
+            }
+        }
+        for ((w, h) in sizes) {
+            for (r in 0..rows - h) {
+                for (c in 0..cols - w) {
+                    val cells = cellsOf(p * perPage + r * cols + c, w, h) ?: continue
+                    if (cells.any { cover[it] != null }) continue
+                    val id = System.currentTimeMillis().toString(36)
+                    widgets[id] = HomeWidget(id, kind, w, h)
+                    cells.forEach { cover[it] = WIDGET_PREFIX + id }
+                    save()
+                    Diag.log("Added a ${kind.label.lowercase()} widget (${w}×$h) to page ${p + 1}")
+                    return true
+                }
+            }
+        }
+        if (makeRoom) {
+            // Across the top of the page; the apps there move to empty spots further down (or another page)
+            val w = minOf(kind.w, cols)
+            val h = minOf(kind.h, rows)
+            val cells = cellsOf(p * perPage, w, h)
+            if (cells != null && cells.none { isWidgetKey(cover[it]) }) {
+                val id = System.currentTimeMillis().toString(36)
+                val moving = cells.mapNotNull { cover[it] }
+                widgets[id] = HomeWidget(id, kind, w, h)
+                cells.forEach { cover[it] = WIDGET_PREFIX + id }
+                val lost = moving.count { !putInFirstEmpty(it, Area.COVER to (p * perPage until (p + 1) * perPage)) }
+                save()
+                Diag.log("Added a ${kind.label.lowercase()} widget to page ${p + 1}; moved ${moving.size} apps to make room" + if (lost > 0) " ($lost had nowhere to go)" else "")
+                return true
+            }
+        }
+        Diag.log("No room on page ${p + 1} for a ${kind.label.lowercase()} widget")
+        return false
+    }
+
+    /** Widgets picked in setup: added to your home page the next time it shows. */
+    fun addPendingWidgets() {
+        // Wait for the starter layout, which would otherwise clear it
+        if (!prefs.getBoolean(Prefs.LAYOUT_READY, false)) return
+        val pending = prefs.getString(Prefs.PENDING_WIDGETS, null)?.takeIf { it.isNotEmpty() } ?: return
+        prefs.edit().remove(Prefs.PENDING_WIDGETS).apply()
+        pending.split(",").mapNotNull { name -> WidgetKind.entries.firstOrNull { it.name == name } }.forEach { kind ->
+            if (widgets.values.none { it.kind == kind } && !addWidget(kind, homePage, makeRoom = true)) {
+                say("No room on your home page for the ${kind.label.lowercase()}. Long-press an empty spot and tap Widgets to add it.")
+            }
+        }
+    }
+
+    /** Where a widget's top-left would go when dropped with its corner over [index]: pulled in so it stays on the page. */
+    fun clampWidgetSpot(id: String, index: Int): Int? {
+        val w = widgets[id] ?: return null
+        if (index !in cover.indices) return null
+        val page = index / perPage
+        val c = minOf(index % perPage % cols, cols - w.w).coerceAtLeast(0)
+        val r = minOf(index % perPage / cols, rows - w.h).coerceAtLeast(0)
+        return page * perPage + r * cols + c
+    }
+
+    /**
+     * Puts a widget at [anchor], [w]×[h]. Apps and folders in the way move to the nearest empty spots on that page;
+     * another widget in the way, or not enough empty spots, and nothing changes (false).
+     */
+    fun placeWidget(id: String, anchor: Int, w: Int, h: Int): Boolean {
+        val widget = widgets[id] ?: return false
+        val key = WIDGET_PREFIX + id
+        val cells = cellsOf(anchor, w, h) ?: return false
+        if (cells.any { isWidgetKey(cover[it]) && cover[it] != key }) return false
+        val page = anchor / perPage
+        val range = page * perPage until (page + 1) * perPage
+        val bumped = cells.filter { cover[it] != null && cover[it] != key }
+        val free = range.filter { it !in cells && (cover[it] == null || cover[it] == key) }
+        if (bumped.size > free.size) return false
+        val moving = bumped.map { it to cover[it]!! }
+        cover.indices.forEach { if (cover[it] == key) cover[it] = null }
+        cells.forEach { cover[it] = key }
+        // Each app or folder in the way takes the nearest free spot to where it was
+        val open = free.toMutableList()
+        moving.forEach { (from, k) ->
+            val fr = (from % perPage) / cols
+            val fc = (from % perPage) % cols
+            val spot = open.minBy { s -> abs((s % perPage) / cols - fr) * 2 + abs((s % perPage) % cols - fc) }
+            open.remove(spot)
+            cover[spot] = k
+        }
+        widgets[id] = widget.copy(w = w, h = h)
+        save()
+        return true
+    }
+
+    /** Moves a widget so its top-left lands at (or as near as fits to) [index]. */
+    fun moveWidget(id: String, index: Int): Boolean {
+        val w = widgets[id] ?: return false
+        val spot = clampWidgetSpot(id, index) ?: return false
+        if (spot == widgetSpot(id)) return true
+        val ok = placeWidget(id, spot, w.w, w.h)
+        if (ok) Diag.log("Moved the ${w.kind.label.lowercase()} widget") else say("Not enough room there")
+        return ok
+    }
+
+    /** Resizes a widget to [w]×[h] with its top-left at [anchor]. */
+    fun resizeWidget(id: String, anchor: Int, w: Int, h: Int): Boolean {
+        val widget = widgets[id] ?: return false
+        if (anchor == widgetSpot(id) && w == widget.w && h == widget.h) return true
+        val ok = placeWidget(id, anchor, w, h)
+        if (ok) Diag.log("Resized the ${widget.kind.label.lowercase()} widget to ${w}×$h") else say("Not enough room for that size")
+        return ok
+    }
+
+    /** Switches a widget to another kind, growing it to that kind's smallest size if it has to. */
+    fun changeWidgetKind(id: String, kind: WidgetKind): Boolean {
+        val widget = widgets[id] ?: return false
+        val anchor = widgetSpot(id) ?: return false
+        val w = maxOf(widget.w, minOf(kind.minW, cols))
+        val h = maxOf(widget.h, minOf(kind.minH, rows))
+        val spot = clampWidgetSpot(id, anchor)?.let { a ->
+            // Clamp for the new size
+            val page = a / perPage
+            page * perPage + minOf((a % perPage) / cols, rows - h).coerceAtLeast(0) * cols + minOf((a % perPage) % cols, cols - w).coerceAtLeast(0)
+        } ?: return false
+        if ((w != widget.w || h != widget.h || spot != anchor) && !placeWidget(id, spot, w, h)) {
+            say("Not enough room to make it a ${kind.label.lowercase()}")
+            return false
+        }
+        widgets[id] = widgets.getValue(id).copy(kind = kind)
+        save()
+        Diag.log("Widget is now a ${kind.label.lowercase()}")
+        return true
+    }
+
+    fun removeWidget(id: String) {
+        val widget = widgets.remove(id) ?: return
+        val key = WIDGET_PREFIX + id
+        cover.indices.forEach { if (cover[it] == key) cover[it] = null }
+        extra.indices.forEach { if (extra[it] == key) extra[it] = null }
+        save()
+        Diag.log("Removed the ${widget.kind.label.lowercase()} widget")
+    }
+
+    /**
+     * Keeps widgets whole after pages or the grid change: each one becomes a clean block from its top-left cell,
+     * narrowed to fit; cells pointing at a widget that's gone are cleared, and a widget with no cells left is
+     * dropped. True if anything changed.
+     */
+    private fun normalizeWidgets(): Boolean {
+        var changed = false
+        listOf(cover, extra, dockCover, dockExtra).forEach { list ->
+            list.indices.forEach { i ->
+                val k = list[i]
+                if (isWidgetKey(k) && (list !== cover || widgetFor(k) == null)) {
+                    list[i] = null
+                    changed = true
+                }
+            }
+        }
+        widgets.values.toList().forEach { widget ->
+            val key = WIDGET_PREFIX + widget.id
+            val cells = cover.indices.filter { cover[it] == key }
+            if (cells.isEmpty()) {
+                widgets.remove(widget.id)
+                changed = true
+                return@forEach
+            }
+            val page = cells.first() / perPage
+            val onPage = cells.filter { it / perPage == page }
+            val r0 = onPage.minOf { (it % perPage) / cols }
+            val c0 = onPage.minOf { (it % perPage) % cols }
+            val w = minOf(widget.w, cols - c0).coerceAtLeast(1)
+            val h = minOf(widget.h, rows - r0).coerceAtLeast(1)
+            val block = cellsOf(page * perPage + r0 * cols + c0, w, h) ?: return@forEach
+            if (cells.toSet() == block.toSet() && w == widget.w && h == widget.h) return@forEach
+            changed = true
+            cells.forEach { cover[it] = null }
+            if (block.any { isWidgetKey(cover[it]) }) {
+                widgets.remove(widget.id) // overlapping another widget (only from a damaged layout)
+                return@forEach
+            }
+            val bumped = block.mapNotNull { cover[it] }
+            block.forEach { cover[it] = key }
+            bumped.forEach { k -> putInFirstEmpty(k, Area.COVER to (page * perPage until (page + 1) * perPage)) }
+            widgets[widget.id] = widget.copy(w = w, h = h)
+        }
+        return changed
+    }
+
+    private fun say(text: String) {
+        Toast.makeText(getApplication<Application>(), text, Toast.LENGTH_SHORT).show()
     }
 
     companion object {

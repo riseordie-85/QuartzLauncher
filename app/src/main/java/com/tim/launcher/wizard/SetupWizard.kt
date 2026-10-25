@@ -71,6 +71,10 @@ import com.tim.launcher.settings.S
 import com.tim.launcher.settings.SettingsContext
 import com.tim.launcher.settings.BadgesSection
 import com.tim.launcher.settings.IconsSection
+import com.tim.launcher.Prefs
+import com.tim.launcher.WidgetKind
+import com.tim.launcher.settings.WidgetPreview
+import com.tim.launcher.settings.WeatherControls
 import com.tim.launcher.settings.IconDraft
 import com.tim.launcher.settings.rememberIconApply
 import com.tim.launcher.settings.TabMode
@@ -103,6 +107,7 @@ import com.tim.launcher.ui.PrimaryButton
 import com.tim.launcher.ui.Q
 import com.tim.launcher.ui.RowDivider
 import com.tim.launcher.ui.Segmented
+import com.tim.launcher.ui.SectionLabel
 import com.tim.launcher.ui.SettingRow
 import com.tim.launcher.ui.SliderRow
 import com.tim.launcher.ui.Stepper
@@ -205,6 +210,10 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
     }
     fun finish() {
         store.set(S.wizardDone, value = true)
+        // The widget you picked goes on your home page when it next shows
+        if (path != Path.IMPORT && store[S.widgets].isNotBlank()) {
+            Prefs.get(context).edit().putString(Prefs.PENDING_WIDGETS, store[S.widgets]).apply()
+        }
         onFinish()
     }
 
@@ -389,7 +398,7 @@ private fun ColumnScope.StepContent(
         }
 
         Step.PATH -> {
-            ChoiceCard("Recommended", "Rounded dock and drawer, blurred glass, clock and weather. Done in one tap.", false, gap) { onPath(Path.RECOMMENDED) }
+            ChoiceCard("Recommended", "Rounded dock and drawer, blurred glass and a flip clock. Done in one tap.", false, gap) { onPath(Path.RECOMMENDED) }
             ChoiceCard("Walk me through it", "A few quick questions about your dock, grid and apps.", false, gap) { onPath(Path.WIZARD) }
             ChoiceCard("Import from another device", "Use a settings file exported from Quartz on your other phone or tablet.", false, gap) { onPath(Path.IMPORT) }
         }
@@ -668,21 +677,24 @@ private fun ColumnScope.StepContent(
         }
 
         Step.WIDGETS -> {
-            val chosen = store[S.widgets].split(",").filter { it.isNotBlank() }.toSet()
-            fun toggle(id: String, on: Boolean) {
-                val next = if (on) chosen + id else chosen - id
-                store.set(S.widgets, value = next.joinToString(","))
+            val chosen = WidgetKind.entries.firstOrNull { it.name == store[S.widgets] }
+            BodyText("Pick one for your home page. Later you can add more, move them and resize them: long-press an empty spot and tap Widgets.")
+            Spacer(Modifier.height(12.dp))
+            if (chosen != null) WidgetPreview(store, chosen)
+            ChoiceCard("No widget for now", null, chosen == null, gap) { store.set(S.widgets, value = "") }
+            WidgetKind.entries.forEach { kind ->
+                ChoiceCard(kind.label, kind.about, chosen == kind, gap) { store.set(S.widgets, value = kind.name) }
             }
-            GlassPanel {
-                SettingRow("Clock") { Toggle("clock" in chosen) { toggle("clock", it) } }
-                RowDivider()
-                SettingRow("Weather", "Uses your location or a city you type. Nothing else is shared.") { Toggle("weather" in chosen) { toggle("weather", it) } }
-                RowDivider()
-                SettingRow("Calendar") { Toggle("calendar" in chosen) { toggle("calendar", it) } }
-                RowDivider()
-                SettingRow("24-hour clock") { Toggle(store[S.clock24h]) { store.set(S.clock24h, value = it) } }
+            if (chosen?.weather == true) {
+                SectionLabel("Weather")
+                WeatherControls(store)
             }
-            BodyText("The widgets themselves arrive in phase 8; your picks are saved.", Modifier.padding(top = 12.dp))
+            if (chosen != null) {
+                Spacer(Modifier.height(12.dp))
+                GlassPanel {
+                    SettingRow("24-hour clock") { Toggle(store[S.clock24h]) { store.set(S.clock24h, value = it) } }
+                }
+            }
         }
 
         Step.DONE -> {
@@ -715,7 +727,7 @@ private fun applyRecommended(store: SettingsStore, type: DeviceType) {
     store.set(S.gesture(GestureSlot.SWIPE_UP), value = GestureAction.APP_DRAWER)
     store.set(S.drawerView, value = DrawerView.ICONS)
     store.set(S.drawerScroll, value = DrawerScroll.VERTICAL)
-    store.set(S.widgets, value = "clock,weather")
+    store.set(S.widgets, value = WidgetKind.FLIP.name)
     applyDefaultForm(store)
 }
 

@@ -28,7 +28,7 @@ import com.tim.launcher.ui.Q
 import com.tim.launcher.ui.QuartzTheme
 import com.tim.launcher.wizard.SetupWizard
 
-enum class Route { MAIN, HOME, DOCK, DRAWER, DRAWER_TAB, APPEARANCE, WALLPAPER, GESTURES, PRIVACY, ABOUT, WIZARD }
+enum class Route { MAIN, HOME, DOCK, DRAWER, DRAWER_TAB, APPEARANCE, WIDGETS, WALLPAPER, GESTURES, PRIVACY, ABOUT, WIZARD }
 
 /** Quartz settings and the setup wizard, shown as a frosted sheet over the wallpaper. */
 class SettingsActivity : ComponentActivity() {
@@ -81,6 +81,7 @@ class SettingsActivity : ComponentActivity() {
                             Route.DRAWER -> DrawerSettings(ctx)
                             Route.DRAWER_TAB -> TabEditor(ctx)
                             Route.APPEARANCE -> AppearanceSettings(ctx)
+                            Route.WIDGETS -> WidgetSettings(ctx)
                             Route.WALLPAPER -> WallpaperSettings(ctx)
                             Route.GESTURES -> GestureSettings(ctx)
                             Route.PRIVACY -> PrivacySettings(ctx)

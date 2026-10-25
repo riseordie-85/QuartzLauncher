@@ -46,6 +46,7 @@ import com.tim.launcher.wallpaper.WallCache
 import com.tim.launcher.wallpaper.PatternStyle
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.material.icons.rounded.Wallpaper
+import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -199,7 +200,7 @@ fun MainSettings(ctx: SettingsContext) {
         GlassPanel {
             NavRow("Wallpaper", "Gradients, colors, photos, patterns", Icons.Rounded.Wallpaper) { ctx.go(Route.WALLPAPER) }
             RowDivider()
-            NavRow("Appearance", "Color, glass, icons, badges", Icons.Rounded.Palette) { ctx.go(Route.APPEARANCE) }
+            NavRow("Appearance", "Icons, badges, widgets", Icons.Rounded.Palette) { ctx.go(Route.APPEARANCE) }
             RowDivider()
             NavRow("Gestures", "What each swipe and tap does", Icons.Rounded.Swipe) { ctx.go(Route.GESTURES) }
         }
@@ -729,7 +730,7 @@ fun AppearanceSettings(ctx: SettingsContext) {
     DisposableEffect(draft) { onDispose { draft.saveQuietly() } }
     Box(Modifier.fillMaxSize()) {
     ScreenScaffold(ctx) {
-        ScreenTitle("Appearance", "Icons, badges and the clock")
+        ScreenTitle("Appearance", "Icons, badges and widgets")
         Box(Modifier.fillMaxWidth().padding(top = 16.dp)) {
             DevicePreview(previewLook(store, ctx.type), height = 130.dp)
         }
@@ -746,9 +747,11 @@ fun AppearanceSettings(ctx: SettingsContext) {
 
         BadgesSection(ctx)
 
-        SectionLabel("Clock")
+        SectionLabel("Widgets")
         GlassPanel {
-            SettingRow("24-hour time") { Toggle(store[S.clock24h]) { store.set(S.clock24h, value = it) } }
+            NavRow("Clocks and weather", "Clock, flip clock, weather: colors, 24-hour time, where the weather is for", Icons.Rounded.Widgets) {
+                ctx.go(Route.WIDGETS)
+            }
         }
 
         SectionLabel("Wallpaper")
@@ -852,7 +855,7 @@ fun PrivacySettings(ctx: SettingsContext) {
                 onClick = { openHomeSettings(context) },
             ) { StatusText(if (isHome) "On" else "Off") }
             RowDivider()
-            SettingRow("Internet", "Weather and things you import only") { StatusText("Allowed") }
+            SettingRow("Internet", "Only for weather widgets you add (from Open-Meteo, with a rough location). Nothing else is sent.") { StatusText("Allowed") }
             RowDivider()
             SettingRow(
                 "Notification access",
@@ -860,7 +863,11 @@ fun PrivacySettings(ctx: SettingsContext) {
                 onClick = { com.tim.launcher.Badges.openAccessSettings(context) },
             ) { StatusText(if (com.tim.launcher.Badges.isAllowed(context)) "On" else "Off") }
             RowDivider()
-            SettingRow("Location", "Weather can use a typed city instead") { StatusText("Not asked") }
+            SettingRow(
+                "Location",
+                "Only if a weather widget uses this phone's location, rounded to about 1 km. A city you choose works instead.",
+                onClick = { ctx.go(Route.WIDGETS) },
+            ) { StatusText(if (com.tim.launcher.weather.Weather.hasLocationPermission(context)) "Allowed" else "Not asked") }
             RowDivider()
             SettingRow(
                 "Contacts",
@@ -929,6 +936,16 @@ fun AboutSettings(ctx: SettingsContext) {
             SettingRow("Support Quartz on Ko-fi", "Link coming before release", enabled = false)
             RowDivider()
             SettingRow("Charities we support", "Coming before release", enabled = false)
+        }
+        SectionLabel("Thanks to")
+        GlassPanel {
+            SettingRow("Meteocons", "Animated weather icons by Bas Milius (MIT license)")
+            RowDivider()
+            SettingRow("Open-Meteo", "Weather data (CC BY 4.0), free and without tracking")
+            RowDivider()
+            SettingRow("Outfit", "The widgets' typeface, by the Outfit Project Authors (SIL Open Font License)")
+            RowDivider()
+            SettingRow("Lottie", "Plays the weather icons, by Airbnb (Apache 2.0)")
         }
     }
 }

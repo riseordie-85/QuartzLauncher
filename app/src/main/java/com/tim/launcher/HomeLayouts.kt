@@ -397,6 +397,11 @@ private fun SinglePages(screen: ScreenState, vm: HomeViewModel, drag: DragContro
     val flip = vm.cols != vm.rows && landscapeScreen != landscapeGrid
     val cols = if (flip) vm.rows else vm.cols
     val rows = if (flip) vm.cols else vm.rows
+    // A sideways grid can't keep a widget's block of cells, so pages flow instead (widgets on top, then icons)
+    if (flip && vm.widgets.isNotEmpty()) {
+        ReflowPages(screen, vm, drag, cols, rows)
+        return
+    }
     HomePager(
         count = vm.pages,
         page = vm.currentPage,
@@ -455,10 +460,23 @@ private fun ReflowPages(screen: ScreenState, vm: HomeViewModel, drag: DragContro
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val base = page * vm.perPage
             // Reflowed pages don't slide icons over while dragging (they'd reshuffle under your finger); the drop does
-            val refs = (0 until vm.perPage).map { SlotRef(Area.COVER, base + it) }.filter { vm.keyAt(it) != null || it == drag.source }
-            val cols = gridCols ?: maxOf(vm.cols, (maxWidth / REFLOW_CELL).toInt())
-            val rows = gridRows ?: maxOf((vm.perPage + cols - 1) / cols, maxOf(1, (maxHeight / REFLOW_CELL).toInt()))
-            RefGrid(refs, cols.coerceAtLeast(1), rows.coerceAtLeast(1), vm, drag, Modifier.fillMaxSize())
+            val refs = (0 until vm.perPage).map { SlotRef(Area.COVER, base + it) }
+                .filter { (vm.keyAt(it) != null && !isWidgetKey(vm.keyAt(it))) || it == drag.source }
+            val cols = (gridCols ?: maxOf(vm.cols, (maxWidth / REFLOW_CELL).toInt())).coerceAtLeast(1)
+            val rows = (gridRows ?: maxOf((vm.perPage + cols - 1) / cols, maxOf(1, (maxHeight / REFLOW_CELL).toInt()))).coerceAtLeast(1)
+            // Widgets go first, across the top, then the icons flow under them
+            val widgets = vm.widgetsOn(page).map { it.first }
+            val cellW = maxWidth / cols
+            val cellH = maxHeight / rows
+            val used = widgets.sumOf { it.h }.coerceAtMost(rows - 1)
+            Column(Modifier.fillMaxSize()) {
+                widgets.forEach { w ->
+                    key(w.id) {
+                        WidgetOnFlow(w, cellW * minOf(w.w, cols), cellH * minOf(w.h, rows), drag)
+                    }
+                }
+                RefGrid(refs, cols, maxOf(1, rows - used), vm, drag, Modifier.fillMaxWidth().weight(1f))
+            }
         }
     }
 }
@@ -513,6 +531,8 @@ private fun GridArea(
                 }
             }
         }
+        // Widgets on top of the cells they cover
+        WidgetLayer(base, items, cols, cellW, cellH, vm, drag)
     }
 }
 

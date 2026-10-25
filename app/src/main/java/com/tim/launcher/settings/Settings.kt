@@ -115,6 +115,8 @@ enum class FolderIcon(val label: String) { PLAIN("Folder"), BADGE("Folder with b
 enum class FolderOpen(val label: String) { FULL("Full screen"), CENTER("Floating box"), POPUP("Pop up by the icon"), ROW("Expanding row") }
 enum class FolderView(val label: String) { GRID("Grid"), LIST("List") }
 enum class RowDirection(val label: String) { HORIZONTAL("Sideways"), VERTICAL("Up and down") }
+enum class WeatherSource(val label: String) { CITY("A city you choose"), DEVICE("This phone's location") }
+enum class TempUnit(val label: String) { F("°F"), C("°C") }
 
 enum class GestureAction(val label: String) {
     NONE("Nothing"),
@@ -265,9 +267,21 @@ object S {
     val badgeStyle = Setting("look.badgeStyle", BadgeStyle.DOT, EnumCodec(BadgeStyle.entries.toTypedArray()))
     val badgeThreshold1 = Setting("look.badgeThreshold1", 10, IntCodec)
     val badgeThreshold2 = Setting("look.badgeThreshold2", 50, IntCodec)
-    /** Comma-separated built-in widgets chosen in setup: clock, weather, calendar. */
-    val widgets = Setting("look.widgets", "clock,weather", StringCodec)
+    /** The widget picked in setup (a WidgetKind name, or "" for none). It's added to your home page when setup ends. */
+    val widgets = Setting("look.widgets", "", StringCodec)
     val clock24h = Setting("look.clock24h", false, BoolCodec)
+
+    // Widgets
+    /** The flip clock's cards and the clock's date. */
+    val widgetColor = Setting("widget.color", 0xFFBF5AA6.toInt(), IntCodec)
+    /** Flip cards turning over, and animated weather icons. Off: they change in place and the icons stay still. */
+    val widgetMotion = Setting("widget.motion", true, BoolCodec)
+    val weatherSource = Setting("weather.source", WeatherSource.CITY, EnumCodec(WeatherSource.entries.toTypedArray()))
+    /** The city you chose: its name as shown, and where it is (kept as text, rounded to about 1 km). */
+    val weatherCity = Setting("weather.city", "", StringCodec)
+    val weatherLat = Setting("weather.lat", "", StringCodec)
+    val weatherLon = Setting("weather.lon", "", StringCodec)
+    val weatherUnits = Setting("weather.units", TempUnit.F, EnumCodec(TempUnit.entries.toTypedArray()))
 
     // Setup
     val wizardDone = Setting("setup.wizardDone", false, BoolCodec)

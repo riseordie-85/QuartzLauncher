@@ -12,8 +12,8 @@ android {
         applicationId = "com.tim.launcher"
         minSdk = 33 // Android 13+ (AGSL shaders for gradients and glass later on)
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.3.0-phase3"
+        versionCode = 8
+        versionName = "0.8.0-phase8"
     }
 
     buildTypes {
@@ -60,4 +60,7 @@ dependencies {
 
     // Fold state and hinge position
     implementation("androidx.window:window:1.3.0")
+
+    // Animated weather icons (Meteocons, bundled in assets). Plays files from the app itself; no network.
+    implementation("com.airbnb.android:lottie-compose:6.6.7")
 }

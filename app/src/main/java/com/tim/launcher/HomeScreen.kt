@@ -71,6 +71,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
@@ -146,6 +147,11 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import com.tim.launcher.settings.FolderIcon
+import com.tim.launcher.settings.Route
+import com.tim.launcher.weather.Weather
+import androidx.compose.material.icons.rounded.Widgets
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 
 
 /** Where the dragged icon is over another one: its middle (to make a folder), or the side before or after it. */
@@ -187,6 +193,16 @@ class DragController {
 
     /** The slot each icon was last drawn in, so an icon that moves to a new slot can glide over from there. */
     val lastSlot = HashMap<String, SlotRef>()
+
+    /** For a widget being carried: where it was grabbed (from its top-left corner) and its size, in px. */
+    var widgetGrab = Offset.Zero
+        private set
+    var widgetSize = Size.Zero
+        private set
+
+    /** The widget being resized (handles on its edges), and the widget whose menu is open. */
+    var resizing by mutableStateOf<String?>(null)
+    var widgetMenu by mutableStateOf<String?>(null)
 
     /** When the last drag ended; icons still glide for a moment after (dropping, or springing back). */
     var endedAt = 0L
@@ -257,6 +273,26 @@ class DragController {
         source = ref
     }
 
+    fun startWidget(ref: SlotRef, key: String, at: Offset, grab: Offset, size: Size) {
+        begin(key, at)
+        source = ref
+        widgetGrab = grab
+        widgetSize = size
+    }
+
+    /**
+     * For a carried widget: the slot its top-left cell would land on (the cell under its top-left corner, pulled in
+     * so the whole widget stays on the page).
+     */
+    fun widgetDrop(vm: HomeViewModel): Int? {
+        val id = key?.takeIf { isWidgetKey(it) }?.removePrefix(WIDGET_PREFIX) ?: return null
+        val cells = bounds.entries.filter { it.key.area == Area.COVER }
+        val first = cells.firstOrNull()?.value ?: return null
+        val corner = pointer - widgetGrab + Offset(first.width / 2f, first.height / 2f)
+        val nearest = cells.minByOrNull { (it.value.center - corner).getDistanceSquared() }?.key ?: return null
+        return vm.clampWidgetSpot(id, nearest.index)
+    }
+
     fun startFromDrawer(key: String, at: Offset) {
         begin(key, at)
         fromDrawer = true
@@ -279,6 +315,12 @@ class DragController {
 
     fun drop(vm: HomeViewModel) {
         val carried = key
+        if (carried != null && isWidgetKey(carried)) {
+            val id = carried.removePrefix(WIDGET_PREFIX)
+            if (overRemove) vm.removeWidget(id) else widgetDrop(vm)?.let { vm.moveWidget(id, it) }
+            clear()
+            return
+        }
         val from = source
         val to = hover
         val folder = fromFolder
@@ -332,6 +374,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
     var openFolder by remember { mutableStateOf<Pair<String, SlotRef>?>(null) }
     var lockPrompt by remember { mutableStateOf(false) }
     var overviewOpen by remember { mutableStateOf(false) }
+    var widgetPicker by remember { mutableStateOf(false) }
     // Set while two fingers are down, so a two-finger gesture doesn't also count as a one-finger swipe
     var multiTouchUntil by remember { mutableStateOf(0L) }
 
@@ -386,6 +429,24 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         vm.reloadIfChanged()
         vm.setGrid(store[S.gridCols, gridScope], store[S.gridRows, gridScope])
+        vm.addPendingWidgets()
+    }
+
+    // Weather for weather widgets: only while one is on your pages and the home screen is showing, every half hour
+    val needsWeather = vm.widgets.values.any { it.kind.weather }
+    val weatherScope = rememberCoroutineScope()
+    LifecycleResumeEffect(needsWeather) {
+        val job = if (needsWeather) {
+            weatherScope.launch {
+                while (true) {
+                    Weather.refresh(activity)
+                    delay(30 * 60_000L)
+                }
+            }
+        } else {
+            null
+        }
+        onPauseOrDispose { job?.cancel() }
     }
 
     // Declared before `look`, whose onSwipePast calls it (local functions aren't visible before their declaration)
@@ -495,12 +556,15 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
 
     LaunchedEffect(homeTick) {
         // Pressing Home while already home, with nothing open, returns to your home page
-        if (homeTick > 0 && !drawerOpen && !panelOpen && !menuOpen && !overviewOpen) vm.goHome()
+        if (homeTick > 0 && !drawerOpen && !panelOpen && !menuOpen && !overviewOpen && !widgetPicker && drag.widgetMenu == null && drag.resizing == null) vm.goHome()
         drawerOpen = false
         panelOpen = false
         menuOpen = false
         openFolder = null
         overviewOpen = false
+        widgetPicker = false
+        drag.widgetMenu = null
+        drag.resizing = null
     }
     BackHandler {
         drawerOpen = false
@@ -508,6 +572,9 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         menuOpen = false
         openFolder = null
         overviewOpen = false
+        widgetPicker = false
+        drag.widgetMenu = null
+        drag.resizing = null
     }
 
     // Hold a dragged icon over the middle of another for a moment to make a folder. Pause anywhere else and the
@@ -518,13 +585,14 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
     LaunchedEffect(hoverAt, drag.key, overRemove) {
         drag.folderTarget = null
         val carried = drag.key ?: return@LaunchedEffect
-        if (overRemove) {
+        // A widget being moved doesn't make folders or push icons around until it's dropped
+        if (overRemove || isWidgetKey(carried)) {
             drag.plan = null
             return@LaunchedEffect
         }
         val (target, zone) = hoverAt ?: return@LaunchedEffect
         val existing = drag.shown(vm, target)
-        val canFolder = existing != null && existing != carried && !isFolderKey(carried) &&
+        val canFolder = existing != null && existing != carried && !isFolderKey(carried) && !isWidgetKey(existing) &&
             !drag.isGap(target) && !(drag.fromFolder != null && vm.folderFor(existing)?.id == drag.fromFolder)
         if (zone == DropZone.CENTER && canFolder) {
             delay(550)
@@ -541,6 +609,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         Diag.log("Posture: ${screen.posture.label}, ${screen.widthDp}×${screen.heightDp}dp, display ${screen.displayId}")
         openFolder = null
         overviewOpen = false
+        drag.resizing = null
         if (drag.active) {
             drag.cancel()
             Diag.log("Drag interrupted by the fold change; icon stayed in its spot")
@@ -609,6 +678,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             }
             .pointerInput(Unit) {
                 detectTapGestures(
+                    onTap = { drag.resizing = null },
                     onDoubleTap = { run(store[S.gesture(GestureSlot.DOUBLE_TAP)]) },
                     onLongPress = {
                         menuOpen = true
@@ -705,8 +775,11 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
 
         if (drag.active) RemoveZone(drag)
 
+        // A widget being moved: where it would land, and the widget under your finger
+        drag.key?.let { carried -> vm.widgetFor(carried)?.let { CarriedWidget(it, vm, drag) } }
+
         // The icon under your finger while dragging
-        drag.key?.let { carried ->
+        drag.key?.takeIf { !isWidgetKey(it) }?.let { carried ->
             val sizePx = with(LocalDensity.current) { 64.dp.toPx() }
             ItemIcon(
                 key = carried,
@@ -746,8 +819,62 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
                     menuOpen = false
                     overviewOpen = true
                 },
+                onWidgets = {
+                    menuOpen = false
+                    widgetPicker = true
+                },
                 onDismiss = { menuOpen = false },
             )
+        }
+
+        AnimatedVisibility(visible = widgetPicker, enter = fadeIn(), exit = fadeOut()) {
+            WidgetPicker(
+                onPick = { kind ->
+                    if (vm.addWidget(kind, vm.currentPage)) {
+                        widgetPicker = false
+                        if (kind.weather) Weather.refresh(activity)
+                    } else {
+                        Toast.makeText(activity, "No room on this page for the ${kind.label.lowercase()}. Make some space, or try another page.", Toast.LENGTH_LONG).show()
+                    }
+                },
+                onDismiss = { widgetPicker = false },
+            )
+        }
+
+        drag.widgetMenu?.let { id ->
+            val widget = vm.widgets[id]
+            if (widget == null) {
+                LaunchedEffect(id) { drag.widgetMenu = null }
+            } else {
+                WidgetMenu(
+                    widget = widget,
+                    canResize = !drag.reflow,
+                    onResize = {
+                        drag.widgetMenu = null
+                        drag.resizing = id
+                    },
+                    onKind = { kind ->
+                        if (vm.changeWidgetKind(id, kind)) {
+                            drag.widgetMenu = null
+                            if (kind.weather) Weather.refresh(activity)
+                        }
+                    },
+                    onSettings = {
+                        drag.widgetMenu = null
+                        SettingsActivity.open(activity, route = Route.WIDGETS)
+                    },
+                    onRemove = {
+                        drag.widgetMenu = null
+                        vm.removeWidget(id)
+                    },
+                    onDismiss = { drag.widgetMenu = null },
+                )
+            }
+        }
+
+        if (drag.resizing != null) {
+            if (drag.resizing?.let { vm.widgets[it] } == null) LaunchedEffect(Unit) { drag.resizing = null }
+            ResizeBar(onDone = { drag.resizing = null })
         }
 
         AnimatedVisibility(visible = overviewOpen, enter = fadeIn() + scaleIn(initialScale = 1.08f), exit = fadeOut() + scaleOut(targetScale = 1.08f)) {
@@ -816,7 +943,14 @@ private fun RemoveZone(drag: DragController) {
 
 /** The long-press menu on an empty spot of the home screen. */
 @Composable
-private fun HomeMenu(onSettings: () -> Unit, onSetup: () -> Unit, onTestPanel: () -> Unit, onPages: () -> Unit, onDismiss: () -> Unit) {
+private fun HomeMenu(
+    onSettings: () -> Unit,
+    onSetup: () -> Unit,
+    onTestPanel: () -> Unit,
+    onPages: () -> Unit,
+    onWidgets: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     Box(
         Modifier
             .fillMaxSize()
@@ -832,6 +966,7 @@ private fun HomeMenu(onSettings: () -> Unit, onSetup: () -> Unit, onTestPanel: (
                 .background(Color(0xF0221F2E))
                 .padding(vertical = 8.dp),
         ) {
+            MenuItem("Widgets", Icons.Rounded.Widgets, onWidgets)
             MenuItem("Quartz settings", Icons.Rounded.Settings, onSettings)
             MenuItem("Run setup again", Icons.Rounded.AutoAwesome, onSetup)
             MenuItem("Pages", Icons.Rounded.GridView, onPages)
@@ -977,7 +1112,7 @@ internal fun Cell(
             )
         }
 
-    val hovered by remember(ref) { derivedStateOf { drag.hover == ref && drag.source != ref && drag.plan == null } }
+    val hovered by remember(ref) { derivedStateOf { drag.hover == ref && drag.source != ref && drag.plan == null && !isWidgetKey(drag.key) } }
     val folderArmed = drag.folderTarget == ref
     Box(
         modifier
