@@ -659,8 +659,19 @@ fun DrawerSettings(ctx: SettingsContext) {
                 SettingRow("App names") { Toggle(store[S.labelsDrawer]) { store.set(S.labelsDrawer, value = it) } }
             }
             RowDivider()
-            SettingRow("Keep the dock showing", "The drawer opens above it, so your dock apps stay one tap away") {
-                Toggle(!store[S.drawerHideDock]) { store.set(S.drawerHideDock, value = !it) }
+            // The drawer opens above the dock, so your dock apps stay one tap away. Folded and unfolded can differ.
+            if (ctx.type == DeviceType.FOLDABLE) {
+                SettingRow("Keep the dock showing when folded", "The drawer opens above it on the cover screen") {
+                    Toggle(!store[S.drawerHideDock, Scope.COVER]) { store.setAt(S.drawerHideDock, Scope.COVER, !it) }
+                }
+                RowDivider()
+                SettingRow("Keep the dock showing when unfolded", "The drawer opens above it on the big screen") {
+                    Toggle(!store[S.drawerHideDock, Scope.INNER]) { store.setAt(S.drawerHideDock, Scope.INNER, !it) }
+                }
+            } else {
+                SettingRow("Keep the dock showing", "The drawer opens above it, so your dock apps stay one tap away") {
+                    Toggle(!store[S.drawerHideDock, ctx.type.primary]) { store.setAt(S.drawerHideDock, ctx.type.primary, !it) }
+                }
             }
         }
 

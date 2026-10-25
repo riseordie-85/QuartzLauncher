@@ -631,7 +631,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             // The drawer leaves the dock showing (unless you'd rather hide it), so it only covers the rest
             val density = LocalDensity.current
             val position = look.dockPosition
-            val keepDock = !store[S.drawerHideDock] && position != DockPosition.NONE && dockRect != Rect.Zero
+            val keepDock = !store[S.drawerHideDock, scope] && position != DockPosition.NONE && dockRect != Rect.Zero
             val gap = with(density) {
                 when {
                     !keepDock -> PaddingValues(0.dp)
@@ -1054,16 +1054,6 @@ fun StyledIcon(app: AppEntry, size: Dp, modifier: Modifier = Modifier, contentDe
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
         Image(drawn ?: app.icon, contentDescription = contentDescription, modifier = Modifier.requiredSize(size * over))
     }
-}
-
-/** An app's icon as you've styled it for where it's shown (home, dock or drawer); its own icon until that's drawn. */
-@Composable
-fun styledIcon(app: AppEntry): ImageBitmap {
-    val context = LocalContext.current
-    val store = remember { SettingsStore.get(context) }
-    val spec = IconRender.specFor(store, LocalIconSlot.current)
-    @Suppress("UNUSED_VARIABLE") val ready = IconRender.version // redraw when new icons are ready
-    return IconRender.icon(context, app, spec) ?: app.icon
 }
 
 /** Light labels get a soft dark shadow to lift them off busy wallpapers; dark labels get a faint light one. */

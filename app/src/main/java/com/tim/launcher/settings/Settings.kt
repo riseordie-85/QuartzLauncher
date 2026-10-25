@@ -225,7 +225,7 @@ object S {
     /** Letter (A to Z) or month (newest first) headings between apps. */
     val drawerDividers = Setting("drawer.dividers", false, BoolCodec)
     /** Off: the dock stays on screen while the drawer is open. */
-    val drawerHideDock = Setting("drawer.hideDock", false, BoolCodec)
+    val drawerHideDock = Setting("drawer.hideDock", false, BoolCodec, perScreen = true)
     val searchSettings = Setting("search.settings", true, BoolCodec)
     val searchContacts = Setting("search.contacts", false, BoolCodec)
     val labelsDrawer = Setting("drawer.labels", true, BoolCodec)
