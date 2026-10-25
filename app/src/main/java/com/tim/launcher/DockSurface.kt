@@ -40,6 +40,7 @@ import com.tim.launcher.settings.DockEdge
 import com.tim.launcher.settings.DockFill
 import com.tim.launcher.settings.DockOutline
 import com.tim.launcher.settings.DockPosition
+import com.tim.launcher.settings.GradientDirection
 import com.tim.launcher.settings.S
 import com.tim.launcher.settings.SettingsStore
 import com.tim.launcher.wallpaper.PatternStyle
@@ -62,6 +63,8 @@ data class DockStyle(
     val color2: Int = 0xFF2546A8.toInt(),
     val pattern: PatternStyle = PatternStyle.NONE,
     val patternStrength: Float = 0.3f,
+    val patternSize: Float = 0.3f,
+    val gradientDirection: GradientDirection = GradientDirection.ALONG,
     val edge: DockEdge = DockEdge.SOFT,
     /** Extra room across the dock (above and below a bottom dock's icons), in dp. */
     val padding: Int = 0,
@@ -95,6 +98,8 @@ data class DockStyle(
             color2 = store[S.dockColor2],
             pattern = store[S.dockPattern],
             patternStrength = store[S.dockPatternStrength],
+            patternSize = store[S.dockPatternSize],
+            gradientDirection = store[S.dockGradientDirection],
             edge = store[S.dockEdge],
             padding = store[S.dockPadding],
             paddingEnds = store[S.dockPaddingEnds],
@@ -246,8 +251,15 @@ fun Modifier.dockSurface(style: DockStyle, tint: Color, edge: DockPosition, ink:
             }
             val vertical = edge == DockPosition.LEFT || edge == DockPosition.RIGHT
             if (style.fill == DockFill.GRADIENT) {
-                val second = Color(style.color2).copy(alpha = tint.alpha)
-                val brush = if (vertical) Brush.verticalGradient(listOf(tint, second)) else Brush.horizontalGradient(listOf(tint, second))
+                // The second color's own see-through, on top of the glass's
+                val second = Color(style.color2).let { it.copy(alpha = it.alpha * tint.alpha) }
+                val colors = listOf(tint, second)
+                val brush = when (style.gradientDirection) {
+                    GradientDirection.ALONG -> if (vertical) Brush.verticalGradient(colors) else Brush.horizontalGradient(colors)
+                    GradientDirection.HORIZONTAL -> Brush.horizontalGradient(colors)
+                    GradientDirection.VERTICAL -> Brush.verticalGradient(colors)
+                    GradientDirection.DIAGONAL -> Brush.linearGradient(colors, start = Offset.Zero, end = Offset(size.width, size.height))
+                }
                 drawRect(brush)
             } else {
                 drawRect(tint)
@@ -265,7 +277,7 @@ fun Modifier.dockSurface(style: DockStyle, tint: Color, edge: DockPosition, ink:
                         (origin.x + size.width).toInt() + 1, (origin.y + size.height).toInt() + 1,
                     )
                     native.clipRect(clip)
-                    WallRenderer.drawPatternOnly(native, screenW, screenH, clip, style.pattern, style.patternStrength)
+                    WallRenderer.drawPatternOnly(native, screenW, screenH, clip, style.pattern, style.patternStrength, style.patternSize)
                     native.restore()
                 }
             }

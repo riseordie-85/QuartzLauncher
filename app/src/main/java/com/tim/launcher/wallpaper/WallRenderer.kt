@@ -157,8 +157,8 @@ object WallRenderer {
      * so the pattern's size and placement match the wallpaper's; [clip] is the part to draw.
      */
     @Synchronized
-    fun drawPatternOnly(canvas: Canvas, w: Float, h: Float, clip: Rect, style: PatternStyle, strength: Float) {
-        val c = WallConfig(pattern = style, patternStrength = strength, patternSize = 0.3f, patternColor = Color.WHITE)
+    fun drawPatternOnly(canvas: Canvas, w: Float, h: Float, clip: Rect, style: PatternStyle, strength: Float, size: Float = 0.3f) {
+        val c = WallConfig(pattern = style, patternStrength = strength, patternSize = size.coerceIn(0f, 1f), patternColor = Color.WHITE)
         if (style.faceted) Facets.draw(canvas, w, h, clip, c) else drawPattern(canvas, w, h, c)
     }
 

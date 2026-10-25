@@ -312,11 +312,11 @@ fun IconsSection(
             val gradient = background == IconBackground.GRADIENT
             ColorEditor(if (gradient) "Gradient from" else "Background color", draft.place(place?.color, S.iconBgColor), colorOpen == "from", {
                 colorOpen = if (colorOpen == "from") null else "from"
-            }) { set(S.iconBgColor, place?.color, it) }
+            }, alpha = true) { set(S.iconBgColor, place?.color, it) }
             if (gradient) {
                 ColorEditor("Gradient to", draft.place(place?.color2, S.iconBgColor2), colorOpen == "to", {
                     colorOpen = if (colorOpen == "to") null else "to"
-                }) { set(S.iconBgColor2, place?.color2, it) }
+                }, alpha = true) { set(S.iconBgColor2, place?.color2, it) }
             }
         }
         if (background != IconBackground.NONE) {
@@ -328,6 +328,10 @@ fun IconsSection(
                 val strength = draft.place(place?.patternStrength, S.iconPatternStrength)
                 SliderRow("Pattern strength", strength, 0.05f..0.6f, "${(strength * 100).roundToInt()}%") {
                     set(S.iconPatternStrength, place?.patternStrength, it)
+                }
+                val size = draft.place(place?.patternSize, S.iconPatternSize)
+                SliderRow("Pattern size", size, 0f..1f, "${(size * 100).roundToInt()}%") {
+                    set(S.iconPatternSize, place?.patternSize, it)
                 }
             }
         }

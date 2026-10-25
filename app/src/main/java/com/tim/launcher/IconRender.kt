@@ -75,11 +75,12 @@ object IconRender {
         val patternStrength: Float = 0.3f,
         val edge: DockEdge = DockEdge.NONE,
         val shadow: IconShadow = IconShadow.NONE,
+        val patternSize: Float = 0.3f,
     ) {
         /** Nothing to change: the app's own icon is used as it is. */
         val plain get() = pack.isEmpty() && shape == IconShape.SYSTEM && style == IconStyle.DEFAULT &&
             background == IconBackground.NONE && edge == DockEdge.NONE && shadow == IconShadow.NONE
-        val key get() = "$pack|$shape|$force|$style|$background|$color|$color2|$pattern|$patternStrength|$edge|$shadow"
+        val key get() = "$pack|$shape|$force|$style|$background|$color|$color2|$pattern|$patternStrength|$edge|$shadow|$patternSize"
 
         /** How much bigger than the icon its picture is drawn, to leave room for the shadow. */
         val overscan get() = if (shadow == IconShadow.NONE) 1f else OVERSCAN
@@ -128,6 +129,7 @@ object IconRender {
             v.place(place?.patternStrength, S.iconPatternStrength),
             v.place(place?.edge, S.iconEdge),
             v.place(place?.shadow, S.iconShadow),
+            patternSize = v.place(place?.patternSize, S.iconPatternSize),
         )
     }
 
@@ -361,7 +363,7 @@ object IconRender {
         IconBackground.NONE -> null
         IconBackground.LIGHT -> 0xFFF4F4F6.toInt()
         IconBackground.DARK -> 0xFF1E1D24.toInt()
-        IconBackground.COLOR, IconBackground.GRADIENT -> spec.color or 0xFF000000.toInt()
+        IconBackground.COLOR, IconBackground.GRADIENT -> spec.color
     }
 
     private val platePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.DITHER_FLAG)
@@ -370,7 +372,7 @@ object IconRender {
     private fun fillPlate(canvas: Canvas, spec: Spec, s: Float) {
         val base = plateColor(spec) ?: return
         if (spec.background == IconBackground.GRADIENT) {
-            platePaint.shader = LinearGradient(0f, 0f, s, s, base, spec.color2 or 0xFF000000.toInt(), Shader.TileMode.CLAMP)
+            platePaint.shader = LinearGradient(0f, 0f, s, s, base, spec.color2, Shader.TileMode.CLAMP)
             canvas.drawRect(0f, 0f, s, s, platePaint)
             platePaint.shader = null
         } else {
@@ -378,7 +380,7 @@ object IconRender {
         }
         if (spec.pattern != PatternStyle.NONE) {
             // Sized as if the icon were a small piece of a screen, so a few facets or dots show across it
-            WallRenderer.drawPatternOnly(canvas, s, s * 3.5f, Rect(0, 0, s.toInt(), s.toInt()), spec.pattern, spec.patternStrength)
+            WallRenderer.drawPatternOnly(canvas, s, s * 3.5f, Rect(0, 0, s.toInt(), s.toInt()), spec.pattern, spec.patternStrength, spec.patternSize)
         }
     }
 

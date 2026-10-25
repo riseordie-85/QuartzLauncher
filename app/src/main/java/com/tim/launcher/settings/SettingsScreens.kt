@@ -541,7 +541,14 @@ fun DockColorControls(store: SettingsStore) {
         store.set(S.panelColor, value = it)
     }
     if (gradient) {
-        ColorEditor("Gradient to", store[S.dockColor2], open == "to", { toggle("to") }) { store.set(S.dockColor2, value = it) }
+        ColorEditor("Gradient to", store[S.dockColor2], open == "to", { toggle("to") }, alpha = true) { store.set(S.dockColor2, value = it) }
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+            Text("Direction", color = Q.Text, fontSize = 16.sp, modifier = Modifier.padding(bottom = 10.dp))
+            Segmented(store[S.dockGradientDirection], GradientDirection.entries, { it.label }) {
+                store.set(S.dockGradientDirection, value = it)
+            }
+        }
+        RowDivider()
     }
     GlassSliders(store)
     RowDivider()
@@ -553,6 +560,8 @@ fun DockColorControls(store: SettingsStore) {
     if (store[S.dockPattern] != PatternStyle.NONE) {
         val p = store[S.dockPatternStrength]
         SliderRow("Pattern strength", p, 0.05f..0.6f, "${(p * 100).roundToInt()}%") { store.set(S.dockPatternStrength, value = it) }
+        val size = store[S.dockPatternSize]
+        SliderRow("Pattern size", size, 0f..1f, "${(size * 100).roundToInt()}%") { store.set(S.dockPatternSize, value = it) }
     }
 }
 

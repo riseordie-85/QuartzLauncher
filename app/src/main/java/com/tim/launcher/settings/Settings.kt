@@ -92,6 +92,8 @@ enum class DockOutline(val label: String) {
     STRAIGHT("Straight"), SLANTED("Slanted"), POINTED("Pointed"), WAVE("Wave"), FADE("Fade"),
 }
 enum class DockFill(val label: String) { GLASS("Glass"), GRADIENT("Gradient") }
+/** Which way the dock's gradient runs. "Along" follows the dock: left to right on a bottom dock, top to bottom on a side one. */
+enum class GradientDirection(val label: String) { ALONG("Along"), HORIZONTAL("Across →"), VERTICAL("Down ↓"), DIAGONAL("Diagonal ↘") }
 enum class DockEdge(val label: String) { NONE("None"), HAIRLINE("Hairline"), SOFT("Soft light"), BRIGHT("Bright light") }
 enum class CoverSide(val label: String) { LEFT("Left half"), RIGHT("Right half") }
 enum class PageMode(val label: String) { STRIP("Side by side"), PAIRED("Paired (old)") }
@@ -149,6 +151,7 @@ class IconPlaceSettings(id: String) {
     val color2 = Setting("look.$id.iconBgColor2", 0xFF2546A8.toInt(), IntCodec)
     val pattern = Setting("look.$id.iconPattern", PatternStyle.NONE, EnumCodec(PatternStyle.entries.toTypedArray()))
     val patternStrength = Setting("look.$id.iconPatternStrength", 0.3f, FloatCodec)
+    val patternSize = Setting("look.$id.iconPatternSize", 0.3f, FloatCodec)
     val edge = Setting("look.$id.iconEdge", DockEdge.NONE, EnumCodec(DockEdge.entries.toTypedArray()))
     val shadow = Setting("look.$id.iconShadow", IconShadow.NONE, EnumCodec(IconShadow.entries.toTypedArray()))
 }
@@ -199,6 +202,9 @@ object S {
     val dockColor2 = Setting("dock.color2", 0xFF2546A8.toInt(), IntCodec)
     val dockPattern = Setting("dock.pattern", PatternStyle.NONE, EnumCodec(PatternStyle.entries.toTypedArray()))
     val dockPatternStrength = Setting("dock.patternStrength", 0.3f, FloatCodec)
+    /** How big the pattern's shapes are, 0–1. */
+    val dockPatternSize = Setting("dock.patternSize", 0.3f, FloatCodec)
+    val dockGradientDirection = Setting("dock.gradientDirection", GradientDirection.ALONG, EnumCodec(GradientDirection.entries.toTypedArray()))
     val dockEdge = Setting("dock.edge", DockEdge.SOFT, EnumCodec(DockEdge.entries.toTypedArray()))
     /** Extra room across the dock (above and below the icons on a bottom dock), in dp. */
     val dockPadding = Setting("dock.padding", 0, IntCodec)
@@ -246,6 +252,7 @@ object S {
     val iconBgColor2 = Setting("look.iconBgColor2", 0xFF2546A8.toInt(), IntCodec)
     val iconPattern = Setting("look.iconPattern", PatternStyle.NONE, EnumCodec(PatternStyle.entries.toTypedArray()))
     val iconPatternStrength = Setting("look.iconPatternStrength", 0.3f, FloatCodec)
+    val iconPatternSize = Setting("look.iconPatternSize", 0.3f, FloatCodec)
     /** A lit rim around each icon, like the dock's. */
     val iconEdge = Setting("look.iconEdge", DockEdge.NONE, EnumCodec(DockEdge.entries.toTypedArray()))
     /** A shadow under each icon. */

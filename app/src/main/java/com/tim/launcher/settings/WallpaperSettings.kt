@@ -461,7 +461,18 @@ private fun ImageControls(cfg: WallConfig, update: (WallConfig) -> Unit) {
  * color in between.
  */
 @Composable
-fun ColorEditor(label: String, color: Int, open: Boolean, onToggle: () -> Unit, onChange: (Int) -> Unit) {
+fun ColorEditor(
+    label: String,
+    color: Int,
+    open: Boolean,
+    onToggle: () -> Unit,
+    /** Also offer how see-through the color is (the dock's gradient, icon plates). */
+    alpha: Boolean = false,
+    onChange: (Int) -> Unit,
+) {
+    // The color's see-through stays as it is while you pick a hue or a swatch
+    val a = if (alpha) (color ushr 24) and 0xFF else 0xFF
+    fun keepAlpha(c: Int) = (c and 0x00FFFFFF) or (a shl 24)
     Column(Modifier.fillMaxWidth()) {
         Row(
             Modifier.fillMaxWidth().clickable { onToggle() }.padding(horizontal = 20.dp, vertical = 12.dp),
@@ -476,14 +487,14 @@ fun ColorEditor(label: String, color: Int, open: Boolean, onToggle: () -> Unit, 
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 WallColors.forEach { c ->
-                    val on = c == color
+                    val on = keepAlpha(c) == color
                     Box(
                         Modifier
                             .size(34.dp)
                             .clip(CircleShape)
                             .background(Color(c))
                             .border(if (on) 3.dp else 1.dp, if (on) Color.White else Q.Edge, CircleShape)
-                            .clickable { onChange(c) },
+                            .clickable { onChange(keepAlpha(c)) },
                     )
                 }
             }
@@ -505,11 +516,19 @@ fun ColorEditor(label: String, color: Int, open: Boolean, onToggle: () -> Unit, 
             fun set(i: Int, v: Float) {
                 val next = hsv.copyOf()
                 next[i] = v
-                onChange(android.graphics.Color.HSVToColor(next))
+                onChange(android.graphics.Color.HSVToColor(a, next))
             }
             SliderRow("Hue", hsv[0], 0f..360f, "${hsv[0].roundToInt()}°") { set(0, it) }
             SliderRow("Saturation", hsv[1], 0f..1f, "${(hsv[1] * 100).roundToInt()}%") { set(1, it) }
             SliderRow("Brightness", hsv[2], 0f..1f, "${(hsv[2] * 100).roundToInt()}%") { set(2, it) }
+            if (alpha) {
+                // 0% is solid, like the glass's see-through slider
+                val clear = 1f - a / 255f
+                SliderRow("See-through", clear, 0f..1f, "${(clear * 100).roundToInt()}%") { v ->
+                    val na = ((1f - v) * 255f).roundToInt().coerceIn(0, 255)
+                    onChange((color and 0x00FFFFFF) or (na shl 24))
+                }
+            }
         }
         RowDivider()
     }
