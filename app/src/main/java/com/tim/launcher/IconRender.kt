@@ -30,6 +30,7 @@ import com.tim.launcher.settings.IconShape
 import com.tim.launcher.settings.IconStyle
 import com.tim.launcher.settings.S
 import com.tim.launcher.settings.SettingsStore
+import com.tim.launcher.settings.orHome
 import java.util.concurrent.Executors
 import kotlin.math.PI
 import kotlin.math.abs
@@ -70,7 +71,20 @@ object IconRender {
             slot == IconSlot.DOCK -> store[S.iconPackDock]
             else -> store[S.iconPackDrawer]
         }
-        return Spec(pack, store[S.iconShape], store[S.iconForceShape], store[S.iconStyle], store[S.iconBackground], store[S.iconBgColor])
+        // Dock and drawer have their own shape and style when icons don't match everywhere
+        val place = when {
+            store[S.iconsMatch] || slot == IconSlot.HOME -> null
+            slot == IconSlot.DOCK -> S.iconsDock
+            else -> S.iconsDrawer
+        }
+        return Spec(
+            pack,
+            store.orHome(place?.shape, S.iconShape),
+            store.orHome(place?.force, S.iconForceShape),
+            store.orHome(place?.style, S.iconStyle),
+            store.orHome(place?.background, S.iconBackground),
+            store.orHome(place?.color, S.iconBgColor),
+        )
     }
 
     /** Bumped when newly drawn icons are ready, so icons on screen swap in. */

@@ -277,8 +277,8 @@ private fun DockBar(
 
     if (!vertical) {
         BoxWithConstraints(modifier.fillMaxWidth().onGloballyPositioned { look.onDockBounds(it.boundsInRoot()) }, contentAlignment = Alignment.Center) {
-            val cellW = 72.dp
-            val iconSize = 56.dp
+            val iconSize = 56.dp * look.dockIconScale
+            val cellW = maxOf(72.dp, iconSize + 16.dp)
             val cellH = iconSize + if (look.labelsDock) 36.dp else 20.dp
             val depth = cellH + style.padding.dp * 2 + style.waveRoom
             val ends = 8.dp + style.endRoom(depth)
@@ -322,9 +322,9 @@ private fun DockBar(
                 else -> Alignment.BottomCenter
             },
         ) {
-            val cellH = 80.dp
-            val iconSize = 52.dp
-            val cellW = 72.dp
+            val iconSize = 52.dp * look.dockIconScale
+            val cellH = maxOf(80.dp, iconSize + 28.dp)
+            val cellW = maxOf(72.dp, iconSize + 20.dp)
             val depth = cellW + style.padding.dp * 2 + style.waveRoom
             val ends = 8.dp + style.endRoom(depth)
             val scrolls = cellH * count + ends * 2 > maxHeight

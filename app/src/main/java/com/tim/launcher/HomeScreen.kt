@@ -431,6 +431,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         panel = panel,
         dock = DockStyle.of(store),
         swapHandle = store[S.swapHandle] && store.dockPositionOn(scope) != DockPosition.NONE,
+        dockIconScale = store[S.dockIconSize],
         swapDock = { store.set(S.dockSwapped, value = !store[S.dockSwapped]) },
         labelsHome = store[S.labelsHome, scope],
         labelsDock = store[S.labelsDock],
@@ -657,6 +658,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
                 scroll = store[S.drawerScroll],
                 cols = if (store[S.drawerColsAuto]) 0 else drawerCols.coerceAtLeast(1),
                 labels = store[S.labelsDrawer],
+                iconScale = store[S.drawerIconSize],
                 sort = store[S.drawerSort],
                 dividers = store[S.drawerDividers],
                 tabs = store[S.drawerTabMode],
@@ -869,6 +871,7 @@ data class HomeLook(
     val panel: Color = Color.White.copy(alpha = 0.14f),
     val dock: DockStyle = DockStyle(),
     val swapHandle: Boolean = false,
+    val dockIconScale: Float = 1f,
     val swapDock: () -> Unit = {},
     /** Where the dock sits on screen, reported by the dock itself. */
     val onDockBounds: (Rect) -> Unit = {},

@@ -48,6 +48,7 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -105,6 +106,7 @@ data class DrawerLook(
     /** 0 means fit as many as the space allows. */
     val cols: Int = 0,
     val labels: Boolean = true,
+    val iconScale: Float = 1f,
     val sort: DrawerSort = DrawerSort.ALPHA,
     val dividers: Boolean = false,
     val tabs: TabMode = TabMode.NONE,
@@ -117,6 +119,9 @@ data class DrawerLook(
 )
 
 private val PanelShape = RoundedCornerShape(28.dp)
+
+/** How big drawer icons are (Settings › Appearance › Icon sizes). */
+private val LocalDrawerIconScale = staticCompositionLocalOf { 1f }
 
 /** Clamps a size between [min] and [max], even on a screen smaller than [min]. */
 private fun Dp.fit(min: Dp, max: Dp): Dp = coerceIn(minOf(min, max), max)
@@ -134,7 +139,7 @@ fun AppDrawer(vm: HomeViewModel, drag: DragController, look: DrawerLook, startWi
     var carried by remember { mutableStateOf(false) }
     val full = look.style == DrawerStyle.FULL
 
-    CompositionLocalProvider(LocalLabelColor provides ink, LocalIconSlot provides IconSlot.DRAWER) {
+    CompositionLocalProvider(LocalLabelColor provides ink, LocalIconSlot provides IconSlot.DRAWER, LocalDrawerIconScale provides look.iconScale) {
         BoxWithConstraints(
             Modifier
                 .fillMaxSize()
@@ -469,7 +474,7 @@ private fun Heading(text: String, ink: Color) {
 
 /** Columns that fit: one per ~88dp, or your own number. */
 private fun columnsFor(look: DrawerLook, width: Dp): Int =
-    if (look.cols > 0) look.cols else (width / 88.dp).toInt().coerceIn(3, 12)
+    if (look.cols > 0) look.cols else (width / (88.dp * look.iconScale.coerceAtLeast(0.7f))).toInt().coerceIn(2, 12)
 
 private val monthFormat = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
 
@@ -529,7 +534,7 @@ private fun AppsView(
             }
             look.scroll == DrawerScroll.HORIZONTAL -> {
                 // Pages of apps you swipe through sideways; headings don't apply here
-                val rows = (maxHeight / 104.dp).toInt().coerceAtLeast(1)
+                val rows = (maxHeight / (104.dp * look.iconScale)).toInt().coerceAtLeast(1)
                 val perPage = (rows * cols).coerceAtLeast(1)
                 val apps = list.filterIsInstance<Entry.App>().map { it.app }
                 val pageCount = (apps.size + perPage - 1) / perPage
@@ -667,7 +672,7 @@ private fun DrawerItem(
         }
     } else {
         Box(gestures.fillMaxWidth().padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
-            AppIcon(app = app, size = 52.dp, showLabel = labels)
+            AppIcon(app = app, size = 52.dp * LocalDrawerIconScale.current, showLabel = labels)
         }
     }
 }

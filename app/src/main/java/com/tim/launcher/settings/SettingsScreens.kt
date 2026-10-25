@@ -275,7 +275,7 @@ fun HomeSettings(ctx: SettingsContext) {
             }
             RowDivider()
             val size = store[S.iconSize, scope]
-            SliderRow("Icon size", size, 0.7f..1.3f, "${(size * 100).roundToInt()}%", link = ctx.link(S.iconSize)) {
+            SliderRow("Icon size", size, 0.7f..1.5f, "${(size * 100).roundToInt()}%", link = ctx.link(S.iconSize)) {
                 store.set(S.iconSize, scope, (it * 20).roundToInt() / 20f)
             }
         }

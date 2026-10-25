@@ -136,6 +136,19 @@ enum class GestureSlot(val label: String) {
     PINCH("Pinch"),
 }
 
+/** One place's icon style (the dock's or the drawer's). The home screen uses the plain icon settings in [S]. */
+class IconPlaceSettings(id: String) {
+    val shape = Setting("look.$id.iconShape", IconShape.SYSTEM, EnumCodec(IconShape.entries.toTypedArray()))
+    val force = Setting("look.$id.iconForceShape", false, BoolCodec)
+    val style = Setting("look.$id.iconStyle", IconStyle.DEFAULT, EnumCodec(IconStyle.entries.toTypedArray()))
+    val background = Setting("look.$id.iconBackground", IconBackground.NONE, EnumCodec(IconBackground.entries.toTypedArray()))
+    val color = Setting("look.$id.iconBgColor", 0xFF8C6CFF.toInt(), IntCodec)
+}
+
+/** A dock or drawer icon setting, or the home screen's while that place hasn't been given its own. */
+fun <T> SettingsStore.orHome(place: Setting<T>?, home: Setting<T>): T =
+    if (place != null && owner(place, Scope.GLOBAL) != null) this[place] else this[home]
+
 /** Every setting Quartz knows about. Changing an id here orphans saved values, so ids stay stable. */
 object S {
     // Home screen
@@ -227,6 +240,12 @@ object S {
     val iconPackHome = Setting("look.iconPackHome", "", StringCodec)
     val iconPackDock = Setting("look.iconPackDock", "", StringCodec)
     val iconPackDrawer = Setting("look.iconPackDrawer", "", StringCodec)
+    /** How big dock and drawer icons are (the home screen's size is per screen: [iconSize]). */
+    val dockIconSize = Setting("dock.iconSize", 1.0f, FloatCodec)
+    val drawerIconSize = Setting("drawer.iconSize", 1.0f, FloatCodec)
+    /** The dock's and drawer's own icon style, used when icons don't match everywhere. Unset ones follow home. */
+    val iconsDock = IconPlaceSettings("dock")
+    val iconsDrawer = IconPlaceSettings("drawer")
     /** Notification badges; needs notification access, which you turn on yourself. */
     val badgesOn = Setting("look.badgesOn", false, BoolCodec)
     val badgeStyle = Setting("look.badgeStyle", BadgeStyle.DOT, EnumCodec(BadgeStyle.entries.toTypedArray()))
