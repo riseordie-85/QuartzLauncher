@@ -23,6 +23,7 @@ import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.Spacer
 import com.tim.launcher.ui.SliderRow
 import com.tim.launcher.ui.Tabs
+import com.tim.launcher.wallpaper.PatternStyle
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,7 +49,7 @@ import com.tim.launcher.IconRender
 import com.tim.launcher.IconSlot
 import com.tim.launcher.LocalIconSlot
 import com.tim.launcher.Prefs
-import com.tim.launcher.styledIcon
+import com.tim.launcher.StyledIcon
 import com.tim.launcher.ui.BodyText
 import com.tim.launcher.ui.Dropdown
 import com.tim.launcher.ui.GlassPanel
@@ -99,7 +100,7 @@ private fun IconPreview(slot: IconSlot) {
     ) {
         CompositionLocalProvider(LocalIconSlot provides slot) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                apps.forEach { app -> Image(styledIcon(app), contentDescription = app.label, modifier = Modifier.size(52.dp)) }
+                apps.forEach { app -> StyledIcon(app, 52.dp, contentDescription = app.label) }
             }
         }
     }
@@ -116,7 +117,7 @@ fun IconsSection(ctx: SettingsContext) {
     val context = LocalContext.current
     val packs by produceState(emptyList<IconPacks.Pack>()) { value = withContext(Dispatchers.IO) { IconPacks.installed(context) } }
     var tab by remember { mutableStateOf(IconSlot.HOME) }
-    var colorOpen by remember { mutableStateOf(false) }
+    var colorOpen by remember { mutableStateOf<String?>(null) }
     val match = store[S.iconsMatch]
     val slot = if (match) IconSlot.HOME else tab
     // The settings this tab edits: the plain ones for home (and for everything when matching), the place's own otherwise
@@ -181,10 +182,37 @@ fun IconsSection(ctx: SettingsContext) {
         SettingRow("Background", "A plate behind each icon, in your shape") {
             Dropdown(background, IconBackground.entries, { it.label }) { set(S.iconBackground, place?.background, it) }
         }
-        if (background == IconBackground.COLOR) {
-            ColorEditor("Background color", store.orHome(place?.color, S.iconBgColor), colorOpen, { colorOpen = !colorOpen }) {
-                set(S.iconBgColor, place?.color, it)
+        if (background == IconBackground.COLOR || background == IconBackground.GRADIENT) {
+            val gradient = background == IconBackground.GRADIENT
+            ColorEditor(if (gradient) "Gradient from" else "Background color", store.orHome(place?.color, S.iconBgColor), colorOpen == "from", {
+                colorOpen = if (colorOpen == "from") null else "from"
+            }) { set(S.iconBgColor, place?.color, it) }
+            if (gradient) {
+                ColorEditor("Gradient to", store.orHome(place?.color2, S.iconBgColor2), colorOpen == "to", {
+                    colorOpen = if (colorOpen == "to") null else "to"
+                }) { set(S.iconBgColor2, place?.color2, it) }
             }
+        }
+        if (background != IconBackground.NONE) {
+            val pattern = store.orHome(place?.pattern, S.iconPattern)
+            SettingRow("Pattern", "Over the background") {
+                Dropdown(pattern, PatternStyle.entries, { if (it.faceted) "◆ ${it.label}" else it.label }) { set(S.iconPattern, place?.pattern, it) }
+            }
+            if (pattern != PatternStyle.NONE) {
+                val strength = store.orHome(place?.patternStrength, S.iconPatternStrength)
+                SliderRow("Pattern strength", strength, 0.05f..0.6f, "${(strength * 100).roundToInt()}%") {
+                    set(S.iconPatternStrength, place?.patternStrength, it)
+                }
+            }
+        }
+        RowDivider()
+        SettingRow("Edge", "A hairline, or light catching the rim like the dock's") {
+            Dropdown(store.orHome(place?.edge, S.iconEdge), DockEdge.entries, { it.label }) { set(S.iconEdge, place?.edge, it) }
+        }
+        RowDivider()
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+            Text("Shadow", color = Q.Text, fontSize = 16.sp, modifier = Modifier.padding(bottom = 10.dp))
+            Segmented(store.orHome(place?.shadow, S.iconShadow), IconShadow.entries, { it.label }) { set(S.iconShadow, place?.shadow, it) }
         }
     }
 

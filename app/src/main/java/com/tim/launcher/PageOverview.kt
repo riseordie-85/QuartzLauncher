@@ -292,6 +292,6 @@ private fun MiniIcon(key: String?, vm: HomeViewModel, size: Dp) {
             Modifier.size(size).clip(RoundedCornerShape(size * 0.28f)).background(Color.White.copy(alpha = 0.3f)),
         )
     } else {
-        vm.apps[key]?.let { Image(styledIcon(it), contentDescription = null, modifier = Modifier.size(size)) }
+        vm.apps[key]?.let { StyledIcon(it, size) }
     }
 }

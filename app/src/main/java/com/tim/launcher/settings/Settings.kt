@@ -108,7 +108,8 @@ enum class IconShape(val label: String) {
     TEARDROP("Teardrop"), HEXAGON("Hexagon"),
 }
 enum class IconStyle(val label: String) { DEFAULT("Default"), MINIMAL("Minimal") }
-enum class IconBackground(val label: String) { NONE("None"), LIGHT("Light"), DARK("Dark"), COLOR("Color") }
+enum class IconBackground(val label: String) { NONE("None"), LIGHT("Light"), DARK("Dark"), COLOR("Color"), GRADIENT("Gradient") }
+enum class IconShadow(val label: String) { NONE("None"), SOFT("Soft"), STRONG("Strong") }
 enum class BadgeStyle(val label: String) { DOT("Dot"), COUNTER("Counter") }
 enum class FolderIcon(val label: String) { PLAIN("Folder"), BADGE("Folder with badge"), GRID2("2 × 2 preview"), GRID3("3 × 3 preview") }
 enum class FolderOpen(val label: String) { FULL("Full screen"), CENTER("Floating box"), POPUP("Pop up by the icon"), ROW("Expanding row") }
@@ -143,6 +144,11 @@ class IconPlaceSettings(id: String) {
     val style = Setting("look.$id.iconStyle", IconStyle.DEFAULT, EnumCodec(IconStyle.entries.toTypedArray()))
     val background = Setting("look.$id.iconBackground", IconBackground.NONE, EnumCodec(IconBackground.entries.toTypedArray()))
     val color = Setting("look.$id.iconBgColor", 0xFF8C6CFF.toInt(), IntCodec)
+    val color2 = Setting("look.$id.iconBgColor2", 0xFF2546A8.toInt(), IntCodec)
+    val pattern = Setting("look.$id.iconPattern", PatternStyle.NONE, EnumCodec(PatternStyle.entries.toTypedArray()))
+    val patternStrength = Setting("look.$id.iconPatternStrength", 0.3f, FloatCodec)
+    val edge = Setting("look.$id.iconEdge", DockEdge.NONE, EnumCodec(DockEdge.entries.toTypedArray()))
+    val shadow = Setting("look.$id.iconShadow", IconShadow.NONE, EnumCodec(IconShadow.entries.toTypedArray()))
 }
 
 /** A dock or drawer icon setting, or the home screen's while that place hasn't been given its own. */
@@ -234,6 +240,14 @@ object S {
     val iconBackground = Setting("look.iconBackground", IconBackground.NONE, EnumCodec(IconBackground.entries.toTypedArray()))
     /** The background color when [iconBackground] is "Color". */
     val iconBgColor = Setting("look.iconBgColor", 0xFF8C6CFF.toInt(), IntCodec)
+    /** The background gradient's second color, and a pattern drawn over the background. */
+    val iconBgColor2 = Setting("look.iconBgColor2", 0xFF2546A8.toInt(), IntCodec)
+    val iconPattern = Setting("look.iconPattern", PatternStyle.NONE, EnumCodec(PatternStyle.entries.toTypedArray()))
+    val iconPatternStrength = Setting("look.iconPatternStrength", 0.3f, FloatCodec)
+    /** A lit rim around each icon, like the dock's. */
+    val iconEdge = Setting("look.iconEdge", DockEdge.NONE, EnumCodec(DockEdge.entries.toTypedArray()))
+    /** A shadow under each icon. */
+    val iconShadow = Setting("look.iconShadow", IconShadow.NONE, EnumCodec(IconShadow.entries.toTypedArray()))
     /** Cut every icon to the shape, even ones from an icon pack. */
     val iconForceShape = Setting("look.iconForceShape", false, BoolCodec)
     /** Icon pack package names; "" is the apps' own icons. Home is used everywhere when icons match. */

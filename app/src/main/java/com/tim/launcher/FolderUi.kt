@@ -167,7 +167,7 @@ fun FolderIconView(folder: Folder, vm: HomeViewModel, size: Dp, showLabel: Boole
                             Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
                                 for (c in 0 until n) {
                                     val app = folder.items.getOrNull(r * n + c)?.let { vm.apps[it] }
-                                    if (app != null) Image(styledIcon(app), contentDescription = null, modifier = Modifier.size(mini))
+                                    if (app != null) StyledIcon(app, mini)
                                     else Spacer(Modifier.size(mini))
                                 }
                             }
@@ -669,7 +669,7 @@ private fun FolderItem(
     ) {
         if (list) {
             Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Image(styledIcon(app), contentDescription = null, modifier = Modifier.size(40.dp))
+                StyledIcon(app, 40.dp)
                 Spacer(Modifier.width(14.dp))
                 Text(app.label, color = LocalLabelColor.current, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }

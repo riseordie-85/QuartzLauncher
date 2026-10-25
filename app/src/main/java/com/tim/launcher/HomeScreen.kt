@@ -43,6 +43,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.LocalView
@@ -1019,7 +1020,7 @@ fun AppIcon(app: AppEntry, size: Dp, showLabel: Boolean, modifier: Modifier = Mo
     val store = remember { SettingsStore.get(context) }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Box {
-            Image(bitmap = styledIcon(app), contentDescription = app.label, modifier = Modifier.size(size))
+            StyledIcon(app, size, contentDescription = app.label)
             BadgeOverlay(store, listOf(app.component.packageName), size, Modifier.align(Alignment.TopEnd).offset(x = size * 0.08f, y = -size * 0.08f))
         }
         if (showLabel) {
@@ -1035,6 +1036,23 @@ fun AppIcon(app: AppEntry, size: Dp, showLabel: Boolean, modifier: Modifier = Mo
                 modifier = Modifier.padding(top = 4.dp).widthIn(max = size * 1.6f),
             )
         }
+    }
+}
+
+/**
+ * An app's icon as you've styled it for where it's shown, [size] across. A shadow is drawn on a slightly bigger
+ * picture, which spills past [size] so the icon itself stays the same size.
+ */
+@Composable
+fun StyledIcon(app: AppEntry, size: Dp, modifier: Modifier = Modifier, contentDescription: String? = null) {
+    val context = LocalContext.current
+    val store = remember { SettingsStore.get(context) }
+    val spec = IconRender.specFor(store, LocalIconSlot.current)
+    @Suppress("UNUSED_VARIABLE") val ready = IconRender.version // redraw when new icons are ready
+    val drawn = IconRender.icon(context, app, spec)
+    val over = if (drawn != null && drawn !== app.icon) spec.overscan else 1f
+    Box(modifier.size(size), contentAlignment = Alignment.Center) {
+        Image(drawn ?: app.icon, contentDescription = contentDescription, modifier = Modifier.requiredSize(size * over))
     }
 }
 

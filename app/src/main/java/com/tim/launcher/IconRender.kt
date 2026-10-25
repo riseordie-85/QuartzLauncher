@@ -4,6 +4,14 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.LauncherApps
 import android.graphics.Bitmap
+import com.tim.launcher.wallpaper.WallRenderer
+import com.tim.launcher.wallpaper.PatternStyle
+import com.tim.launcher.settings.IconShadow
+import com.tim.launcher.settings.DockEdge
+import android.graphics.BlurMaskFilter
+import android.graphics.Rect
+import android.graphics.Shader
+import android.graphics.LinearGradient
 import android.graphics.Canvas
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
@@ -59,11 +67,23 @@ object IconRender {
         val style: IconStyle,
         val background: IconBackground,
         val color: Int,
+        val color2: Int = 0,
+        val pattern: PatternStyle = PatternStyle.NONE,
+        val patternStrength: Float = 0.3f,
+        val edge: DockEdge = DockEdge.NONE,
+        val shadow: IconShadow = IconShadow.NONE,
     ) {
         /** Nothing to change: the app's own icon is used as it is. */
-        val plain get() = pack.isEmpty() && shape == IconShape.SYSTEM && style == IconStyle.DEFAULT && background == IconBackground.NONE
-        val key get() = "$pack|$shape|$force|$style|$background|$color"
+        val plain get() = pack.isEmpty() && shape == IconShape.SYSTEM && style == IconStyle.DEFAULT &&
+            background == IconBackground.NONE && edge == DockEdge.NONE && shadow == IconShadow.NONE
+        val key get() = "$pack|$shape|$force|$style|$background|$color|$color2|$pattern|$patternStrength|$edge|$shadow"
+
+        /** How much bigger than the icon its picture is drawn, to leave room for the shadow. */
+        val overscan get() = if (shadow == IconShadow.NONE) 1f else OVERSCAN
     }
+
+    /** Room around an icon for its shadow: the picture is this much bigger than the icon. */
+    const val OVERSCAN = 1.25f
 
     fun specFor(store: SettingsStore, slot: IconSlot): Spec {
         val pack = when {
@@ -84,6 +104,11 @@ object IconRender {
             store.orHome(place?.style, S.iconStyle),
             store.orHome(place?.background, S.iconBackground),
             store.orHome(place?.color, S.iconBgColor),
+            store.orHome(place?.color2, S.iconBgColor2),
+            store.orHome(place?.pattern, S.iconPattern),
+            store.orHome(place?.patternStrength, S.iconPatternStrength),
+            store.orHome(place?.edge, S.iconEdge),
+            store.orHome(place?.shadow, S.iconShadow),
         )
     }
 
@@ -152,7 +177,16 @@ object IconRender {
 
     // ---- Drawing ----
 
+    /** The icon, then its rim of light and its shadow. */
     private fun render(context: Context, app: AppEntry, spec: Spec): Bitmap? {
+        val icon = drawIcon(context, app, spec) ?: return null
+        val shape = path(if (spec.shape == IconShape.SYSTEM) IconShape.SQUIRCLE else spec.shape, SIZE.toFloat())
+        drawEdge(Canvas(icon), shape, SIZE.toFloat(), spec.edge, isLight(plateColor(spec) ?: 0xFF000000.toInt()))
+        if (spec.shadow == IconShadow.NONE) return icon
+        return withShadow(icon, spec.shadow)
+    }
+
+    private fun drawIcon(context: Context, app: AppEntry, spec: Spec): Bitmap? {
         val density = context.resources.displayMetrics.densityDpi
         val launcherApps = context.getSystemService(LauncherApps::class.java)
         val info = launcherApps?.resolveActivity(Intent().setComponent(app.component), Process.myUserHandle())
@@ -170,7 +204,7 @@ object IconRender {
 
         if (spec.style == IconStyle.MINIMAL) {
             // One color: Android 13's monochrome icon when the app has one, otherwise a grey version of its icon
-            if (plate != null) fillShape(canvas, shape, plate)
+            if (plate != null) paintPlate(canvas, shape, spec, s)
             val ink = if (plate != null && isLight(plate)) 0xFF1E1D24.toInt() else 0xFFFFFFFF.toInt()
             val mono = (own as? AdaptiveIconDrawable)?.monochrome?.mutate()
             if (mono != null) {
@@ -211,16 +245,16 @@ object IconRender {
         val adaptive = own as? AdaptiveIconDrawable
         when {
             packIcon != null -> {
-                fillShape(canvas, shape, plate ?: 0xFFF4F4F6.toInt())
+                if (plate != null) fillPlate(canvas, spec, s) else canvas.drawColor(0xFFF4F4F6.toInt())
                 drawInset(canvas, packIcon, s, 0.78f)
             }
             adaptive != null -> {
-                if (plate != null) canvas.drawColor(plate) else adaptive.background?.let { drawLayer(canvas, it, s, adaptive = true) }
+                if (plate != null) fillPlate(canvas, spec, s) else adaptive.background?.let { drawLayer(canvas, it, s, adaptive = true) }
                 adaptive.foreground?.let { drawLayer(canvas, it, s, adaptive = true) }
             }
             own != null -> {
                 // An old-style icon with its own outline: sit it on a plate so it fills the shape neatly
-                canvas.drawColor(plate ?: 0xFFF4F4F6.toInt())
+                if (plate != null) fillPlate(canvas, spec, s) else canvas.drawColor(0xFFF4F4F6.toInt())
                 drawInset(canvas, own, s, 0.7f)
             }
         }
@@ -232,7 +266,92 @@ object IconRender {
         IconBackground.NONE -> null
         IconBackground.LIGHT -> 0xFFF4F4F6.toInt()
         IconBackground.DARK -> 0xFF1E1D24.toInt()
-        IconBackground.COLOR -> spec.color or 0xFF000000.toInt()
+        IconBackground.COLOR, IconBackground.GRADIENT -> spec.color or 0xFF000000.toInt()
+    }
+
+    private val platePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.DITHER_FLAG)
+
+    /** The background inside the shape: a color or a corner-to-corner gradient, then the pattern, if any. */
+    private fun fillPlate(canvas: Canvas, spec: Spec, s: Float) {
+        val base = plateColor(spec) ?: return
+        if (spec.background == IconBackground.GRADIENT) {
+            platePaint.shader = LinearGradient(0f, 0f, s, s, base, spec.color2 or 0xFF000000.toInt(), Shader.TileMode.CLAMP)
+            canvas.drawRect(0f, 0f, s, s, platePaint)
+            platePaint.shader = null
+        } else {
+            canvas.drawColor(base)
+        }
+        if (spec.pattern != PatternStyle.NONE) {
+            // Sized as if the icon were a small piece of a screen, so a few facets or dots show across it
+            WallRenderer.drawPatternOnly(canvas, s, s * 3.5f, Rect(0, 0, s.toInt(), s.toInt()), spec.pattern, spec.patternStrength)
+        }
+    }
+
+    /** [fillPlate], cut to [shape] with a smooth edge. */
+    private fun paintPlate(canvas: Canvas, shape: Path, spec: Spec, s: Float) {
+        fillShape(canvas, shape, 0xFF000000.toInt())
+        val layer = canvas.saveLayer(null, cutPaint)
+        fillPlate(canvas, spec, s)
+        canvas.restoreToCount(layer)
+    }
+
+    private val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        // Only where the icon already is, so the outer half of the line disappears and the edge stays smooth
+        xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_ATOP)
+    }
+    private val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_ATOP) }
+
+    /** The rim around an icon: a hairline, or light catching the edge (brightest top left, a glint bottom right). */
+    private fun drawEdge(canvas: Canvas, shape: Path, s: Float, edge: DockEdge, lightPlate: Boolean) {
+        when (edge) {
+            DockEdge.NONE -> return
+            DockEdge.HAIRLINE -> {
+                rimPaint.shader = null
+                rimPaint.color = if (lightPlate) 0x40000000 else 0x55FFFFFF
+                rimPaint.strokeWidth = s * 0.03f
+                canvas.drawPath(shape, rimPaint)
+            }
+            DockEdge.SOFT, DockEdge.BRIGHT -> {
+                val k = if (edge == DockEdge.BRIGHT) 1f else 0.6f
+                fun w(a: Float) = (((a * k).coerceIn(0f, 1f) * 255).toInt() shl 24) or 0xFFFFFF
+                rimPaint.color = 0xFFFFFFFF.toInt()
+                rimPaint.shader = LinearGradient(
+                    0f, 0f, s, s,
+                    intArrayOf(w(0.95f), w(0.32f), w(0.12f), w(0.3f), w(0.75f)),
+                    floatArrayOf(0f, 0.3f, 0.5f, 0.75f, 1f),
+                    Shader.TileMode.CLAMP,
+                )
+                rimPaint.strokeWidth = s * if (edge == DockEdge.BRIGHT) 0.05f else 0.04f
+                canvas.drawPath(shape, rimPaint)
+                rimPaint.shader = null
+                if (edge == DockEdge.BRIGHT) {
+                    // A soft sheen across the top, as if the icon were a curved piece of glass
+                    sheenPaint.shader = LinearGradient(0f, 0f, 0f, s * 0.5f, 0x2EFFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP)
+                    canvas.drawRect(0f, 0f, s, s * 0.5f, sheenPaint)
+                    sheenPaint.shader = null
+                }
+            }
+        }
+    }
+
+    /** The icon on a bigger picture with a blurred shadow under it, falling slightly down. */
+    private fun withShadow(icon: Bitmap, shadow: IconShadow): Bitmap {
+        val big = (SIZE * OVERSCAN).toInt()
+        val out = Bitmap.createBitmap(big, big, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(out)
+        val strong = shadow == IconShadow.STRONG
+        val blur = SIZE * if (strong) 0.07f else 0.05f
+        val offset = IntArray(2)
+        val alpha = icon.extractAlpha(Paint().apply { maskFilter = BlurMaskFilter(blur, BlurMaskFilter.Blur.NORMAL) }, offset)
+        val margin = (big - SIZE) / 2f
+        val drop = SIZE * if (strong) 0.05f else 0.035f
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = if (strong) 0x8C000000.toInt() else 0x59000000 }
+        canvas.drawBitmap(alpha, margin + offset[0], margin + offset[1] + drop, paint)
+        alpha.recycle()
+        canvas.drawBitmap(icon, margin, margin, null)
+        icon.recycle()
+        return out
     }
 
     private fun isLight(c: Int): Boolean {

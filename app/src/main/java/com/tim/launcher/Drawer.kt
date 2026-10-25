@@ -667,7 +667,7 @@ private fun DrawerItem(
             gestures.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Image(styledIcon(app), contentDescription = null, modifier = Modifier.size(40.dp))
+            StyledIcon(app, 40.dp)
             Spacer(Modifier.width(14.dp))
             Text(app.label, color = LocalLabelColor.current, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
