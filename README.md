@@ -1,6 +1,15 @@
 # Quartz Launcher
 
-Phase 6: app drawer and search, on phase 5 dock styling, the phase 4 wallpaper engine, phase 3 folders and gestures, phase 2 layout engine and phase 1 settings.
+Phase 7: icons and badges, on phase 6 app drawer and search, phase 5 dock styling, the phase 4 wallpaper engine, phase 3 folders and gestures, phase 2 layout engine and phase 1 settings.
+
+## Phase 7: what's new
+
+- **Icon packs:** any pack made for Nova, Lawnchair and similar launchers. Use one everywhere, or turn off "Match everywhere" to pick one each for the home screen, dock and app drawer. Apps a pack doesn't cover get the pack's own frame when it has one.
+- **Shapes:** app's own, circle, squircle, rounded square, square, teardrop, hexagon. "Use the shape on every icon" cuts pack icons too.
+- **Style:** default, or minimal (one color: Android 13 monochrome icons where apps have them, a grey version otherwise).
+- **Background:** none, light, dark, or a color you pick, as a plate behind each icon.
+- **Badges** (Appearance › Notification badges): a dot or a count (99+) that changes color at two steps you choose. Folders add up their apps. Needs notification access, which you turn on yourself; Quartz only counts notifications per app and never reads them. Off by default.
+- Icons are drawn in the background and kept, so the home screen never waits; the app's own icon shows until its styled one is ready.
 
 ## Phase 6: what's new
 
