@@ -139,7 +139,7 @@ fun AppDrawer(vm: HomeViewModel, drag: DragController, look: DrawerLook, startWi
             Modifier
                 .fillMaxSize()
                 .graphicsLayer { alpha = if (carried || drag.fromDrawer) 0f else 1f }
-                .then(if (full) Modifier else Modifier.background(Color(0x40000000)))
+                // No dimming behind the floating, side and bottom styles; tapping outside still closes them
                 // Keyed on the style, so switching it while open (via the + tab button) doesn't keep the old rule
                 .pointerInput(full) { detectTapGestures { if (!full) onClose() } },
         ) {
