@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -242,12 +243,18 @@ private fun WeatherRow(
     }
 }
 
+/**
+ * True while something covers the home screen (the app drawer, the page overview): widgets underneath hold still,
+ * so they don't take time from scrolling the drawer on slower devices.
+ */
+val LocalWidgetsPaused = compositionLocalOf { false }
+
 /** A Meteocons weather icon, playing while the home screen is showing (still when [motion] is off). */
 @Composable
 fun WeatherIcon(name: String, motion: Boolean, modifier: Modifier) {
     val composition by rememberLottieComposition(LottieCompositionSpec.Asset("weather/$name.json"))
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
-    val playing = motion && lifecycle.isAtLeast(Lifecycle.State.RESUMED)
+    val playing = motion && lifecycle.isAtLeast(Lifecycle.State.RESUMED) && !LocalWidgetsPaused.current
     val progress by animateLottieCompositionAsState(composition, iterations = LottieConstants.IterateForever, isPlaying = playing)
     LottieAnimation(composition, { if (motion) progress else 0.25f }, modifier)
 }

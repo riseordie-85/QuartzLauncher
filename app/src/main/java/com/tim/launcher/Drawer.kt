@@ -72,6 +72,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -603,15 +604,17 @@ private fun DrawerItem(
     onClose: () -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
-    val itemBounds = remember { arrayOf(Rect.Zero) }
+    // Where the item is, worked out only when it's needed (tap, pick up) rather than on every frame of a scroll
+    val placed = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    fun bounds(): Rect = placed[0]?.takeIf { it.isAttached }?.boundsInRoot() ?: Rect.Zero
     var lifted by remember { mutableStateOf(false) }
     val gestures = Modifier
-        .onGloballyPositioned { itemBounds[0] = it.boundsInRoot() }
+        .onGloballyPositioned { placed[0] = it }
         .clip(RoundedCornerShape(16.dp))
         .pointerInput(app.key) {
             detectTapGestures(
                 onTap = {
-                    vm.launch(app, itemBounds[0].toAndroidRect())
+                    vm.launch(app, bounds().toAndroidRect())
                     onClose()
                 },
                 onLongPress = { }, // long press picks the app up instead
@@ -626,7 +629,7 @@ private fun DrawerItem(
                 onDragStart = { local ->
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     lifted = true
-                    startAt = itemBounds[0].topLeft + local
+                    startAt = bounds().topLeft + local
                     travel = Offset.Zero
                     carrying = false
                 },

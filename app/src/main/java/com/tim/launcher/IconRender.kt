@@ -29,6 +29,8 @@ import android.os.Process
 import android.util.LruCache
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.State
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.ImageBitmap
@@ -129,9 +131,26 @@ object IconRender {
         )
     }
 
-    /** Bumped when newly drawn icons are ready, so icons on screen swap in. */
+    /**
+     * Bumped when newly drawn icons are ready, so icons still waiting for theirs swap in. Only icons that are
+     * waiting watch it: an icon already showing its drawing doesn't redraw every time another one is ready
+     * (that made scrolling the drawer stutter on slower devices while new icons were being drawn).
+     */
     var version by mutableIntStateOf(0)
         private set
+
+    /** Bumped when drawn icons are thrown away (a pack changed or an app updated), so every icon looks again. */
+    var epoch by mutableIntStateOf(0)
+        private set
+
+    private val specStates = HashMap<IconSlot, State<Spec>>()
+
+    /**
+     * The style for [slot], worked out once and shared by every icon in that place (rather than each icon reading
+     * every icon setting itself). Follows the settings as they change.
+     */
+    fun specState(store: SettingsStore, slot: IconSlot): State<Spec> =
+        specStates.getOrPut(slot) { derivedStateOf { specFor(store, slot) } }
 
     // Same size as the apps' own icons, so styled ones are just as sharp
     private const val SIZE = 192
@@ -211,9 +230,13 @@ object IconRender {
     /** An app was updated or removed: redraw everything if it was an icon pack in use, else just its own icons. */
     fun packageChanged(pkg: String?) {
         if (pkg == null) return
-        if (IconPacks.isLoaded(pkg)) clear()
-        // Otherwise the app's own icon may have changed: drop what was drawn from the old one
-        else cache.snapshot().keys.filter { it.contains("|$pkg/") }.forEach { cache.remove(it) }
+        if (IconPacks.isLoaded(pkg)) {
+            clear()
+        } else {
+            // Otherwise the app's own icon may have changed: drop what was drawn from the old one
+            cache.snapshot().keys.filter { it.contains("|$pkg/") }.forEach { cache.remove(it) }
+            main.post { epoch++ }
+        }
     }
 
     private var refreshQueued = false
@@ -234,7 +257,10 @@ object IconRender {
     fun clear() {
         cache.evictAll()
         IconPacks.clear()
-        main.post { version++ }
+        main.post {
+            epoch++
+            version++
+        }
     }
 
     // ---- Drawing ----

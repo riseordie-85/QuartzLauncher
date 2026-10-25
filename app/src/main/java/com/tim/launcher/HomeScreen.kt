@@ -746,7 +746,10 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             },
     ) {
       CompositionLocalProvider(LocalHomeLook provides look, LocalGlass provides glass, LocalLabelColor provides homeLabels) {
-        HomeLayout(screen, vm, drag, showHint = !hintSeen)
+        // Covered by the drawer or the page overview: the widgets underneath hold still
+        CompositionLocalProvider(LocalWidgetsPaused provides (drawerOpen || overviewOpen)) {
+            HomeLayout(screen, vm, drag, showHint = !hintSeen)
+        }
 
         AnimatedVisibility(
             visible = drawerOpen,
@@ -1269,9 +1272,15 @@ fun StyledIcon(
 ) {
     val context = LocalContext.current
     val store = remember { SettingsStore.get(context) }
-    val s = spec ?: IconRender.specFor(store, LocalIconSlot.current)
-    @Suppress("UNUSED_VARIABLE") val ready = IconRender.version // redraw when new icons are ready
+    val slot = LocalIconSlot.current
+    val shared = remember(slot) { IconRender.specState(store, slot) }
+    val s = spec ?: shared.value
+    @Suppress("UNUSED_VARIABLE") val epoch = IconRender.epoch // drawn icons were thrown away: look again
     val drawn = IconRender.icon(context, app, s)
+    // Still being drawn: redraw when new icons are ready (an icon already drawn doesn't need to)
+    if (drawn == null && !s.plain) {
+        @Suppress("UNUSED_VARIABLE") val ready = IconRender.version
+    }
     // While a new style is being drawn, keep showing the last one rather than flashing back to the plain icon
     val last = remember(app.key) { arrayOfNulls<Pair<ImageBitmap, Float>>(1) }
     val shown: Pair<ImageBitmap, Float> = when {
