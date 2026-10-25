@@ -229,6 +229,11 @@ class QuartzWidgetHostView(context: Context) : AppWidgetHostView(context) {
             r = maxOf(r, c.right)
             b = maxOf(b, c.bottom)
         }
+        // Only what's inside this view counts (a child can hang over its edges)
+        l = maxOf(l, 0)
+        t = maxOf(t, 0)
+        r = minOf(r, right - left)
+        b = minOf(b, bottom - top)
         if (l >= r || t >= b) return
         if (content[0] != l || content[1] != t || content[2] != r || content[3] != b) {
             content[0] = l

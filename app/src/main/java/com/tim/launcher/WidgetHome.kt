@@ -13,7 +13,17 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import android.os.SystemClock
+import android.graphics.Bitmap
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.unit.IntRect
+import kotlin.coroutines.cancellation.CancellationException
 import android.appwidget.AppWidgetProviderInfo
 import android.os.Bundle
 import android.util.SizeF
@@ -110,12 +120,28 @@ private data class Block(val c: Int, val r: Int, val w: Int, val h: Int)
  */
 @Composable
 internal fun WidgetLayer(base: Int, items: List<String?>, cols: Int, cellW: Dp, cellH: Dp, vm: HomeViewModel, drag: DragController) {
+    val range = base until base + vm.perPage
+    // The widget being carried stays (hidden) where it really is while the page shows where things would go.
+    // Following the preview would restart the gesture carrying it, or on another page remake an app's widget
+    // mid-drag and lose the touch.
+    val carried = drag.key?.takeIf { isWidgetKey(it) }
+    val placed = ArrayList<Pair<HomeWidget, Int>>()
     val seen = HashSet<String>()
-    for (i in base until base + vm.perPage) {
+    for (i in range) {
         val k = items.getOrNull(i) ?: continue
-        if (!isWidgetKey(k) || !seen.add(k)) continue
+        if (k == carried || !isWidgetKey(k) || !seen.add(k)) continue
         val widget = vm.widgetFor(k) ?: continue
-        key(k) {
+        placed += widget to i
+    }
+    if (carried != null) {
+        val widget = vm.widgetFor(carried)
+        val at = widget?.let { vm.widgetSpot(it.id) }
+        if (widget != null && at != null && at in range) placed += widget to at
+    }
+    placed.sortBy { it.second }
+    // One keyed loop, so a widget that changes spot (or starts or stops being carried) keeps its composition
+    for ((widget, i) in placed) {
+        key(WIDGET_PREFIX + widget.id) {
             WidgetOnGrid(widget, i, Block((i - base) % cols, (i - base) / cols, widget.w, widget.h), cellW, cellH, vm, drag)
         }
     }
@@ -140,12 +166,14 @@ private fun WidgetOnGrid(widget: HomeWidget, anchor: Int, block: Block, cellW: D
     }
     var edit by remember(widget, resizing) { mutableStateOf(home) }
     val shown = if (resizing) edit else block
-    // Pushed aside by another widget, or set down somewhere new: slide over rather than jump
-    val glide = !resizing && !(drag.active && drag.key == key)
-    val x by animateDpAsState(cellW * shown.c, if (glide) spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow) else snap(), label = "x")
-    val y by animateDpAsState(cellH * shown.r, if (glide) spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow) else snap(), label = "y")
-    var origin by remember { mutableStateOf(Offset.Zero) }
     val carried = drag.active && drag.key == key
+    // Pushed aside by another widget: slide over rather than jump. Not the one being resized, carried or just let go
+    // of (it shows up where you dropped it). Counted in cells, so the grid changing size doesn't make it slide.
+    val justDropped = drag.lastKey == key && SystemClock.uptimeMillis() - drag.endedAt < 600
+    val glide = !resizing && !carried && !justDropped
+    val col by animateFloatAsState(shown.c.toFloat(), if (glide) spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow) else snap(), label = "col")
+    val row by animateFloatAsState(shown.r.toFloat(), if (glide) spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow) else snap(), label = "row")
+    var origin by remember { mutableStateOf(Offset.Zero) }
 
     var boxSize by remember { mutableStateOf(Size.Zero) }
     val appWidget = widget.kind == WidgetKind.ANDROID
@@ -188,7 +216,7 @@ private fun WidgetOnGrid(widget: HomeWidget, anchor: Int, block: Block, cellW: D
 
     Box(
         Modifier
-            .offset(x, y)
+            .offset(cellW * col, cellH * row)
             .width(cellW * shown.w)
             .height(cellH * shown.h)
             .onGloballyPositioned {
@@ -203,9 +231,10 @@ private fun WidgetOnGrid(widget: HomeWidget, anchor: Int, block: Block, cellW: D
                 widget,
                 Modifier.fillMaxSize().padding(WIDGET_PAD),
                 holdEnabled = !resizing,
-                onHold = { x, y, view ->
-                    val at = Offset(x, y)
-                    val snapshot = runCatching { view.drawToBitmap().asImageBitmap() }.getOrNull()
+                onHold = { px, py, view ->
+                    val at = Offset(px, py)
+                    // With glass, just what the app draws (the panel is drawn around it again while carried)
+                    val snapshot = view?.let { v -> runCatching { v.snapshot(widget.glass).asImageBitmap() }.getOrNull() }
                     drag.startWidget(ref, key, at, grab = at - origin, size = boxSize, snapshot = snapshot)
                 },
                 onMove = { dx, dy -> drag.moveBy(Offset(dx, dy)) },
@@ -241,9 +270,11 @@ private fun WidgetOnGrid(widget: HomeWidget, anchor: Int, block: Block, cellW: D
                 cellH = ch,
                 onChange = { b ->
                     edit = b
-                    // Show what would move out of the way at this size
+                    // Show what would move out of the way at this size (nothing, back where it started: a handle let
+                    // go of or called off lands here too, maybe after resizing has ended)
                     val page = (vm.widgetSpot(widget.id) ?: anchor) / vm.perPage
-                    drag.plan = vm.planWidget(widget.id, page * vm.perPage + b.r * vm.cols + b.c, b.w, b.h)
+                    drag.plan = if (b == home || drag.resizing != widget.id) null
+                    else vm.planWidget(widget.id, page * vm.perPage + b.r * vm.cols + b.c, b.w, b.h)
                 },
                 onDone = { b ->
                     val page = (vm.widgetSpot(widget.id) ?: anchor) / vm.perPage
@@ -379,7 +410,7 @@ private fun AppWidgetBox(
     widget: HomeWidget,
     modifier: Modifier,
     holdEnabled: Boolean,
-    onHold: (x: Float, y: Float, view: QuartzWidgetHostView) -> Unit,
+    onHold: (x: Float, y: Float, view: QuartzWidgetHostView?) -> Unit,
     onMove: (dx: Float, dy: Float) -> Unit,
     onLetGo: (moved: Boolean) -> Unit,
     onCancel: () -> Unit,
@@ -387,38 +418,97 @@ private fun AppWidgetBox(
     // Android sends a widget the size it has, in dp, so it can pick the layout that fits
     val lastSize = remember(widget.appWidgetId) { arrayOfNulls<SizeF>(1) }
     // Where the app's widget really draws inside its view (px); many are shorter than the room they're given
-    var content by remember(widget.appWidgetId) { mutableStateOf<IntArray?>(null) }
+    var content by remember(widget.appWidgetId) { mutableStateOf<IntRect?>(null) }
     val look = LocalHomeLook.current
     val density = LocalDensity.current
-    BoxWithConstraints(modifier) {
-        val glass = widget.glass
+    val haptics = LocalHapticFeedback.current
+    val hostView = remember { arrayOfNulls<QuartzWidgetHostView>(1) }
+    val windowAt = remember { arrayOf(Offset.Zero) }
+    val hold by rememberUpdatedState(onHold)
+    val move by rememberUpdatedState(onMove)
+    val letGo by rememberUpdatedState(onLetGo)
+    val cancel by rememberUpdatedState(onCancel)
+    val glass = widget.glass
+    // With glass the app's view only takes touches on what it draws (it's clipped to that). The glass around it is
+    // still the widget: a touch there doesn't reach the home screen behind, and holding there picks it up too.
+    val glassTouch = if (!glass) Modifier else Modifier
+        .onGloballyPositioned { windowAt[0] = it.positionInWindow() }
+        .pointerInput(holdEnabled) {
+            awaitEachGesture {
+                // A touch on the app's view is used up there before this sees it
+                val down = awaitFirstDown()
+                down.consume()
+                val held = (if (holdEnabled) awaitLongPressOrCancellation(down.id) else null) ?: return@awaitEachGesture
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                held.consume()
+                val at = windowAt[0] + held.position
+                hold(at.x, at.y, hostView[0])
+                var moved = 0f
+                try {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == held.id }
+                        if (change == null) {
+                            cancel()
+                            break
+                        }
+                        if (!change.pressed) {
+                            // A lift someone else already took is the touch being called off
+                            if (change.isConsumed) cancel() else letGo(moved > viewConfiguration.touchSlop * 2)
+                            change.consume()
+                            break
+                        }
+                        val d = change.positionChange()
+                        change.consume()
+                        if (d != Offset.Zero) {
+                            moved += d.getDistance()
+                            move(d.x, d.y)
+                        }
+                    }
+                } catch (e: CancellationException) {
+                    cancel()
+                    throw e
+                }
+            }
+        }
+    BoxWithConstraints(modifier.then(glassTouch)) {
         // With glass, the widget sits inside the panel with an even margin all round, centered, and its corners are
-        // rounded to follow the panel's
+        // rounded to follow the panel's. All in px, the same way padding rounds.
         val inset = if (glass) 10.dp else 0.dp
-        val viewW = with(density) { (maxWidth - inset * 2).roundToPx() }
-        val viewH = with(density) { (maxHeight - inset * 2).roundToPx() }
-        val c = content?.takeIf { glass }
-        val cw = c?.let { it[2] - it[0] } ?: viewW
-        val ch = c?.let { it[3] - it[1] } ?: viewH
-        val dx = c?.let { (viewW - cw) / 2 - it[0] } ?: 0
-        val dy = c?.let { (viewH - ch) / 2 - it[1] } ?: 0
+        val insetPx = with(density) { inset.roundToPx() }
+        val viewW = (constraints.maxWidth - insetPx * 2).coerceAtLeast(0)
+        val viewH = (constraints.maxHeight - insetPx * 2).coerceAtLeast(0)
+        // What the app draws, kept inside the view (it may have been measured at another size)
+        val c = content?.takeIf { glass }?.let { b ->
+            val l = b.left.coerceIn(0, viewW)
+            val t = b.top.coerceIn(0, viewH)
+            IntRect(l, t, b.right.coerceIn(l, viewW), b.bottom.coerceIn(t, viewH))
+        }?.takeIf { it.width > 0 && it.height > 0 }
+        val cw = c?.width ?: viewW
+        val ch = c?.height ?: viewH
+        // Where the content's top-left goes in the view's space: centered
+        val left = (viewW - cw) / 2
+        val top = (viewH - ch) / 2
         if (glass) {
             Box(
                 Modifier
-                    .align(Alignment.Center)
-                    .size(
-                        with(density) { cw.toDp() + inset * 2 }.coerceAtMost(maxWidth),
-                        with(density) { ch.toDp() + inset * 2 }.coerceAtMost(maxHeight),
-                    ),
+                    .offset { IntOffset(left, top) }
+                    .size(with(density) { (cw + insetPx * 2).toDp() }, with(density) { (ch + insetPx * 2).toDp() }),
             ) { WidgetCard(Modifier.fillMaxSize()) }
         }
         val radius = with(density) { (look.dock.radius.coerceIn(14, 36).dp - inset).coerceAtLeast(6.dp).toPx() }
-        val clip = if (c == null) Modifier else Modifier.clip(object : Shape {
-            override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density) = Outline.Rounded(
-                RoundRect(c[0].toFloat(), c[1].toFloat(), c[2].toFloat(), c[3].toFloat(), CornerRadius(radius)),
-            )
-        })
-        val size = SizeF((maxWidth - inset * 2).value, (maxHeight - inset * 2).value)
+        val clip = if (c == null) Modifier else Modifier.clip(
+            remember(c, radius) {
+                object : Shape {
+                    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline = Outline.Rounded(
+                        RoundRect(c.left.toFloat(), c.top.toFloat(), c.right.toFloat(), c.bottom.toFloat(), CornerRadius(radius)),
+                    )
+                }
+            },
+        )
+        val dx = if (c == null) 0 else left - c.left
+        val dy = if (c == null) 0 else top - c.top
+        val widgetSize = SizeF(with(density) { viewW.toDp().value }, with(density) { viewH.toDp().value })
         AndroidView(
             factory = { ctx ->
                 AppWidgets.createView(ctx, widget.appWidgetId) ?: android.widget.TextView(ctx).apply {
@@ -433,23 +523,40 @@ private fun AppWidgetBox(
                 .offset { IntOffset(dx, dy) }
                 .then(clip),
             // Android keeps the last view made for each widget, so let go of the home screen's callbacks
-            onRelease = { v -> (v as? QuartzWidgetHostView)?.release() },
+            onRelease = { v ->
+                (v as? QuartzWidgetHostView)?.release()
+                if (hostView[0] === v) hostView[0] = null
+            },
             update = { v ->
                 val host = v as? QuartzWidgetHostView ?: return@AndroidView
+                hostView[0] = host
                 host.holdEnabled = holdEnabled
                 host.onHold = { x, y -> onHold(x, y, host) }
                 host.onMove = onMove
                 host.onLetGo = onLetGo
                 host.onCancelHold = onCancel
-                host.onContent = { l, t, r, b -> content = intArrayOf(l, t, r, b) }
-                if (content == null) host.content()?.let { content = it }
-                if (lastSize[0] != size) {
-                    lastSize[0] = size
-                    runCatching { host.updateAppWidgetSize(Bundle(), listOf(size)) }
+                // Reported from the view's layout; the new bounds show on the next frame (they don't change its size)
+                host.onContent = { l, t, r, b -> content = IntRect(l, t, r, b) }
+                if (content == null) host.content()?.let { content = IntRect(it[0], it[1], it[2], it[3]) }
+                if (lastSize[0] != widgetSize) {
+                    lastSize[0] = widgetSize
+                    runCatching { host.updateAppWidgetSize(Bundle(), listOf(widgetSize)) }
                 }
             },
         )
     }
+}
+
+/** A picture of an app's widget; with [cropToContent], just the part the app draws. */
+private fun QuartzWidgetHostView.snapshot(cropToContent: Boolean): Bitmap {
+    val full = drawToBitmap()
+    val c = (if (cropToContent) content() else null) ?: return full
+    val l = c[0].coerceIn(0, full.width - 1)
+    val t = c[1].coerceIn(0, full.height - 1)
+    val r = c[2].coerceIn(l + 1, full.width)
+    val b = c[3].coerceIn(t + 1, full.height)
+    if (l == 0 && t == 0 && r == full.width && b == full.height) return full
+    return Bitmap.createBitmap(full, l, t, r - l, b - t)
 }
 
 /** Tapping a widget: the clock opens your alarms; weather that isn't set up yet opens its settings. */
@@ -507,8 +614,25 @@ internal fun CarriedWidget(widget: HomeWidget, vm: HomeViewModel, drag: DragCont
                     alpha = if (drag.overRemove) 0.55f else 0.92f
                 },
         ) {
-            if (widget.glass) WidgetCard(Modifier.fillMaxSize())
-            Image(picture, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds)
+            if (widget.glass) {
+                // As on the grid: the panel hugs what the app draws (the picture is just that), with the same margin
+                Box(
+                    Modifier
+                        .align(Alignment.Center)
+                        .size(with(density) { picture.width.toDp() + 20.dp }, with(density) { picture.height.toDp() + 20.dp }),
+                ) {
+                    val corner = (LocalHomeLook.current.dock.radius.coerceIn(14, 36).dp - 10.dp).coerceAtLeast(6.dp)
+                    WidgetCard(Modifier.fillMaxSize())
+                    Image(
+                        picture,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize().padding(10.dp).clip(RoundedCornerShape(corner)),
+                        contentScale = ContentScale.FillBounds,
+                    )
+                }
+            } else {
+                Image(picture, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds)
+            }
         }
         return
     }

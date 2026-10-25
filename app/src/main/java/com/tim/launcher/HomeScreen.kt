@@ -214,6 +214,10 @@ class DragController {
     var endedAt = 0L
         private set
 
+    /** What that drag carried. */
+    var lastKey: String? = null
+        private set
+
     /** What a slot shows right now: the slid-over contents while a plan is showing, otherwise the saved layout. */
     fun shown(vm: HomeViewModel, ref: SlotRef): String? {
         val p = plan
@@ -373,7 +377,10 @@ class DragController {
     fun cancel() = clear()
 
     private fun clear() {
-        if (key != null) endedAt = SystemClock.uptimeMillis()
+        if (key != null) {
+            endedAt = SystemClock.uptimeMillis()
+            lastKey = key
+        }
         plan = null
         source = null
         key = null
@@ -643,6 +650,8 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             return@LaunchedEffect
         }
         delay(150)
+        // Let go (or picked up something else) while waiting: what's showing is already right
+        if (drag.key != carried) return@LaunchedEffect
         drag.plan = vm.planWidgetMove(carried.removePrefix(WIDGET_PREFIX), spot)
     }
     // Done resizing: the page shows what was saved again
@@ -1137,7 +1146,8 @@ internal fun Cell(
         val here = drag.bounds[ref]?.topLeft
         val from = fromSlot?.takeIf { it != ref }?.let { drag.bounds[it]?.topLeft }
         // Not the icon being carried: it's hidden in its gap and shows up there when you let go
-        val recent = key != drag.key && (drag.active || SystemClock.uptimeMillis() - drag.endedAt < 600)
+        // (or a widget being resized pushes it aside)
+        val recent = key != drag.key && (drag.active || drag.resizing != null || SystemClock.uptimeMillis() - drag.endedAt < 600)
         if (from != null && here != null && from != here && recent) {
             glide.snapTo(from - here)
             glide.animateTo(Offset.Zero, spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow))
