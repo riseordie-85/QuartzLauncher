@@ -717,13 +717,39 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val newPer = c * r
         val next = MutableList<String?>(pages * newPer) { null }
         val overflow = mutableListOf<Pair<Int, String>>()
+        // Widgets first, as whole blocks: each keeps its top-left where it can, pulled in from the right and bottom
+        // edges and narrowed to the new grid (or moved to the nearest free block on its page). Cut off cell by cell,
+        // a widget at the right or bottom edge would lose all its cells and disappear.
+        val resized = HashMap<String, HomeWidget>()
+        for (p in 0 until pages) {
+            for (i in 0 until oldPer) {
+                val widget = widgetFor(cover.getOrNull(p * oldPer + i)) ?: continue
+                if (widget.id in resized) continue // its top-left is the first of its cells in reading order
+                val w = minOf(widget.w, c)
+                val h = minOf(widget.h, r)
+                val wantR = minOf(i / oldCols, r - h)
+                val wantC = minOf(i % oldCols, c - w)
+                val spot = (0..r - h).flatMap { rr -> (0..c - w).map { cc -> rr to cc } }
+                    .filter { (rr, cc) -> (0 until h).all { dr -> (0 until w).all { dc -> next[p * newPer + (rr + dr) * c + cc + dc] == null } } }
+                    .minByOrNull { (rr, cc) -> abs(rr - wantR) * 2 + abs(cc - wantC) }
+                if (spot == null) {
+                    resized[widget.id] = widget // no room on its page; it's dropped below
+                    continue
+                }
+                for (dr in 0 until h) for (dc in 0 until w) next[p * newPer + (spot.first + dr) * c + spot.second + dc] = WIDGET_PREFIX + widget.id
+                resized[widget.id] = widget.copy(w = w, h = h)
+            }
+        }
+        resized.values.forEach { widgets[it.id] = it }
         for (p in 0 until pages) {
             for (i in 0 until oldPer) {
                 val key = cover.getOrNull(p * oldPer + i) ?: continue
+                if (isWidgetKey(key)) continue
                 val row = i / oldCols
                 val col = i % oldCols
-                if (row < r && col < c) next[p * newPer + row * c + col] = key
-                else if (!isWidgetKey(key)) overflow += p to key
+                val slot = p * newPer + row * c + col
+                if (row < r && col < c && next[slot] == null) next[slot] = key
+                else overflow += p to key
             }
         }
         var lost = 0
@@ -798,10 +824,19 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     /** Widgets whose top-left cell is on [page], in reading order, with that cell's slot. */
     fun widgetsOn(page: Int): List<Pair<HomeWidget, Int>> {
         val range = page * perPage until (page + 1) * perPage
+        // A widget's cells are all on one page, so its first cell in reading order here is its top-left
+        val seen = HashSet<String>()
         return range.mapNotNull { i ->
             val w = widgetFor(cover.getOrNull(i)) ?: return@mapNotNull null
-            if (cover.indexOf(WIDGET_PREFIX + w.id) == i) w to i else null
+            if (seen.add(w.id)) w to i else null
         }
+    }
+
+    /** A new widget id (time-based like folder ids, but never one already in use). */
+    private fun newWidgetId(): String {
+        var t = System.currentTimeMillis()
+        while (t.toString(36) in widgets) t++
+        return t.toString(36)
     }
 
     /** The cells a [w]×[h] block covers with its top-left at [anchor], or null if it runs off the page. */
@@ -831,7 +866,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 for (c in 0..cols - w) {
                     val cells = cellsOf(p * perPage + r * cols + c, w, h) ?: continue
                     if (cells.any { cover[it] != null }) continue
-                    val id = System.currentTimeMillis().toString(36)
+                    val id = newWidgetId()
                     widgets[id] = HomeWidget(id, kind, w, h)
                     cells.forEach { cover[it] = WIDGET_PREFIX + id }
                     save()
@@ -846,7 +881,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val h = minOf(kind.h, rows)
             val cells = cellsOf(p * perPage, w, h)
             if (cells != null && cells.none { isWidgetKey(cover[it]) }) {
-                val id = System.currentTimeMillis().toString(36)
+                val id = newWidgetId()
                 val moving = cells.mapNotNull { cover[it] }
                 widgets[id] = HomeWidget(id, kind, w, h)
                 cells.forEach { cover[it] = WIDGET_PREFIX + id }

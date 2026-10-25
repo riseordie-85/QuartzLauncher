@@ -200,6 +200,9 @@ class DragController {
     var widgetSize = Size.Zero
         private set
 
+    /** How wide the screen is (px), so a carried widget only lands on a page you can see. */
+    var screenWidth = 0f
+
     /** The widget being resized (handles on its edges), and the widget whose menu is open. */
     var resizing by mutableStateOf<String?>(null)
     var widgetMenu by mutableStateOf<String?>(null)
@@ -286,10 +289,21 @@ class DragController {
      */
     fun widgetDrop(vm: HomeViewModel): Int? {
         val id = key?.takeIf { isWidgetKey(it) }?.removePrefix(WIDGET_PREFIX) ?: return null
-        val cells = bounds.entries.filter { it.key.area == Area.COVER }
-        val first = cells.firstOrNull()?.value ?: return null
+        val perPage = vm.perPage
+        if (perPage <= 0) return null
+        // Only cells on screen: every page stays composed, so the pages off to the sides have cells too
+        val wide = screenWidth
+        val cells = bounds.entries.filter {
+            it.key.area == Area.COVER && it.value.width > 0f && (wide <= 0f || it.value.center.x in 0f..wide)
+        }
+        // The page under your finger is where it lands. Going by the top-left corner alone, a widget held by its
+        // right side near the screen's left edge would land on the page off screen.
+        val under = cells.minByOrNull { (it.value.center - pointer).getDistanceSquared() } ?: return null
+        val page = under.key.index / perPage
+        val onPage = cells.filter { it.key.index / perPage == page }
+        val first = onPage.first().value
         val corner = pointer - widgetGrab + Offset(first.width / 2f, first.height / 2f)
-        val nearest = cells.minByOrNull { (it.value.center - corner).getDistanceSquared() }?.key ?: return null
+        val nearest = onPage.minByOrNull { (it.value.center - corner).getDistanceSquared() }?.key ?: return null
         return vm.clampWidgetSpot(id, nearest.index)
     }
 
@@ -363,6 +377,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
     val screen = rememberScreenState(activity)
     val prefs = remember { Prefs.get(activity) }
     val drag = remember { DragController() }
+    SideEffect { drag.screenWidth = screen.widthPx.toFloat() }
     val store = remember { SettingsStore.get(activity).also { it.migrateDockShape() } }
     var drawerOpen by remember { mutableStateOf(false) }
     // Opened by the Search gesture: the drawer starts with the keyboard up

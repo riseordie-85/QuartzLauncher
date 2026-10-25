@@ -18,6 +18,7 @@ import com.tim.launcher.settings.S
 import com.tim.launcher.settings.SettingsStore
 import com.tim.launcher.settings.TempUnit
 import com.tim.launcher.settings.WeatherSource
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -115,24 +116,35 @@ object Weather {
         if (!force && shown != null && shown.source == sourceKey(store) && System.currentTimeMillis() - shown.at < STALE_MS) return
         job = scope.launch {
             loading = true
-            val result = runCatching { withContext(Dispatchers.IO) { fetch(app, store) } }
-            loading = false
-            result.onSuccess { (weather, issue) ->
-                problem = issue
-                if (weather != null) {
-                    now = weather
-                    saveCache(app, weather)
+            try {
+                val (weather, issue) = withContext(Dispatchers.IO) { fetch(app, store) }
+                // Settings may have moved on to another place while this was on its way
+                if (weather == null || weather.source == sourceKey(store)) {
+                    problem = issue
+                    if (weather != null) {
+                        now = weather
+                        saveCache(app, weather)
+                    }
                 }
-            }.onFailure {
+            } catch (e: CancellationException) {
+                throw e // replaced by a newer request: not a failure
+            } catch (e: Exception) {
                 problem = "Couldn't reach the weather service. It'll try again soon."
-                Diag.log("Weather: ${it.javaClass.simpleName} ${it.message}")
+                Diag.log("Weather: ${e.javaClass.simpleName} ${e.message}")
+            } finally {
+                // A request dropped for a newer one finishes late; it mustn't say the newer one is done
+                if (job == null || job === coroutineContext[Job]) loading = false
             }
         }
     }
 
     /** Clears what's shown (the location changed), then fetches for the new place. */
     fun locationChanged(context: Context) {
+        // A request still on its way is for the old place: drop it, or it would block this one
+        job?.cancel()
+        job = null
         now = null
+        problem = null
         Prefs.get(context).edit().remove(Prefs.WEATHER).apply()
         refresh(context, force = true)
     }

@@ -123,7 +123,8 @@ fun WidgetSettings(ctx: SettingsContext) {
                 BodyText(
                     "Weather data by Open-Meteo.com: free, no account, no ads or tracking. Quartz only asks while a weather " +
                         "widget is on your home screen (about every half hour), or when you tap Update. It sends a rough " +
-                        "location only, rounded to about 1 km. Nothing else about you goes with it.",
+                        "location only, rounded to about 1 km. Nothing else about you goes with it. With this phone's location, " +
+                        "Android's own place lookup (on most phones, Google's) also gets that rounded spot to name your town.",
                 )
                 Spacer(Modifier.height(8.dp))
                 BodyText("Weather icons: Meteocons by Bas Milius (MIT). Typeface: Outfit (SIL Open Font License).")

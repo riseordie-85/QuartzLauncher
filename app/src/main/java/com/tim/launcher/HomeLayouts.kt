@@ -265,7 +265,8 @@ private fun DockBar(
     // the end to drop into unless the icons have already made room
     val filled = slots.filter { drag.shown(vm, it) != null || it == drag.source }
     val makingRoom = drag.plan?.let { p -> slots.any { it.area == p.area } } == true
-    val dropSpot = if (drag.active && !makingRoom) slots.firstOrNull { drag.shown(vm, it) == null && it != drag.source } else null
+    // (widgets don't go in the dock, so moving one doesn't open a spot there)
+    val dropSpot = if (drag.active && !makingRoom && !isWidgetKey(drag.key)) slots.firstOrNull { drag.shown(vm, it) == null && it != drag.source } else null
     val refs = if (dropSpot != null) filled + dropSpot else filled
     val count = refs.size + if (button != null) 1 else 0
     // An empty dock still keeps its room from the screen edge (the content no longer has insets on that side)
@@ -468,14 +469,20 @@ private fun ReflowPages(screen: ScreenState, vm: HomeViewModel, drag: DragContro
             val widgets = vm.widgetsOn(page).map { it.first }
             val cellW = maxWidth / cols
             val cellH = maxHeight / rows
-            val used = widgets.sumOf { it.h }.coerceAtMost(rows - 1)
+            // Widgets stacked taller than the page (a sideways grid has fewer rows) shrink to leave the icons a row
+            val tall = widgets.sumOf { minOf(it.h, rows) }
+            val room = maxOf(1, rows - 1)
+            val squeeze = if (tall > room) room.toFloat() / tall else 1f
+            val used = if (tall > room) room else tall
             Column(Modifier.fillMaxSize()) {
                 widgets.forEach { w ->
                     key(w.id) {
-                        WidgetOnFlow(w, cellW * minOf(w.w, cols), cellH * minOf(w.h, rows), drag)
+                        WidgetOnFlow(w, cellW * minOf(w.w, cols), cellH * (minOf(w.h, rows) * squeeze), drag)
                     }
                 }
-                RefGrid(refs, cols, maxOf(1, rows - used), vm, drag, Modifier.fillMaxWidth().weight(1f))
+                // Every icon gets a cell, even if the widgets leave fewer rows than it takes (the cells get shorter)
+                val iconRows = maxOf(1, rows - used, (refs.size + cols - 1) / cols)
+                RefGrid(refs, cols, iconRows, vm, drag, Modifier.fillMaxWidth().weight(1f))
             }
         }
     }
@@ -602,7 +609,8 @@ private fun HomePager(
                 event.changes.firstOrNull { it.id == down.id }?.let { dx += it.positionChangeIgnoreConsumed().x }
             } while (event.changes.any { it.pressed })
             val threshold = 90.dp.toPx()
-            if (!multi && !drag.active && state.currentPage == startPage) {
+            // Not while dragging an icon or a widget's resize handle either
+            if (!multi && !drag.active && drag.resizing == null && state.currentPage == startPage) {
                 if (dx > threshold && startPage == 0) onSwipePast(true)
                 if (dx < -threshold && startPage >= last) onSwipePast(false)
             }

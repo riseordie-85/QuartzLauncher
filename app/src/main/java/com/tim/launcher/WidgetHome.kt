@@ -112,8 +112,9 @@ private fun WidgetOnGrid(widget: HomeWidget, anchor: Int, block: Block, cellW: D
     var origin by remember { mutableStateOf(Offset.Zero) }
     val carried = drag.active && drag.key == key
 
+    // Keyed on the kind too: changing its style must change what a tap does
     val gestures = if (resizing) Modifier else Modifier
-        .pointerInput(widget.id, anchor) {
+        .pointerInput(widget.id, widget.kind, anchor) {
             detectTapGestures(
                 onTap = { widgetTap(context, widget.kind) },
                 onLongPress = { }, // long press belongs to moving it
@@ -234,14 +235,16 @@ private fun BoxScope.ResizeFrame(
             Box(Modifier.size(22.dp).clip(CircleShape).background(Color.White).border(3.dp, Q.Accent, CircleShape))
         }
     }
-    Handle(Alignment.CenterEnd) { b, dx, _ -> b.copy(w = (b.w + (dx / cellW).roundToInt()).coerceIn(minW, cols - b.c)) }
-    Handle(Alignment.BottomCenter) { b, _, dy -> b.copy(h = (b.h + (dy / cellH).roundToInt()).coerceIn(minH, rows - b.r)) }
+    // A widget narrowed by a smaller grid can be under its smallest size: it can't shrink further, but never
+    // gets an empty range (coerceIn throws when min > max)
+    Handle(Alignment.CenterEnd) { b, dx, _ -> b.copy(w = (b.w + (dx / cellW).roundToInt()).coerceIn(minOf(minW, b.w), cols - b.c)) }
+    Handle(Alignment.BottomCenter) { b, _, dy -> b.copy(h = (b.h + (dy / cellH).roundToInt()).coerceIn(minOf(minH, b.h), rows - b.r)) }
     Handle(Alignment.CenterStart) { b, dx, _ ->
-        val d = (dx / cellW).roundToInt().coerceIn(-b.c, b.w - minW)
+        val d = (dx / cellW).roundToInt().coerceIn(-b.c, maxOf(0, b.w - minW))
         b.copy(c = b.c + d, w = b.w - d)
     }
     Handle(Alignment.TopCenter) { b, _, dy ->
-        val d = (dy / cellH).roundToInt().coerceIn(-b.r, b.h - minH)
+        val d = (dy / cellH).roundToInt().coerceIn(-b.r, maxOf(0, b.h - minH))
         b.copy(r = b.r + d, h = b.h - d)
     }
 }
@@ -258,7 +261,7 @@ internal fun WidgetOnFlow(widget: HomeWidget, width: Dp, height: Dp, drag: DragC
         Modifier
             .width(width)
             .height(height)
-            .pointerInput(widget.id) {
+            .pointerInput(widget.id, widget.kind) {
                 detectTapGestures(
                     onTap = { widgetTap(context, widget.kind) },
                     onLongPress = {

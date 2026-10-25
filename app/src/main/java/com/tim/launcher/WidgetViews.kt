@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -37,6 +38,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -46,6 +48,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -119,6 +122,9 @@ fun WidgetView(kind: WidgetKind, modifier: Modifier = Modifier, sample: Boolean 
     val hours = if (h24) "%02d".format(hour) else ((hour + 11) % 12 + 1).toString()
     val minutes = "%02d".format(cal.get(Calendar.MINUTE))
 
+    // Laid out left to right in every language: `at` places by absolute x, and in a right-to-left layout the Box
+    // would put each zero-size `at` child at its right edge, pushing everything out of the widget
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
     BoxWithConstraints(modifier) {
         val w = maxWidth
         val h = maxHeight
@@ -158,6 +164,7 @@ fun WidgetView(kind: WidgetKind, modifier: Modifier = Modifier, sample: Boolean 
                 WeatherRow(weather, unit, ink, motion, u, w, rowTop = u.top + u(40f), rowHeight = u(160f), iconSize = u(340f), iconTop = u.top - u(85f))
             }
         }
+    }
     }
 }
 
