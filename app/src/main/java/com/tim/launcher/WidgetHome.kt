@@ -224,7 +224,7 @@ private fun WidgetOnGrid(widget: HomeWidget, anchor: Int, block: Block, cellW: D
                 boxSize = Size(it.size.width.toFloat(), it.size.height.toFloat())
             }
             .alpha(if (carried) 0f else 1f)
-            .then(if (resizing) Modifier else Modifier.onRightClick { drag.widgetMenu = widget.id })
+            .onRightClick(enabled = !resizing) { drag.widgetMenu = widget.id }
             .then(gestures),
     ) {
         if (appWidget) {

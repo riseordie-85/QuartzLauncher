@@ -16,15 +16,20 @@ import androidx.compose.ui.input.pointer.pointerInput
  *
  * Things on top (icons, widgets) look first ([PointerEventPass.Initial]); the home screen behind them passes
  * [behind] = true and only answers clicks nothing on top took.
+ *
+ * Always add it, and switch it off with [enabled] rather than leaving it out: adding or dropping a pointer
+ * modifier shifts the ones after it, and Compose then hands another one's gesture to this one's handler, cutting
+ * short a drag that's under way.
  */
-fun Modifier.onRightClick(behind: Boolean = false, action: () -> Unit): Modifier = composed {
+fun Modifier.onRightClick(behind: Boolean = false, enabled: Boolean = true, action: () -> Unit): Modifier = composed {
     val current by rememberUpdatedState(action)
+    val on by rememberUpdatedState(enabled)
     val pass = if (behind) PointerEventPass.Final else PointerEventPass.Initial
     pointerInput(behind) {
         awaitEachGesture {
             val event = awaitPointerEvent(pass)
             val press = event.type == PointerEventType.Press && event.buttons.isSecondaryPressed
-            if (!press || (behind && event.changes.any { it.isConsumed })) return@awaitEachGesture
+            if (!press || !on || (behind && event.changes.any { it.isConsumed })) return@awaitEachGesture
             event.changes.forEach { it.consume() }
             current()
             // Keep the rest of the click (moves, the release) from reaching anything else

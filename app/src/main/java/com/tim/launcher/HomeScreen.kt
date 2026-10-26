@@ -1288,15 +1288,9 @@ internal fun Cell(
                 },
             )
             // A right click opens an app's menu at once (a folder just opens)
-            .then(
-                if (app != null || folder != null) {
-                    Modifier.onRightClick {
-                        if (folder != null) look.openFolder(folder.id, ref) else if (app != null) drag.appMenu = app.key to ref
-                    }
-                } else {
-                    Modifier
-                },
-            )
+            .onRightClick(enabled = app != null || folder != null) {
+                if (folder != null) look.openFolder(folder.id, ref) else if (app != null) drag.appMenu = app.key to ref
+            }
             .then(gestures),
         contentAlignment = Alignment.Center,
     ) {
