@@ -20,6 +20,7 @@ import com.tim.launcher.settings.SettingsStore
 import com.tim.launcher.settings.SetupNag
 import com.tim.launcher.settings.detectDeviceType
 import com.tim.launcher.settings.ensureGridDefaults
+import com.tim.launcher.settings.ensureWidgetAccent
 
 class HomeActivity : ComponentActivity() {
 
@@ -33,6 +34,7 @@ class HomeActivity : ComponentActivity() {
         Diag.log("Home created (#${Diag.activityCreates}) on display $displayId")
 
         SettingsStore.get(this).ensureGridDefaults(detectDeviceType(this))
+        SettingsStore.get(this).ensureWidgetAccent()
 
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),

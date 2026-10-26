@@ -282,8 +282,10 @@ object S {
     val clock24h = Setting("look.clock24h", false, BoolCodec)
 
     // Widgets
-    /** The flip clock's cards and the clock's date. */
+    /** The flip clock's cards. */
     val widgetColor = Setting("widget.color", 0xFFBF5AA6.toInt(), IntCodec)
+    /** The clock's date and the buttons on the tips card: their own color, apart from the flip cards. */
+    val widgetAccent = Setting("widget.accent", 0xFFBF5AA6.toInt(), IntCodec)
     /** Flip cards turning over, and animated weather icons. Off: they change in place and the icons stay still. */
     val widgetMotion = Setting("widget.motion", true, BoolCodec)
     val weatherSource = Setting("weather.source", WeatherSource.CITY, EnumCodec(WeatherSource.entries.toTypedArray()))
@@ -486,6 +488,13 @@ fun SettingsStore.ensureGridDefaults(type: DeviceType) {
     if (type == DeviceType.TABLET && owner(S.gridCols, Scope.TABLET) == null) {
         setAt(S.gridCols, Scope.TABLET, 7)
         setAt(S.gridRows, Scope.TABLET, 6)
+    }
+}
+
+/** The accent used to be the flip cards' color: someone who picked a card color keeps it on the date too. */
+fun SettingsStore.ensureWidgetAccent() {
+    if (owner(S.widgetAccent, Scope.GLOBAL) == null && owner(S.widgetColor, Scope.GLOBAL) != null) {
+        set(S.widgetAccent, value = this[S.widgetColor])
     }
 }
 

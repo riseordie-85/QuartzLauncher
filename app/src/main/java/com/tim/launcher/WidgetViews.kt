@@ -37,6 +37,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
@@ -117,7 +118,8 @@ fun WidgetView(kind: WidgetKind, modifier: Modifier = Modifier, sample: Boolean 
     remember { Weather.loadCache(context); true }
     val now = rememberNow()
     val ink = LocalHomeLook.current.onPanel
-    val accent = Color(store[S.widgetColor])
+    val cards = Color(store[S.widgetColor])
+    val accent = Color(store[S.widgetAccent])
     val motion = store[S.widgetMotion]
     val h24 = store[S.clock24h]
     val unit = store[S.weatherUnits]
@@ -151,7 +153,7 @@ fun WidgetView(kind: WidgetKind, modifier: Modifier = Modifier, sample: Boolean 
                 // Laid out on an 832 × 402 plan (the cards rise above the panel), scaled to fit
                 val u = Plan(w, h, 832f, 402f)
                 WidgetCard(Modifier.at(0.dp, u.top + u(42f), w, u(360f)))
-                FlipPair(hours, minutes, u, w, accent, motion)
+                FlipPair(hours, minutes, u, w, cards, motion)
                 Slot(0.dp, u.top + u(284f), w, u(118f), Alignment.Center) {
                     WText(dateText(now, weekday = true), u(34f), ink, FontWeight.Light, Modifier.fillMaxWidth(), TextAlign.Center)
                 }
@@ -160,7 +162,7 @@ fun WidgetView(kind: WidgetKind, modifier: Modifier = Modifier, sample: Boolean 
             WidgetKind.FLIP_WEATHER -> {
                 val u = Plan(w, h, 832f, 440f)
                 WidgetCard(Modifier.at(0.dp, u.top + u(42f), w, u(360f)))
-                FlipPair(hours, minutes, u, w, accent, motion)
+                FlipPair(hours, minutes, u, w, cards, motion)
                 WeatherRow(weather, unit, ink, motion, u, w, rowTop = u.top + u(262f), rowHeight = u(120f), iconSize = u(380f), iconTop = u.top + u(132f))
             }
 
@@ -376,9 +378,12 @@ private fun Face(text: String, color: Color, shade: Float) {
     ) {
         // Outfit's digits are a little over half as wide as they're tall
         val size = minOf(maxHeight * 0.66f, maxWidth * 0.8f / (0.58f * maxOf(2, text.length)))
-        WText(text, size, Color.White, FontWeight.ExtraBold)
+        WText(text, size, inkOn(color), FontWeight.ExtraBold)
     }
 }
+
+/** Dark text on a light color, white on anything else. */
+internal fun inkOn(color: Color): Color = if (color.luminance() > 0.4f) Color(0xFF1E1D24) else Color.White
 
 /**
  * Quartz tips: the card every new home screen starts with, pointing at the long-press menu and its three most
@@ -419,7 +424,7 @@ private fun TipsCard(w: Dp, h: Dp, ink: Color, accent: Color, live: Boolean) {
                         .background(accent.copy(alpha = 0.85f))
                         .then(if (live) Modifier.quickTap(open) else Modifier),
                     contentAlignment = Alignment.Center,
-                ) { WText(label, base * 0.085f, Color.White, FontWeight.Medium) }
+                ) { WText(label, base * 0.085f, inkOn(accent), FontWeight.Medium) }
             }
         }
     }

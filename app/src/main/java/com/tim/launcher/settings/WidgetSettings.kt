@@ -61,6 +61,7 @@ private val WidgetColors: List<Int> = listOf(
     0xFF1E9C8F.toInt(), // teal
     0xFFE0763F.toInt(), // amber
     0xFF3A3846.toInt(), // graphite
+    0xFFF1EDE6.toInt(), // paper
 )
 
 /** Settings › Widgets: how the clocks and weather look, and where the weather is for. */
@@ -69,7 +70,7 @@ fun WidgetSettings(ctx: SettingsContext) {
     val store = ctx.store
     val context = LocalContext.current
     remember { Weather.loadCache(context); true }
-    var colorOpen by remember { mutableStateOf(false) }
+    var colorOpen by remember { mutableStateOf<String?>(null) }
     var previewKind by remember { mutableStateOf(WidgetKind.FLIP_WEATHER) }
 
     ScreenScaffold(ctx, pinned = {
@@ -95,17 +96,34 @@ fun WidgetSettings(ctx: SettingsContext) {
             }
         }
 
-        SectionLabel("Color")
+        SectionLabel("Flip cards")
         GlassPanel {
             Text(
-                "The flip clock's cards and the clock's date",
+                "The flip clock's cards. The numbers turn dark on a light color.",
                 color = Q.TextDim,
                 fontSize = 13.sp,
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp),
             )
             SwatchRow(store[S.widgetColor], WidgetColors) { store.set(S.widgetColor, value = it) }
             RowDivider()
-            ColorEditor("Any color", store[S.widgetColor], colorOpen, { colorOpen = !colorOpen }) { store.set(S.widgetColor, value = it) }
+            ColorEditor("Any color", store[S.widgetColor], colorOpen == "cards", { colorOpen = if (colorOpen == "cards") null else "cards" }) {
+                store.set(S.widgetColor, value = it)
+            }
+        }
+
+        SectionLabel("Accent")
+        GlassPanel {
+            Text(
+                "The clock's date and the buttons on the tips card",
+                color = Q.TextDim,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp),
+            )
+            SwatchRow(store[S.widgetAccent], WidgetColors) { store.set(S.widgetAccent, value = it) }
+            RowDivider()
+            ColorEditor("Any color", store[S.widgetAccent], colorOpen == "accent", { colorOpen = if (colorOpen == "accent") null else "accent" }) {
+                store.set(S.widgetAccent, value = it)
+            }
             Text(
                 "The panel behind each widget matches your dock: its glass, gradient, pattern and edge light (Dock › Style).",
                 color = Q.TextDim,

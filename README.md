@@ -12,6 +12,7 @@ Phase 9 (in progress): first run and setup polish, on phase 8 widgets and weathe
 - **Mouse:** a right click opens menus straight away: an app's menu on an app (home, dock or drawer), a widget's menu on a widget, the home menu on empty space; a folder just opens. Hold the left button to drag things, as with a finger.
 - **Drawer edge light:** the app drawer's panel takes the dock's edge light (hairline, soft or bright), with no separate setting.
 - **Folders wear your icon style:** a folder's tile follows the icon settings of the place it's in (home or dock): shape, background color or gradient, pattern, see-through, edge light and shadow. With no background it keeps its light veil, cut to your shape, and the little app grid moves in on round shapes so it stays inside. The icon preview in Appearance shows a folder too.
+- **Widget colors:** the flip cards and the accent (the clock's date, the tips card's buttons) each have their own color in Settings › Widgets. Numbers on a light card, and button text on a light accent, turn dark.
 - **App menus:** hold an app and let go (home, dock or drawer) for App info, Uninstall (apps you installed), and Remove from home or Add to home screen. While dragging, an **Uninstall** target sits next to Remove.
 
 ## Phase 8: what's new
