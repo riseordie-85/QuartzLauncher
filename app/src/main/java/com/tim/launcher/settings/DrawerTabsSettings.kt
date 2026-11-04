@@ -1,6 +1,15 @@
 package com.tim.launcher.settings
 
 import android.Manifest
+import android.content.ComponentName
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.Star
+import com.tim.launcher.StarterApps
 import android.content.Context
 import android.content.pm.LauncherApps
 import android.os.Process
@@ -126,9 +135,15 @@ fun DrawerTabsSection(ctx: SettingsContext) {
             )
         }
         if (store[S.drawerTabMode] == TabMode.CUSTOM) {
-            DrawerTabs.tabs.forEach { t ->
+            val list = DrawerTabs.tabs.toList()
+            list.forEachIndexed { i, t ->
                 RowDivider()
-                NavRow(t.name, "${t.apps.size} apps", FolderBadges.firstOrNull { it.first == t.icon }?.second) {
+                TabListRow(
+                    t,
+                    first = i == 0,
+                    last = i == list.lastIndex,
+                    onMove = { DrawerTabs.move(context, t.id, it) },
+                ) {
                     EditingTab.id = t.id
                     ctx.go(Route.DRAWER_TAB)
                 }
@@ -138,10 +153,13 @@ fun DrawerTabsSection(ctx: SettingsContext) {
         }
         RowDivider()
         BodyText(
-            "Tabs sit down the side of the drawer: names on wide screens, icons on narrow ones. They stay on the side away from the dock.",
+            "Tabs sit down the side of the drawer: names on wide screens, icons on narrow ones. They stay on the side away from " +
+                "the dock." + if (store[S.drawerTabMode] == TabMode.CUSTOM) " Use the arrows to change their order; All apps stays first." else "",
             Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
         )
     }
+
+    if (store[S.drawerTabMode] != TabMode.NONE) DrawerShortcutsSection()
 
     if (naming) {
         var name by remember { mutableStateOf("") }
@@ -171,6 +189,149 @@ fun DrawerTabsSection(ctx: SettingsContext) {
                 }) { Text("Next") }
             },
             dismissButton = { TextButton(onClick = { naming = false }) { Text("Cancel") } },
+        )
+    }
+}
+
+/** One of your tabs in the list: tap to edit it, arrows to move it up or down. */
+@Composable
+private fun TabListRow(tab: DrawerTab, first: Boolean, last: Boolean, onMove: (Int) -> Unit, onOpen: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(start = 20.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Q.AccentSoft), contentAlignment = Alignment.Center) {
+            Icon(FolderBadges.firstOrNull { it.first == tab.icon }?.second ?: Icons.Rounded.Star, contentDescription = null, tint = Q.Text, modifier = Modifier.size(22.dp))
+        }
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(tab.name, color = Q.Text, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("${tab.apps.size} apps", color = Q.TextDim, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
+        }
+        MoveButtons(first, last, onMove)
+    }
+}
+
+/** Up and down arrows; the one that can't move further is faded out. */
+@Composable
+private fun MoveButtons(first: Boolean, last: Boolean, onMove: (Int) -> Unit) {
+    listOf(Triple(Icons.Rounded.KeyboardArrowUp, "Move up", -1), Triple(Icons.Rounded.KeyboardArrowDown, "Move down", 1)).forEach { (icon, label, by) ->
+        val can = if (by < 0) !first else !last
+        Box(
+            Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .then(if (can) Modifier.clickable { onMove(by) } else Modifier),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = label, tint = if (can) Q.Text else Q.TextFaint.copy(alpha = 0.35f), modifier = Modifier.size(24.dp))
+        }
+    }
+}
+
+/** Quartz Settings, as a shortcut you can pin (it isn't in Android's app list). */
+private fun quartzSettingsEntry(context: Context): AppEntry? = runCatching {
+    AppEntry(
+        key = StarterApps.QUARTZ_SETTINGS,
+        label = "Quartz Settings",
+        icon = context.packageManager.getApplicationIcon(context.packageName).toBitmap(96, 96).asImageBitmap(),
+        component = ComponentName(context, SettingsActivity::class.java),
+    )
+}.getOrNull()
+
+// ---- Drawer settings: shortcuts under the tabs ----
+
+@Composable
+private fun DrawerShortcutsSection() {
+    val context = LocalContext.current
+    val apps by produceState<List<AppEntry>?>(null) {
+        value = withContext(Dispatchers.IO) { listOfNotNull(quartzSettingsEntry(context)) + loadAppEntries(context) }
+    }
+    var picking by remember { mutableStateOf(false) }
+
+    SectionLabel("Shortcuts")
+    GlassPanel {
+        BodyText(
+            "Apps pinned under the tabs, one tap away whichever tab is showing. Handy for Settings, a calculator, or " +
+                "anything you open all the time.",
+            Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 10.dp),
+        )
+        val byKey = apps?.associateBy { it.key }.orEmpty()
+        val pinned = DrawerTabs.shortcuts.toList()
+        pinned.forEachIndexed { i, key ->
+            val app = byKey[key]
+            RowDivider()
+            Row(
+                Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (app != null) Image(app.icon, contentDescription = null, modifier = Modifier.size(36.dp))
+                else Spacer(Modifier.size(36.dp))
+                Spacer(Modifier.width(14.dp))
+                Text(
+                    app?.label ?: if (apps == null) "…" else "App not installed",
+                    color = if (app != null) Q.Text else Q.TextDim,
+                    fontSize = 15.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                MoveButtons(first = i == 0, last = i == pinned.lastIndex) { DrawerTabs.moveShortcut(context, key, it) }
+                Box(
+                    Modifier.size(40.dp).clip(CircleShape).clickable { DrawerTabs.removeShortcut(context, key) },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.Rounded.Close, contentDescription = "Remove", tint = Q.Text, modifier = Modifier.size(20.dp)) }
+            }
+        }
+        RowDivider()
+        NavRow("Add a shortcut", "Pick an app to pin under the tabs", Icons.Rounded.Add) { picking = true }
+    }
+
+    if (picking) {
+        var filter by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { picking = false },
+            title = { Text("Add a shortcut") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = filter,
+                        onValueChange = { filter = it },
+                        singleLine = true,
+                        placeholder = { Text("Find an app") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    val list = apps
+                    if (list == null) {
+                        Text("Reading your apps…", modifier = Modifier.padding(top = 16.dp))
+                    } else {
+                        val choices = list.filter {
+                            it.key !in DrawerTabs.shortcuts && (filter.isBlank() || it.label.contains(filter.trim(), ignoreCase = true))
+                        }
+                        LazyColumn(Modifier.padding(top = 8.dp).heightIn(max = 380.dp)) {
+                            items(choices, key = { it.key }) { app ->
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable {
+                                            DrawerTabs.addShortcut(context, app.key)
+                                            picking = false
+                                        }
+                                        .padding(vertical = 8.dp, horizontal = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Image(app.icon, contentDescription = null, modifier = Modifier.size(32.dp))
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(app.label, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { picking = false }) { Text("Cancel") } },
         )
     }
 }

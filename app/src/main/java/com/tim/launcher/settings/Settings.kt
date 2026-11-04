@@ -234,6 +234,10 @@ object S {
     val drawerSize = Setting("drawer.size", 0.8f, FloatCodec, perScreen = true)
     /** Letter (A to Z) or month (newest first) headings between apps. */
     val drawerDividers = Setting("drawer.dividers", false, BoolCodec)
+    /** A strip of letters down the side of a scrolling drawer: slide along it to jump through your apps. */
+    val drawerLetters = Setting("drawer.letters", true, BoolCodec)
+    /** The drawer opens on the tab and spot you left it at, instead of the top of All apps. */
+    val drawerRemember = Setting("drawer.remember", false, BoolCodec)
     /** Off: the dock stays on screen while the drawer is open. */
     val drawerHideDock = Setting("drawer.hideDock", false, BoolCodec, perScreen = true)
     val searchSettings = Setting("search.settings", true, BoolCodec)

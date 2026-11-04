@@ -69,6 +69,7 @@ object Prefs {
     const val L_DOCK_EXTRA = "layout_dock_extra"
     const val L_FOLDERS = "layout_folders"
     const val DRAWER_TABS = "drawer_tabs"   // your custom drawer tabs, as JSON
+    const val DRAWER_SHORTCUTS = "drawer_shortcuts" // apps pinned under the drawer tabs, as a JSON list of keys
     const val L_WIDGETS = "layout_widgets"  // Quartz widgets on your pages (kind and size), as JSON
     const val PENDING_WIDGETS = "pending_widgets" // widgets picked in setup, added to your home page next time it shows
     const val WEATHER = "weather_now"       // the last weather fetched, so widgets show it straight away

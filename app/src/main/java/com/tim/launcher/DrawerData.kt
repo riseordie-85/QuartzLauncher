@@ -49,11 +49,20 @@ data class DrawerTab(val id: String, val name: String, val icon: String, val app
  */
 object DrawerTabs {
     val tabs = mutableStateListOf<DrawerTab>()
+
+    /** Apps pinned under the tabs, one tap away from any tab (Settings, a calculator…), in your order. */
+    val shortcuts = mutableStateListOf<String>()
     private var loaded = false
 
     fun load(context: Context) {
         if (loaded) return
         loaded = true
+        Prefs.get(context).getString(Prefs.DRAWER_SHORTCUTS, null)?.let { text ->
+            runCatching {
+                val arr = JSONArray(text)
+                shortcuts += (0 until arr.length()).map { arr.getString(it) }.distinct()
+            }
+        }
         val text = Prefs.get(context).getString(Prefs.DRAWER_TABS, null) ?: return
         runCatching {
             val arr = JSONArray(text)
@@ -74,6 +83,7 @@ object DrawerTabs {
     /** Re-reads the saved tabs (after a profile import). */
     fun reload(context: Context) {
         tabs.clear()
+        shortcuts.clear()
         loaded = false
         load(context)
     }
@@ -115,6 +125,29 @@ object DrawerTabs {
     }
 
     fun find(id: String?): DrawerTab? = tabs.firstOrNull { it.id == id }
+
+    private fun saveShortcuts(context: Context) {
+        Prefs.get(context).edit().putString(Prefs.DRAWER_SHORTCUTS, JSONArray(shortcuts.toList()).toString()).apply()
+    }
+
+    fun addShortcut(context: Context, key: String) {
+        if (key in shortcuts) return
+        shortcuts += key
+        saveShortcuts(context)
+    }
+
+    fun removeShortcut(context: Context, key: String) {
+        shortcuts.remove(key)
+        saveShortcuts(context)
+    }
+
+    fun moveShortcut(context: Context, key: String, by: Int) {
+        val i = shortcuts.indexOf(key)
+        val j = i + by
+        if (i < 0 || j !in shortcuts.indices) return
+        shortcuts.add(j, shortcuts.removeAt(i))
+        saveShortcuts(context)
+    }
 }
 
 /** One tab as the drawer shows it: custom tabs, automatic category tabs and "All" all look the same here. */

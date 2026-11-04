@@ -706,6 +706,22 @@ fun DrawerSettings(ctx: SettingsContext) {
                 "Headings",
                 if (store[S.drawerSort] == DrawerSort.INSTALLED) "The month each app was installed" else "A letter before each group",
             ) { Toggle(store[S.drawerDividers]) { store.set(S.drawerDividers, value = it) } }
+            RowDivider()
+            val sideways = store[S.drawerView] == DrawerView.ICONS && store[S.drawerScroll] == DrawerScroll.HORIZONTAL
+            val lettersWork = store[S.drawerSort] != DrawerSort.INSTALLED && !sideways
+            SettingRow(
+                "Letter scroller",
+                when {
+                    store[S.drawerSort] == DrawerSort.INSTALLED -> "Shows with A to Z order"
+                    sideways -> "Shows when the drawer scrolls up and down"
+                    else -> "Letters down the side: slide along them to jump through your apps"
+                },
+                enabled = lettersWork,
+            ) { Toggle(store[S.drawerLetters], enabled = lettersWork) { store.set(S.drawerLetters, value = it) } }
+            RowDivider()
+            SettingRow("Remember where you were", "Opens on the tab and spot you left, instead of the top of All apps") {
+                Toggle(store[S.drawerRemember]) { store.set(S.drawerRemember, value = it) }
+            }
         }
 
         DrawerTabsSection(ctx)

@@ -1,6 +1,21 @@
 package com.tim.launcher
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.key
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -116,6 +131,10 @@ data class DrawerLook(
     val searchContacts: Boolean = false,
     /** Tabs sit on the right (away from a dock on the left). */
     val railOnRight: Boolean = false,
+    /** A strip of letters down the side to slide through (A to Z order, scrolling up and down). */
+    val letters: Boolean = true,
+    /** Open on the tab and spot you left. */
+    val remember: Boolean = false,
     /** The screen edges this drawer area touches, so only those get system bar padding. */
     val edges: WindowInsetsSides = WindowInsetsSides.Horizontal + WindowInsetsSides.Vertical,
 )
@@ -195,6 +214,17 @@ private sealed interface Entry {
     data class App(val app: AppEntry) : Entry
 }
 
+/**
+ * Where the drawer was left: the tab, and how far each tab was scrolled (kept while Quartz runs). Used when
+ * "Remember where you were" is on.
+ */
+private object DrawerMemory {
+    var tab = "all"
+
+    /** Tab, view and scroll direction → first item showing (or page) and how far into it. */
+    val spots = HashMap<String, Pair<Int, Int>>()
+}
+
 @Composable
 private fun DrawerBody(
     vm: HomeViewModel,
@@ -207,7 +237,8 @@ private fun DrawerBody(
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
-    LaunchedEffect(Unit) { DrawerTabs.load(context) }
+    // Read straight away (not after the first frame), so a remembered tab is there when the drawer opens
+    remember { DrawerTabs.load(context); true }
     val all = vm.sortedApps
     val tabs: List<TabView> = remember(look.tabs, all, DrawerTabs.tabs.toList()) {
         val everything = TabView("all", "All apps", "all", all)
@@ -219,15 +250,26 @@ private fun DrawerBody(
             }
         }
     }
-    var tabId by remember { mutableStateOf("all") }
-    val tab = tabs.firstOrNull { it.id == tabId } ?: tabs.first()
     var query by remember { mutableStateOf("") }
+    var tabId by remember { mutableStateOf(if (look.remember) DrawerMemory.tab else "all") }
+    val tab = tabs.firstOrNull { it.id == tabId } ?: tabs.first()
+    val pick: (String) -> Unit = { id ->
+        tabId = id
+        DrawerMemory.tab = id
+        query = ""
+    }
+    // Apps pinned under the tabs (ones since uninstalled just don't show)
+    val shortcuts = if (look.tabs == TabMode.NONE) emptyList() else DrawerTabs.shortcuts.mapNotNull { vm.apps[it] }
+    val openShortcut: (AppEntry) -> Unit = { app ->
+        vm.launch(app, null)
+        onClose()
+    }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide = maxWidth >= 560.dp
         val showTabs = look.tabs != TabMode.NONE
         Row(Modifier.fillMaxSize()) {
-            if (showTabs && !look.railOnRight) TabRail(tabs, tab.id, wide, ink, look.tabs == TabMode.CUSTOM, onClose) { tabId = it; query = "" }
+            if (showTabs && !look.railOnRight) TabRail(tabs, tab.id, wide, ink, look.tabs == TabMode.CUSTOM, shortcuts, openShortcut, onClose, pick)
             Column(Modifier.weight(1f).fillMaxHeight()) {
                 if (full) {
                     // Drag the handle down (or tap it) to close
@@ -256,11 +298,12 @@ private fun DrawerBody(
                     if (query.isNotBlank()) {
                         SearchResults(vm, drag, look, ink, query, onPickUp, onClose)
                     } else {
-                        AppsView(vm, drag, look, ink, tab, onPickUp, onClose)
+                        // Each tab (and view) keeps its own scroll position
+                        key(tab.id, look.view, look.scroll) { AppsView(vm, drag, look, ink, tab, onPickUp, onClose) }
                     }
                 }
             }
-            if (showTabs && look.railOnRight) TabRail(tabs, tab.id, wide, ink, look.tabs == TabMode.CUSTOM, onClose) { tabId = it; query = "" }
+            if (showTabs && look.railOnRight) TabRail(tabs, tab.id, wide, ink, look.tabs == TabMode.CUSTOM, shortcuts, openShortcut, onClose, pick)
         }
     }
 }
@@ -281,6 +324,8 @@ private fun TabRail(
     wide: Boolean,
     ink: Color,
     canAdd: Boolean,
+    shortcuts: List<AppEntry>,
+    onShortcut: (AppEntry) -> Unit,
     onClose: () -> Unit,
     onSelect: (String) -> Unit,
 ) {
@@ -337,6 +382,33 @@ private fun TabRail(
                 if (wide) {
                     Spacer(Modifier.width(12.dp))
                     Text("New tab", color = ink.copy(alpha = 0.6f), fontSize = 15.sp)
+                }
+            }
+        }
+        // Shortcuts: apps that open straight from here, whichever tab is showing
+        if (shortcuts.isNotEmpty()) {
+            Box(
+                Modifier
+                    .padding(horizontal = if (wide) 12.dp else 10.dp, vertical = 6.dp)
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(ink.copy(alpha = 0.14f)),
+            )
+            shortcuts.forEach { app ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { onShortcut(app) }
+                        .padding(horizontal = if (wide) 10.dp else 0.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = if (wide) Arrangement.Start else Arrangement.Center,
+                ) {
+                    StyledIcon(app, 28.dp, contentDescription = app.label)
+                    if (wide) {
+                        Spacer(Modifier.width(10.dp))
+                        Text(app.label, color = ink.copy(alpha = 0.85f), fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
             }
         }
@@ -482,6 +554,22 @@ private fun columnsFor(look: DrawerLook, width: Dp): Int =
 
 private val monthFormat = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
 
+/** The letter an app files under: its first letter, or # for numbers and symbols. */
+private fun letterOf(label: String): String = label.firstOrNull()?.uppercaseChar()?.takeIf { it.isLetter() }?.toString() ?: "#"
+
+/** Each letter in [list] and the row it starts at (its heading, when headings are on), in the list's order. */
+private fun letterStarts(list: List<Entry>): List<Pair<String, Int>> {
+    val out = LinkedHashMap<String, Int>()
+    list.forEachIndexed { i, e ->
+        val letter = when (e) {
+            is Entry.Heading -> e.text
+            is Entry.App -> letterOf(e.app.label)
+        }
+        if (letter !in out) out[letter] = i
+    }
+    return out.map { it.key to it.value }
+}
+
 /** The tab's apps in the chosen order, with headings between letters (A to Z) or months (newest first). */
 private fun entries(apps: List<AppEntry>, look: DrawerLook): List<Entry> {
     val sorted = when (look.sort) {
@@ -494,7 +582,7 @@ private fun entries(apps: List<AppEntry>, look: DrawerLook): List<Entry> {
     sorted.forEach { app ->
         val head = when (look.sort) {
             DrawerSort.INSTALLED -> if (app.installed > 0) monthFormat.format(Date(app.installed)) else "Earlier"
-            else -> app.label.firstOrNull()?.uppercaseChar()?.takeIf { it.isLetter() }?.toString() ?: "#"
+            else -> letterOf(app.label)
         }
         if (head != last) {
             out += Entry.Heading(head, "h${out.size}:$head")
@@ -525,68 +613,188 @@ private fun AppsView(
         )
         return
     }
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val cols = columnsFor(look, maxWidth)
-        when {
-            look.view == DrawerView.LIST -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) {
-                items(list, key = { e -> if (e is Entry.App) e.app.key else (e as Entry.Heading).key }) { e ->
-                    when (e) {
-                        is Entry.Heading -> Heading(e.text, ink)
-                        is Entry.App -> DrawerItem(e.app, vm, drag, list = true, labels = true, onPickUp = onPickUp, onClose = onClose)
-                    }
-                }
+    // Where this tab was left (the caller keys this view by tab and view, so each starts from its own spot)
+    val spotKey = "${tab.id}|${look.view}|${look.scroll}"
+    val start = remember { if (look.remember) DrawerMemory.spots[spotKey] else null }
+    val listState = remember { LazyListState(start?.first ?: 0, start?.second ?: 0) }
+    val gridState = remember { LazyGridState(start?.first ?: 0, start?.second ?: 0) }
+    val pager = remember { arrayOfNulls<PagerState>(1) }
+    DisposableEffect(Unit) {
+        onDispose {
+            DrawerMemory.spots[spotKey] = when {
+                look.view == DrawerView.LIST -> listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
+                look.scroll == DrawerScroll.HORIZONTAL -> (pager[0]?.currentPage ?: 0) to 0
+                else -> gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset
             }
-            look.scroll == DrawerScroll.HORIZONTAL -> {
-                // Pages of apps you swipe through sideways; headings don't apply here
-                // A row is the icon plus its padding and label (104dp at normal size); only the icon part scales
-                val rows = (maxHeight / (52.dp + 52.dp * look.iconScale)).toInt().coerceAtLeast(1)
-                val perPage = (rows * cols).coerceAtLeast(1)
-                val apps = list.filterIsInstance<Entry.App>().map { it.app }
-                val pageCount = (apps.size + perPage - 1) / perPage
-                val pager = rememberPagerState { pageCount.coerceAtLeast(1) }
-                Column(Modifier.fillMaxSize()) {
-                    HorizontalPager(pager, Modifier.weight(1f).fillMaxWidth()) { page ->
-                        Column(Modifier.fillMaxSize().padding(horizontal = 10.dp)) {
-                            apps.drop(page * perPage).take(perPage).chunked(cols).forEach { row ->
-                                Row(Modifier.fillMaxWidth()) {
-                                    row.forEach { app ->
-                                        Box(Modifier.weight(1f)) {
-                                            DrawerItem(app, vm, drag, list = false, labels = look.labels, onPickUp = onPickUp, onClose = onClose)
+        }
+    }
+    val scope = rememberCoroutineScope()
+    // Letters to slide through: only in A to Z order, scrolling up and down
+    val starts = remember(list) { letterStarts(list) }
+    val vertical = look.view == DrawerView.LIST || look.scroll != DrawerScroll.HORIZONTAL
+    val showLetters = look.letters && vertical && look.sort != DrawerSort.INSTALLED && starts.size > 1
+    // On the side away from the tabs
+    val lettersLeft = look.railOnRight && look.tabs != TabMode.NONE
+    var scrub by remember { mutableStateOf<Pair<String, Float>?>(null) }
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val cols = columnsFor(look, maxWidth - if (showLetters) LetterStripWidth else 0.dp)
+        val letterStrip: @Composable () -> Unit = {
+            LetterStrip(starts.map { it.first }, ink, onPick = { i, y ->
+                scrub = starts[i].first to y
+                val row = starts[i].second
+                scope.launch {
+                    if (look.view == DrawerView.LIST) listState.scrollToItem(row) else gridState.scrollToItem(row)
+                }
+            }, onDone = { scrub = null })
+        }
+        Row(Modifier.fillMaxSize()) {
+            if (showLetters && lettersLeft) letterStrip()
+            Box(Modifier.weight(1f).fillMaxHeight()) {
+                when {
+                    look.view == DrawerView.LIST -> LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) {
+                        items(list, key = { e -> if (e is Entry.App) e.app.key else (e as Entry.Heading).key }) { e ->
+                            when (e) {
+                                is Entry.Heading -> Heading(e.text, ink)
+                                is Entry.App -> DrawerItem(e.app, vm, drag, list = true, labels = true, onPickUp = onPickUp, onClose = onClose)
+                            }
+                        }
+                    }
+                    look.scroll == DrawerScroll.HORIZONTAL -> {
+                        // Pages of apps you swipe through sideways; headings don't apply here
+                        // A row is the icon plus its padding and label (104dp at normal size); only the icon part scales
+                        val rows = (maxHeight / (52.dp + 52.dp * look.iconScale)).toInt().coerceAtLeast(1)
+                        val perPage = (rows * cols).coerceAtLeast(1)
+                        val apps = list.filterIsInstance<Entry.App>().map { it.app }
+                        val pageCount = (apps.size + perPage - 1) / perPage
+                        val pagerState = rememberPagerState(initialPage = (start?.first ?: 0).coerceIn(0, (pageCount - 1).coerceAtLeast(0))) {
+                            pageCount.coerceAtLeast(1)
+                        }
+                        pager[0] = pagerState
+                        Column(Modifier.fillMaxSize()) {
+                            HorizontalPager(pagerState, Modifier.weight(1f).fillMaxWidth()) { page ->
+                                Column(Modifier.fillMaxSize().padding(horizontal = 10.dp)) {
+                                    apps.drop(page * perPage).take(perPage).chunked(cols).forEach { row ->
+                                        Row(Modifier.fillMaxWidth()) {
+                                            row.forEach { app ->
+                                                Box(Modifier.weight(1f)) {
+                                                    DrawerItem(app, vm, drag, list = false, labels = look.labels, onPickUp = onPickUp, onClose = onClose)
+                                                }
+                                            }
+                                            repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
                                         }
                                     }
-                                    repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
+                                }
+                            }
+                            if (pageCount > 1) {
+                                Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.Center) {
+                                    repeat(pageCount) { i ->
+                                        Box(
+                                            Modifier
+                                                .padding(horizontal = 4.dp)
+                                                .size(if (i == pagerState.currentPage) 8.dp else 6.dp)
+                                                .clip(CircleShape)
+                                                .background(ink.copy(alpha = if (i == pagerState.currentPage) 0.9f else 0.4f)),
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
-                    if (pageCount > 1) {
-                        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.Center) {
-                            repeat(pageCount) { i ->
-                                Box(
-                                    Modifier
-                                        .padding(horizontal = 4.dp)
-                                        .size(if (i == pager.currentPage) 8.dp else 6.dp)
-                                        .clip(CircleShape)
-                                        .background(ink.copy(alpha = if (i == pager.currentPage) 0.9f else 0.4f)),
-                                )
+                    else -> LazyVerticalGrid(
+                        columns = GridCells.Fixed(cols),
+                        modifier = Modifier.fillMaxSize(),
+                        state = gridState,
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                    ) {
+                        list.forEach { e ->
+                            when (e) {
+                                is Entry.Heading -> item(span = { GridItemSpan(maxLineSpan) }, key = e.key) { Heading(e.text, ink) }
+                                is Entry.App -> item(key = e.app.key) {
+                                    DrawerItem(e.app, vm, drag, list = false, labels = look.labels, onPickUp = onPickUp, onClose = onClose)
+                                }
                             }
                         }
                     }
                 }
-            }
-            else -> LazyVerticalGrid(
-                columns = GridCells.Fixed(cols),
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-            ) {
-                list.forEach { e ->
-                    when (e) {
-                        is Entry.Heading -> item(span = { GridItemSpan(maxLineSpan) }, key = e.key) { Heading(e.text, ink) }
-                        is Entry.App -> item(key = e.app.key) {
-                            DrawerItem(e.app, vm, drag, list = false, labels = look.labels, onPickUp = onPickUp, onClose = onClose)
-                        }
+                // The letter you're on, big, beside your finger
+                scrub?.let { (letter, y) ->
+                    val density = LocalDensity.current
+                    Box(
+                        Modifier
+                            .align(if (lettersLeft) Alignment.TopStart else Alignment.TopEnd)
+                            .offset { IntOffset(0, (y - with(density) { 32.dp.toPx() }).roundToInt().coerceAtLeast(0)) }
+                            .padding(horizontal = 14.dp)
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(ink.copy(alpha = 0.9f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(letter, color = if (ink.luminance() > 0.5f) Color(0xFF1E1D24) else Color.White, fontSize = 30.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
+            }
+            if (showLetters && !lettersLeft) letterStrip()
+        }
+    }
+}
+
+private val LetterStripWidth = 26.dp
+
+/**
+ * The letters down the side of the drawer. Touch one, or slide along them, to jump to the apps starting with that
+ * letter. [onPick] gets the letter and how far down the strip your finger is; [onDone] when you let go.
+ */
+@Composable
+private fun LetterStrip(letters: List<String>, ink: Color, onPick: (Int, Float) -> Unit, onDone: () -> Unit) {
+    val haptics = LocalHapticFeedback.current
+    var active by remember { mutableStateOf<Int?>(null) }
+    val pick by rememberUpdatedState(onPick)
+    val done by rememberUpdatedState(onDone)
+    BoxWithConstraints(
+        Modifier
+            .fillMaxHeight()
+            .width(LetterStripWidth)
+            .pointerInput(letters) {
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    down.consume()
+                    fun at(y: Float) = ((y / size.height.coerceAtLeast(1)) * letters.size).toInt().coerceIn(0, letters.lastIndex)
+                    fun touch(y: Float) {
+                        val i = at(y)
+                        if (i != active) {
+                            active = i
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        }
+                        pick(i, y.coerceIn(0f, size.height.toFloat()))
+                    }
+                    touch(down.position.y)
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) break
+                        change.consume()
+                        touch(change.position.y)
+                    }
+                    active = null
+                    done()
+                }
+            },
+    ) {
+        // Letters shrink to fit a short drawer
+        val each = maxHeight / letters.size.coerceAtLeast(1)
+        val font = with(LocalDensity.current) { (each * 0.62f).coerceIn(7.dp, 12.dp).toSp() }
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly, horizontalAlignment = Alignment.CenterHorizontally) {
+            letters.forEachIndexed { i, letter ->
+                val on = i == active
+                Text(
+                    letter,
+                    color = ink.copy(alpha = if (on) 1f else 0.6f),
+                    fontSize = font,
+                    lineHeight = font,
+                    fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
+                    maxLines = 1,
+                )
             }
         }
     }

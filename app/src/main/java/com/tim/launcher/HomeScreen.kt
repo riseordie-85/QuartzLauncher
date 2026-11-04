@@ -811,6 +811,8 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
                 searchSettings = store[S.searchSettings],
                 searchContacts = store[S.searchContacts],
                 railOnRight = position == DockPosition.LEFT,
+                letters = store[S.drawerLetters],
+                remember = store[S.drawerRemember],
                 edges = edges,
             )
             Box(Modifier.fillMaxSize().padding(gap)) {
