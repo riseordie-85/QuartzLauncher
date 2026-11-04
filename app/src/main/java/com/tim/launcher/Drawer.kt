@@ -1,6 +1,7 @@
 package com.tim.launcher
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.offset
@@ -209,7 +210,7 @@ fun AppDrawer(vm: HomeViewModel, drag: DragController, look: DrawerLook, startWi
 
 /** What one row of the drawer is: a heading or an app. */
 private sealed interface Entry {
-    /** [key] is unique even when the same heading shows twice (A to Z can put "#" both before A and after Z). */
+    /** [key] is unique even if the same heading were to show twice. */
     data class Heading(val text: String, val key: String) : Entry
     data class App(val app: AppEntry) : Entry
 }
@@ -299,7 +300,7 @@ private fun DrawerBody(
                         SearchResults(vm, drag, look, ink, query, onPickUp, onClose)
                     } else {
                         // Each tab (and view) keeps its own scroll position
-                        key(tab.id, look.view, look.scroll) { AppsView(vm, drag, look, ink, tab, onPickUp, onClose) }
+                        key(tab.id, look.view, look.scroll, look.sort, look.dividers) { AppsView(vm, drag, look, ink, tab, onPickUp, onClose) }
                     }
                 }
             }
@@ -574,7 +575,8 @@ private fun letterStarts(list: List<Entry>): List<Pair<String, Int>> {
 private fun entries(apps: List<AppEntry>, look: DrawerLook): List<Entry> {
     val sorted = when (look.sort) {
         DrawerSort.INSTALLED -> apps.sortedByDescending { it.installed }
-        else -> apps.sortedBy { it.label.lowercase() }
+        // Numbers and symbols (#) all go first, so they're one group the letter strip can reach
+        else -> apps.sortedWith(compareBy<AppEntry>({ letterOf(it.label) != "#" }, { it.label.lowercase() }))
     }
     if (!look.dividers) return sorted.map { Entry.App(it) }
     val out = ArrayList<Entry>()
@@ -614,7 +616,7 @@ private fun AppsView(
         return
     }
     // Where this tab was left (the caller keys this view by tab and view, so each starts from its own spot)
-    val spotKey = "${tab.id}|${look.view}|${look.scroll}"
+    val spotKey = "${tab.id}|${look.view}|${look.scroll}|${look.sort}|${look.dividers}"
     val start = remember { if (look.remember) DrawerMemory.spots[spotKey] else null }
     val listState = remember { LazyListState(start?.first ?: 0, start?.second ?: 0) }
     val gridState = remember { LazyGridState(start?.first ?: 0, start?.second ?: 0) }
@@ -755,6 +757,8 @@ private fun LetterStrip(letters: List<String>, ink: Color, onPick: (Int, Float) 
         Modifier
             .fillMaxHeight()
             .width(LetterStripWidth)
+            // Keep Android's back swipe from taking a slide along the letters at the screen edge
+            .systemGestureExclusion()
             .pointerInput(letters) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
@@ -768,33 +772,40 @@ private fun LetterStrip(letters: List<String>, ink: Color, onPick: (Int, Float) 
                         }
                         pick(i, y.coerceIn(0f, size.height.toFloat()))
                     }
-                    touch(down.position.y)
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed) break
-                        change.consume()
-                        touch(change.position.y)
+                    try {
+                        touch(down.position.y)
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) break
+                            change.consume()
+                            touch(change.position.y)
+                        }
+                    } finally {
+                        // Also when the slide is cut short, so the big letter never stays up
+                        active = null
+                        done()
                     }
-                    active = null
-                    done()
                 }
             },
     ) {
         // Letters shrink to fit a short drawer
         val each = maxHeight / letters.size.coerceAtLeast(1)
         val font = with(LocalDensity.current) { (each * 0.62f).coerceIn(7.dp, 12.dp).toSp() }
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly, horizontalAlignment = Alignment.CenterHorizontally) {
+        // Each letter gets an equal band, the same bands touches are matched to
+        Column(Modifier.fillMaxSize()) {
             letters.forEachIndexed { i, letter ->
                 val on = i == active
-                Text(
-                    letter,
-                    color = ink.copy(alpha = if (on) 1f else 0.6f),
-                    fontSize = font,
-                    lineHeight = font,
-                    fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
-                    maxLines = 1,
-                )
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Text(
+                        letter,
+                        color = ink.copy(alpha = if (on) 1f else 0.6f),
+                        fontSize = font,
+                        lineHeight = font,
+                        fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }
