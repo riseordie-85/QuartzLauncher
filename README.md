@@ -17,6 +17,7 @@ Phase 9 (in progress): first run and setup polish, on phase 8 widgets and weathe
 - **Remember where you were:** an option to have the drawer open on the tab and spot you left (each tab keeps its own). Off by default.
 - **Tab order:** up and down arrows beside each of your tabs in Settings › App drawer › Tabs. All apps stays first.
 - **Shortcuts under the tabs:** pin apps (Settings, Quartz Settings, a calculator…) below the tabs, one tap away from any tab. Add, order and remove them in Settings › App drawer › Shortcuts. Profiles carry them.
+- **Home menu:** long-press an empty spot for Wallpaper, Widgets, Quartz settings, Run setup again and Pages. The test panel is gone from it.
 - **App menus:** hold an app and let go (home, dock or drawer) for App info, Uninstall (apps you installed), and Remove from home or Add to home screen. While dragging, an **Uninstall** target sits next to Remove.
 
 ## Phase 8: what's new
@@ -124,7 +125,7 @@ The fold test build underneath: its only job was to prove fold behavior on real 
 - Unfolded page modes (test panel): **Paired** (each cover page has its own inner half) or **Side by side** (unfolding shows two cover pages at once, like an open book).
 - Rotated unfolded: the apps reflow into one grid sized for the tall screen, iPad style. Rotate back and everything is where it was.
 - Swipe up for a simple app drawer. Long-press an app there and drag it to a spot on the home screen.
-- Long-press empty space for the **test panel**: what the device reports, cover side, grid size, test wallpaper, default home, copy report, event log.
+- (Removed from the home menu in phase 9.) Long-press empty space for the **test panel**: what the device reports, cover side, grid size, test wallpaper, default home, copy report, event log.
 - A **test live wallpaper** that labels which screen, size, and display it is drawing on.
 
 ## Build

@@ -114,7 +114,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Settings
@@ -152,6 +151,7 @@ import androidx.compose.material3.TextButton
 import com.tim.launcher.settings.FolderIcon
 import com.tim.launcher.settings.Route
 import com.tim.launcher.weather.Weather
+import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
@@ -891,9 +891,9 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
                     menuOpen = false
                     SettingsActivity.open(activity, wizard = true)
                 },
-                onTestPanel = {
+                onWallpaper = {
                     menuOpen = false
-                    panelOpen = true
+                    SettingsActivity.open(activity, route = Route.WALLPAPER)
                 },
                 onPages = {
                     menuOpen = false
@@ -1097,7 +1097,7 @@ private fun RemoveZone(drag: DragController, canUninstall: Boolean) {
 private fun HomeMenu(
     onSettings: () -> Unit,
     onSetup: () -> Unit,
-    onTestPanel: () -> Unit,
+    onWallpaper: () -> Unit,
     onPages: () -> Unit,
     onWidgets: () -> Unit,
     onDismiss: () -> Unit,
@@ -1117,11 +1117,11 @@ private fun HomeMenu(
                 .background(Color(0xF0221F2E))
                 .padding(vertical = 8.dp),
         ) {
+            MenuItem("Wallpaper", Icons.Rounded.Wallpaper, onWallpaper)
             MenuItem("Widgets", Icons.Rounded.Widgets, onWidgets)
             MenuItem("Quartz settings", Icons.Rounded.Settings, onSettings)
             MenuItem("Run setup again", Icons.Rounded.AutoAwesome, onSetup)
             MenuItem("Pages", Icons.Rounded.GridView, onPages)
-            MenuItem("Test panel", Icons.Rounded.BugReport, onTestPanel)
         }
     }
 }
