@@ -641,6 +641,8 @@ private fun AppsView(
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val cols = columnsFor(look, maxWidth - if (showLetters) LetterStripWidth else 0.dp)
+        // Read here: inside the Row and Box below, BoxWithConstraints' maxHeight can't be reached without its scope
+        val fullHeight = maxHeight
         val letterStrip: @Composable () -> Unit = {
             LetterStrip(starts.map { it.first }, ink, onPick = { i, y ->
                 scrub = starts[i].first to y
@@ -665,7 +667,7 @@ private fun AppsView(
                     look.scroll == DrawerScroll.HORIZONTAL -> {
                         // Pages of apps you swipe through sideways; headings don't apply here
                         // A row is the icon plus its padding and label (104dp at normal size); only the icon part scales
-                        val rows = (maxHeight / (52.dp + 52.dp * look.iconScale)).toInt().coerceAtLeast(1)
+                        val rows = (fullHeight / (52.dp + 52.dp * look.iconScale)).toInt().coerceAtLeast(1)
                         val perPage = (rows * cols).coerceAtLeast(1)
                         val apps = list.filterIsInstance<Entry.App>().map { it.app }
                         val pageCount = (apps.size + perPage - 1) / perPage
