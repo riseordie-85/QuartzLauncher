@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- For Android's themed icons: the gem's outline with the house inside, in one color -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="3"
+        android:strokeLineJoin="round"
+        android:pathData="M54.0,26.0 L70.5,31.3 L80.6,45.3 L80.6,62.7 L70.5,76.7 L54.0,82.0 L37.5,76.7 L27.4,62.7 L27.4,45.3 L37.5,31.3 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M54,37 L70,51 L66,51 L66,70 L58,70 L58,58 L50,58 L50,70 L42,70 L42,51 L38,51 Z" />
+</vector>
