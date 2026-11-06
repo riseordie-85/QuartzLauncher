@@ -313,7 +313,24 @@ fun IconsSection(
         RowDivider()
         val background = draft.place(place?.background, S.iconBackground)
         SettingRow("Background", "A plate behind each icon, in your shape") {
-            Dropdown(background, IconBackground.entries, { it.label }) { set(S.iconBackground, place?.background, it) }
+            Dropdown(background, IconBackground.entries, { it.label }) {
+                set(S.iconBackground, place?.background, it)
+                // Frosted glass needs a see-through tint: a solid color would hide the glass, so start it faint
+                val tint = draft.place(place?.color, S.iconBgColor)
+                if (it == IconBackground.FROSTED && (tint ushr 24) > 0x99) set(S.iconBgColor, place?.color, 0x38FFFFFF)
+            }
+        }
+        if (background == IconBackground.FROSTED) {
+            ColorEditor("Tint", draft.place(place?.color, S.iconBgColor), colorOpen == "from", {
+                colorOpen = if (colorOpen == "from") null else "from"
+            }, alpha = true) { set(S.iconBgColor, place?.color, it) }
+            Text(
+                "Your wallpaper, blurred behind each icon like the dock's glass, under this tint. Keep it see-through " +
+                    "for the glass to show. On the home screen and dock (the drawer is already glass).",
+                color = Q.TextDim,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 12.dp),
+            )
         }
         if (background == IconBackground.COLOR || background == IconBackground.GRADIENT) {
             val gradient = background == IconBackground.GRADIENT

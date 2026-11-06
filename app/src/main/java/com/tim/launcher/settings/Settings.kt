@@ -111,7 +111,16 @@ enum class IconShape(val label: String) {
     TEARDROP("Teardrop"), HEXAGON("Hexagon"),
 }
 enum class IconStyle(val label: String) { DEFAULT("Default"), MINIMAL("Minimal") }
-enum class IconBackground(val label: String) { NONE("None"), LIGHT("Light"), DARK("Dark"), COLOR("Color"), GRADIENT("Gradient") }
+enum class IconBackground(val label: String) {
+    NONE("None"),
+
+    /** Frosted glass: the wallpaper blurred behind the icon, like the dock, under a see-through tint. */
+    FROSTED("Frosted glass"),
+    LIGHT("Light"),
+    DARK("Dark"),
+    COLOR("Color"),
+    GRADIENT("Gradient"),
+}
 enum class IconShadow(val label: String) { NONE("None"), SOFT("Soft"), STRONG("Strong") }
 enum class BadgeStyle(val label: String) { DOT("Dot"), COUNTER("Counter") }
 enum class FolderIcon(val label: String) { PLAIN("Folder"), BADGE("Folder with badge"), GRID2("2 × 2 preview"), GRID3("3 × 3 preview") }

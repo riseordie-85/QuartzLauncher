@@ -13,6 +13,7 @@ Phase 9 (in progress): first run and setup polish, on phase 8 widgets and weathe
 - **Drawer edge light:** the app drawer's panel takes the dock's edge light (hairline, soft or bright), with no separate setting.
 - **Folders wear your icon style:** a folder's tile follows the icon settings of the place it's in (home or dock): shape, background color or gradient, pattern, see-through, edge light and shadow. With no background it keeps its light veil, cut to your shape, and the little app grid moves in on round shapes so it stays inside. The icon preview in Appearance shows a folder too.
 - **Widget colors:** the flip cards and the accent (the clock's date, the tips card's buttons) each have their own color in Settings › Widgets. Numbers on a light card, and button text on a light accent, turn dark.
+- **Frosted glass icons:** a "Frosted glass" icon background: your wallpaper blurred behind each icon in its shape, like the dock, under a see-through tint you pick. Folders get it too. Edge light, pattern and shadow still apply (no shadow under the glass itself).
 - **Letter scroller:** letters down the side of the app drawer when it scrolls up and down in A to Z order. Touch one or slide along them to jump; a big letter shows beside your finger. On by default (Settings › App drawer › Order).
 - **Remember where you were:** an option to have the drawer open on the tab and spot you left (each tab keeps its own). Off by default.
 - **Tab order:** up and down arrows beside each of your tabs in Settings › App drawer › Tabs. All apps stays first.

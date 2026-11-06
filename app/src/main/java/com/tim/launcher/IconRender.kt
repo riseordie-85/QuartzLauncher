@@ -36,6 +36,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.asImageBitmap
 import com.tim.launcher.settings.IconBackground
 import com.tim.launcher.settings.IconShape
@@ -279,7 +280,8 @@ object IconRender {
         val icon = drawIcon(context, app, spec, outline) ?: return null
         drawEdge(Canvas(icon), outline, SIZE.toFloat(), spec.edge, isLight(plateColor(spec) ?: 0xFF000000.toInt()))
         if (spec.shadow == IconShadow.NONE) return icon
-        return withShadow(icon, spec.shadow)
+        // Frosted glass is see-through: no shadow under it, or the glass goes murky
+        return withShadow(icon, spec.shadow, cut = if (spec.background == IconBackground.FROSTED) outline else null)
     }
 
     private fun drawIcon(context: Context, app: AppEntry, spec: Spec, outline: Path): Bitmap? {
@@ -368,7 +370,26 @@ object IconRender {
         IconBackground.NONE -> null
         IconBackground.LIGHT -> 0xFFF4F4F6.toInt()
         IconBackground.DARK -> 0xFF1E1D24.toInt()
-        IconBackground.COLOR, IconBackground.GRADIENT -> spec.color
+        // Frosted: the tint over the blurred wallpaper, which StyledIcon lays down behind the drawn icon
+        IconBackground.COLOR, IconBackground.GRADIENT, IconBackground.FROSTED -> spec.color
+    }
+
+    /** The outline an icon in [spec] is cut to, as a Compose shape (for the frosted glass behind it). */
+    fun outline(spec: Spec): androidx.compose.ui.graphics.Shape = IconOutline(if (spec.shape == IconShape.SYSTEM) IconShape.SQUIRCLE else spec.shape)
+
+    private class IconOutline(private val shape: IconShape) : androidx.compose.ui.graphics.Shape {
+        override fun createOutline(
+            size: androidx.compose.ui.geometry.Size,
+            layoutDirection: androidx.compose.ui.unit.LayoutDirection,
+            density: androidx.compose.ui.unit.Density,
+        ): androidx.compose.ui.graphics.Outline {
+            val p = path(shape, 100f)
+            p.transform(android.graphics.Matrix().apply { setScale(size.width / 100f, size.height / 100f) })
+            return androidx.compose.ui.graphics.Outline.Generic(p.asComposePath())
+        }
+
+        override fun equals(other: Any?) = other is IconOutline && other.shape == shape
+        override fun hashCode() = shape.hashCode()
     }
 
     private val platePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.DITHER_FLAG)
@@ -546,7 +567,7 @@ object IconRender {
     private val keepPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN) }
 
     /** The icon on a bigger picture with a blurred shadow under it, falling slightly down. */
-    private fun withShadow(icon: Bitmap, shadow: IconShadow): Bitmap {
+    private fun withShadow(icon: Bitmap, shadow: IconShadow, cut: Path? = null): Bitmap {
         val big = (SIZE * OVERSCAN).toInt()
         val out = Bitmap.createBitmap(big, big, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(out)
@@ -559,16 +580,28 @@ object IconRender {
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = if (strong) 0x8C000000.toInt() else 0x59000000 }
         canvas.drawBitmap(alpha, margin + offset[0], margin + offset[1] + drop, paint)
         alpha.recycle()
+        if (cut != null) {
+            canvas.save()
+            canvas.translate(margin, margin)
+            canvas.drawPath(cut, Paint(Paint.ANTI_ALIAS_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR) })
+            canvas.restore()
+        }
         canvas.drawBitmap(icon, margin, margin, null)
         icon.recycle()
         return out
     }
 
+    /**
+     * Whether ink on [c] should be dark. A see-through color counts for only as much as it covers, over a
+     * mid-dark wallpaper (most are), so a faint white frost still gets white ink.
+     */
     private fun isLight(c: Int): Boolean {
+        val a = ((c ushr 24) and 0xFF) / 255.0
         val r = (c shr 16) and 0xFF
         val g = (c shr 8) and 0xFF
         val b = c and 0xFF
-        return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0 > 0.6
+        val luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0
+        return luma * a + 0.3 * (1 - a) > 0.6
     }
 
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)

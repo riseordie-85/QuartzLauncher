@@ -64,6 +64,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.layout.offset
+import com.tim.launcher.settings.IconBackground
 import com.tim.launcher.settings.SettingsStore
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.CompositionLocalProvider
@@ -216,6 +217,27 @@ internal fun FolderTile(spec: IconRender.Spec, size: Dp, content: @Composable (i
     val ink = IconRender.folderInk(spec)?.let { Color(it) } ?: label
     val inset = IconRender.folderInset(spec)
     val outline = remember(spec.key) { FolderOutline(spec) }
+    // Frosted glass sits under the tile's see-through tint, like the dock
+    if (spec.background == IconBackground.FROSTED) {
+        Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+            Box(Modifier.matchParentSize().glass(outline, Color.Transparent))
+            FolderTileFace(size, shown, veil, outline, ink, inset, content)
+        }
+    } else {
+        FolderTileFace(size, shown, veil, outline, ink, inset, content)
+    }
+}
+
+@Composable
+private fun FolderTileFace(
+    size: Dp,
+    shown: Pair<ImageBitmap, Float>?,
+    veil: Int,
+    outline: Shape,
+    ink: Color,
+    inset: Float,
+    content: @Composable (ink: Color, inset: Float) -> Unit,
+) {
     Box(
         Modifier
             .size(size)

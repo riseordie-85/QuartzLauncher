@@ -103,6 +103,7 @@ import android.content.pm.ActivityInfo
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.LifecycleEventEffect
+import com.tim.launcher.settings.IconBackground
 import com.tim.launcher.settings.DockAlign
 import com.tim.launcher.settings.DockLength
 import com.tim.launcher.settings.DockPosition
@@ -1373,7 +1374,10 @@ fun StyledIcon(
         else -> last[0] ?: (app.icon to 1f)
     }
     if (drawn != null || s.plain) last[0] = shown
+    // Frosted glass: the blurred wallpaper in the icon's shape, under the drawn icon and its see-through tint
+    val frosted = s.background == IconBackground.FROSTED && shown.first !== app.icon
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
+        if (frosted) Box(Modifier.matchParentSize().glass(IconRender.outline(s), Color.Transparent))
         Image(shown.first, contentDescription = contentDescription, modifier = Modifier.requiredSize(size * shown.second))
     }
 }
