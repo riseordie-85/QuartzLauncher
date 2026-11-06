@@ -89,7 +89,20 @@ object WallCache {
     // ---- Glass ----
 
     /** A small copy of one screen's wallpaper, blurred for glass, and how bright it is (0 dark – 1 light). */
-    class Glass(val bitmap: Bitmap, val screenW: Int, val screenH: Int, val brightness: Float, val blurred: Boolean)
+    /**
+     * A blurred copy of what's behind the panels: [bitmap] covers a [screenW]×[screenH] area whose top left sits at
+     * [left], [top] in the window (the whole screen, for the home screen; just the sample strip, for a settings
+     * preview).
+     */
+    class Glass(
+        val bitmap: Bitmap,
+        val screenW: Int,
+        val screenH: Int,
+        val brightness: Float,
+        val blurred: Boolean,
+        val left: Float = 0f,
+        val top: Float = 0f,
+    )
 
     private val glass = LinkedHashMap<String, Glass>()
     private val latest = HashMap<String, Glass>()

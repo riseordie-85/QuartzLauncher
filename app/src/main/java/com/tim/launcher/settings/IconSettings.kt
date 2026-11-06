@@ -6,6 +6,13 @@ import android.content.pm.LauncherApps
 import android.net.Uri
 import android.os.Process
 import androidx.compose.foundation.Image
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.FilterQuality
+import com.tim.launcher.LocalGlass
+import com.tim.launcher.wallpaper.WallCache
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -207,21 +214,40 @@ fun IconDraftPreview(draft: IconDraft, tab: IconSlot) {
     IconPreview(slot, IconRender.specFor(draft, slot))
 }
 
-/** Your apps drawn in [spec], over a wallpaper strip. */
+/** Your apps drawn in [spec], over a sample wallpaper with enough detail that frosted glass shows. */
 @Composable
 private fun IconPreview(slot: IconSlot, spec: IconRender.Spec) {
     val context = LocalContext.current
     val apps by produceState(emptyList<AppEntry>()) { value = withContext(Dispatchers.IO) { sampleApps(context) } }
+    // Where the strip is in the window and how big, so its blurred copy lines up behind each icon
+    var strip by remember { mutableStateOf<Pair<Offset, IntSize>?>(null) }
+    val stripSize = strip?.second
+    val scene by produceState<Pair<android.graphics.Bitmap, android.graphics.Bitmap>?>(null, stripSize) {
+        val sz = stripSize ?: return@produceState
+        // A third of full size is plenty for a picture that's mostly behind glass
+        value = withContext(Dispatchers.Default) { PreviewScene.make(sz.width / 3, sz.height / 3) }
+    }
+    val sharp = remember(scene) { scene?.first?.asImageBitmap() }
+    val glass = scene?.let { pics ->
+        strip?.let { (at, sz) -> WallCache.Glass(pics.second, sz.width, sz.height, 0.4f, blurred = true, left = at.x, top = at.y) }
+    }
     Box(
         Modifier
             .fillMaxWidth()
             .padding(start = 16.dp, end = 16.dp, top = 16.dp)
             .height(92.dp)
             .clip(RoundedCornerShape(18.dp))
-            .background(Brush.linearGradient(listOf(Color(0xFF3B2A7A), Color(0xFF244F9E), Color(0xFF14808A), Color(0xFF4E9F3D)))),
+            .onGloballyPositioned { strip = it.positionInWindow() to it.size }
+            .drawBehind {
+                if (sharp != null) {
+                    drawImage(sharp, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()), filterQuality = FilterQuality.Low)
+                } else {
+                    drawRect(Brush.linearGradient(listOf(Color(0xFF3B2A7A), Color(0xFF244F9E), Color(0xFF14808A), Color(0xFF4E9F3D))))
+                }
+            },
         contentAlignment = Alignment.Center,
     ) {
-        CompositionLocalProvider(LocalIconSlot provides slot) {
+        CompositionLocalProvider(LocalIconSlot provides slot, LocalGlass provides glass) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                 // Folders on the home screen and dock wear the same style; the drawer has none
                 val folder = slot != IconSlot.DRAWER && apps.size >= 4

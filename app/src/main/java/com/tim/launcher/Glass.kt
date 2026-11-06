@@ -39,7 +39,7 @@ fun Modifier.glass(shape: Shape, tint: Color): Modifier = composed {
                 val sx = image.width / glass.screenW.toFloat()
                 val sy = image.height / glass.screenH.toFloat()
                 withTransform({
-                    translate(-origin.x, -origin.y)
+                    translate(glass.left - origin.x, glass.top - origin.y)
                     scale(1f / sx, 1f / sy, pivot = Offset.Zero)
                 }) {
                     drawImage(image, filterQuality = FilterQuality.Low)
