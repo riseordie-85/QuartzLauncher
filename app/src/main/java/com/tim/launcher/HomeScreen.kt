@@ -426,11 +426,16 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
     // Which layout shows: the unfolded screen has its own when the cover screen doesn't carry over
     val carryOver = store[S.carryOver]
     val board = if (screen.posture == Posture.UNFOLDED && !carryOver) Board.INNER else Board.MAIN
-    val innerPages = store[S.innerPages].takeIf { it > 0 } ?: store[S.pages]
+    val innerPagesSetting = store[S.innerPages]
     // Switched before anything below reads the layout, so the first frame already shows the right one
     remember(board) {
-        vm.useBoard(board, store[S.gridCols, Scope.INNER], store[S.gridRows, Scope.INNER], innerPages)
+        vm.useBoard(board, store[S.gridCols, Scope.INNER], store[S.gridRows, Scope.INNER], innerPagesSetting.takeIf { it > 0 } ?: store[S.pages])
         true
+    }
+    // The unfolded layout's own page count, once it exists: never following the cover's (that would cut its pages)
+    val innerPages = innerPagesSetting.takeIf { it > 0 } ?: if (board == Board.INNER) vm.pages else store[S.pages]
+    LaunchedEffect(board) {
+        if (board == Board.INNER && store[S.innerPages] == 0) store.set(S.innerPages, value = vm.pages)
     }
     val scope = when (screen.posture) {
         Posture.PHONE -> Scope.PHONE
@@ -601,6 +606,8 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         }
         val folded = if (dockFolded == 0) HomeViewModel.UNLIMITED_DOCK else dockFolded
         val extra = when {
+            // The unfolded screen has its own dock: the cover layout's extra slots aren't used, so leave them be
+            deviceType == DeviceType.FOLDABLE && !carryOver -> vm.dockExtra.size
             deviceType != DeviceType.FOLDABLE || dockFolded == 0 -> 0
             dockUnfolded == 0 -> HomeViewModel.UNLIMITED_DOCK
             else -> dockUnfolded - dockFolded
@@ -1031,8 +1038,9 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         AnimatedVisibility(visible = overviewOpen, enter = fadeIn() + scaleIn(initialScale = 1.08f), exit = fadeOut() + scaleOut(targetScale = 1.08f)) {
             PageOverview(
                 vm = vm,
-                onAddPage = { store.set(S.pages, value = (vm.pages + 1).coerceAtMost(HomeViewModel.MAX_PAGES)) },
-                onPagesChanged = { store.set(S.pages, value = vm.pages) },
+                // Pages of the layout showing: the unfolded screen's own one has its own count
+                onAddPage = { store.set(if (board == Board.INNER) S.innerPages else S.pages, value = (vm.pages + 1).coerceAtMost(HomeViewModel.MAX_PAGES)) },
+                onPagesChanged = { store.set(if (board == Board.INNER) S.innerPages else S.pages, value = vm.pages) },
                 onClose = { overviewOpen = false },
             )
         }

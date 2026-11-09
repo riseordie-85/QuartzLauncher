@@ -41,8 +41,10 @@ object Profile {
         edit.putInt(Prefs.ROWS, layout.optInt("rows", prefs.getInt(Prefs.ROWS, 6)))
         edit.putInt(Prefs.PAGES, layout.optInt("pages", prefs.getInt(Prefs.PAGES, 3)))
         layoutKeys.forEach { key -> if (layout.has(key)) edit.putString(key, layout.getString(key)) }
-        // A file without an unfolded layout of its own: the unfolded screen makes a new one from the imported pages
-        if (!layout.has(Prefs.L_INNER)) (innerInts + Prefs.L_INNER + Prefs.L_DOCK_INNER).forEach { edit.remove(it) }
+        // This device's unfolded layout goes; the file's comes in if it has one (if not, the unfolded screen makes a
+        // new one from the imported pages)
+        (innerInts + Prefs.L_INNER + Prefs.L_DOCK_INNER).forEach { edit.remove(it) }
+        listOf(Prefs.L_INNER, Prefs.L_DOCK_INNER).forEach { key -> if (layout.has(key)) edit.putString(key, layout.getString(key)) }
         innerInts.forEach { key -> if (layout.has(key)) edit.putInt(key, layout.getInt(key)) }
         edit.putString(Prefs.L_EXTRA, "")
         edit.putBoolean(Prefs.LAYOUT_READY, true)

@@ -195,7 +195,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val current: Int,
     )
 
-    private var parked: Parked? = null
+    // Snapshot state, so a swap made during a composition that's thrown away is undone along with `board`
+    private var parked by mutableStateOf<Parked?>(null)
 
     /** The grid and pages to make the unfolded screen's own layout with, the first time it's needed. */
     private var innerSpec = Triple(6, 5, 3)
@@ -637,8 +638,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             }
             widgets[w.id] = w
         }
-        // The other layout, so its widgets and folders count as placed
-        parked = readParked(other(board))
+        // The other layout, so its widgets and folders count as placed (phones and tablets have no unfolded one,
+        // even if a foldable's profile brought one along)
+        parked = if (foldable) readParked(other(board)) else null
         if (normalizeWidgets()) save()
     }
 
@@ -710,6 +712,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         layoutStamp = stamp
         // An imported file may not have an unfolded layout: then it's made again from the imported pages
         if (board == Board.INNER && !prefs.contains(Prefs.L_INNER)) {
+            val innerDock = dockCover.size
             board = Board.MAIN
             parked = null
             homePageChoice = prefs.getInt(Prefs.HOME_PAGE, -1)
@@ -718,7 +721,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             pages = prefs.getInt(Prefs.PAGES, pages)
             restoreLayout()
             migratePairedPages()
+            // Apps from another device that aren't installed here mustn't be copied into the unfolded layout
+            if (apps.keys.any { it != StarterApps.QUARTZ_SETTINGS }) dropMissingApps()
             swapTo(Board.INNER)
+            applyDockSizes(innerDock, dockExtra.size)
             normalizeWidgets()
             save()
             currentPage = homePage
@@ -749,6 +755,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private fun fillDefaults() {
         // A new start is made on your main layout; the unfolded screen's own one is made again from it
         val wasInner = board == Board.INNER
+        val innerDock = dockCover.size
         if (wasInner) swapTo(Board.MAIN)
         parked = null
         prefs.edit().remove(Prefs.L_INNER).remove(Prefs.L_DOCK_INNER).remove(Prefs.INNER_HOME_PAGE).apply()
@@ -776,6 +783,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         Diag.log("Starter layout: ${picks.dock.size} apps in the dock, ${picks.home.size} on page ${homePage + 1}, and tips")
         if (wasInner) {
             swapTo(Board.INNER)
+            applyDockSizes(innerDock, dockExtra.size)
             save()
         }
     }
@@ -799,9 +807,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         // The layout that's waiting is saved as it stands too (a removed app or widget may have left it)
         parked?.let { away ->
             val k = keys(other(board))
+            // Packed, but keeping its size (empty slots at the end), so it comes back the same size
             val packed = away.dock.filterNotNull()
             edit.putString(k.items, join(away.items))
-                .putString(k.dock, join(packed))
+                .putString(k.dock, join(packed + List(away.dock.size - packed.size) { null }))
                 .putInt(k.cols, away.cols)
                 .putInt(k.rows, away.rows)
                 .putInt(k.pages, away.pages)
@@ -836,7 +845,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clearLayout() {
-        listOf(cover, extra, dockCover, dockExtra).forEach { list -> list.indices.forEach { list[it] = null } }
+        // The extra dock slots belong to the cover layout: left alone while the unfolded screen's own one shows
+        (if (board == Board.MAIN) listOf(cover, extra, dockCover, dockExtra) else listOf(cover, extra, dockCover))
+            .forEach { list -> list.indices.forEach { list[it] = null } }
         val away = parked?.items.orEmpty().toSet()
         widgets.keys.filter { WIDGET_PREFIX + it !in away }.forEach { widgets.remove(it) }
         save()
@@ -1093,6 +1104,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun setDockSizes(folded: Int, extra: Int) {
         reloadIfChanged() // an import may have replaced the saved layout; don't save over it with the old one
+        applyDockSizes(folded, extra)
+    }
+
+    private fun applyDockSizes(folded: Int, extra: Int) {
         val f = folded.coerceIn(1, UNLIMITED_DOCK)
         val e = extra.coerceIn(0, UNLIMITED_DOCK)
         if (dockCover.size == f && dockExtra.size == e) return
