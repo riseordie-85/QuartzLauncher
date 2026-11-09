@@ -93,14 +93,16 @@ fun HomeLayout(screen: ScreenState, vm: HomeViewModel, drag: DragController, sho
     val look = LocalHomeLook.current
     val unfolded = screen.posture == Posture.UNFOLDED
     val tall = screen.heightDp > screen.widthDp
-    val ownGrid = unfolded && !look.carryOver
-    val dock = if (unfolded) unfoldedDock(vm) else coverDock(vm)
+    // The unfolded screen's own layout (the cover doesn't carry over): its own pages, apps, dock and widgets
+    val own = unfolded && vm.board == Board.INNER
+    val dock = if (unfolded && !own) unfoldedDock(vm) else coverDock(vm)
 
     HomeFrame(dock, vm, drag) {
         if (showHint) HintLine()
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
-                ownGrid && !tall -> ReflowPages(screen, vm, drag, look.innerCols, look.innerRows)
+                // One page at a time in its own grid, which stays as you set it whichever way you hold it
+                own -> SinglePages(screen, vm, drag, allowFlip = false)
                 unfolded && !tall -> BoxWithConstraints(Modifier.fillMaxSize()) {
                     // A side dock takes room from one half, so then the two pages split what's left evenly;
                     // otherwise they split exactly at the hinge
@@ -392,11 +394,11 @@ private fun DrawerButton() {
  * nothing moves when you turn it back.
  */
 @Composable
-private fun SinglePages(screen: ScreenState, vm: HomeViewModel, drag: DragController) {
+private fun SinglePages(screen: ScreenState, vm: HomeViewModel, drag: DragController, allowFlip: Boolean = true) {
     SideEffect { drag.reflow = false }
     val landscapeScreen = screen.widthDp > screen.heightDp
     val landscapeGrid = vm.cols > vm.rows
-    val flip = vm.cols != vm.rows && landscapeScreen != landscapeGrid
+    val flip = allowFlip && vm.cols != vm.rows && landscapeScreen != landscapeGrid
     val cols = if (flip) vm.rows else vm.cols
     val rows = if (flip) vm.cols else vm.rows
     // A sideways grid can't keep a widget's block of cells, so pages flow instead (widgets on top, then icons)

@@ -178,6 +178,8 @@ object S {
     val gridRows = Setting("home.rows", 6, IntCodec, perScreen = true)
     val pages = Setting("home.pages", 3, IntCodec)
     val carryOver = Setting("home.carryOver", true, BoolCodec)
+    /** Pages on the unfolded screen's own layout (when the cover doesn't carry over). 0: as many as the cover has. */
+    val innerPages = Setting("home.innerPages", 0, IntCodec)
     val coverSide = Setting("home.coverSide", CoverSide.RIGHT, EnumCodec(CoverSide.entries.toTypedArray()))
     val pageMode = Setting("home.pageMode", PageMode.STRIP, EnumCodec(PageMode.entries.toTypedArray()))
     val labelsHome = Setting("home.labels", true, BoolCodec, perScreen = true)
@@ -537,14 +539,16 @@ object SetupNag {
 fun SettingsStore.dockCounts(type: DeviceType): Pair<Int, Int> {
     val folded = this[S.dockIcons, type.primary]
     if (type != DeviceType.FOLDABLE) return folded to folded
-    if (folded == 0) return 0 to 0
+    // The unfolded screen's own dock (the cover doesn't carry over) is sized on its own
+    val own = !this[S.carryOver]
+    if (folded == 0 && !own) return 0 to 0
     val inner = if (isLinked(S.dockIcons, Scope.INNER)) {
         val p = this[S.dockPosition, Scope.INNER]
         if (p == DockPosition.BOTTOM || p == DockPosition.TOP) folded * 2 else folded
     } else {
         this[S.dockIcons, Scope.INNER]
     }
-    return folded to if (inner == 0) 0 else maxOf(inner, folded)
+    return folded to if (inner == 0) 0 else if (own) inner else maxOf(inner, folded)
 }
 
 /** A pattern size slider's label: 100% is the usual size, in the middle; it runs from about 35% to about 280%. */

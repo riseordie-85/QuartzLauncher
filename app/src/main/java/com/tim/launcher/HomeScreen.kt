@@ -423,24 +423,34 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
     var multiTouchUntil by remember { mutableStateOf(0L) }
 
     // ---- Settings → home ----
+    // Which layout shows: the unfolded screen has its own when the cover screen doesn't carry over
+    val carryOver = store[S.carryOver]
+    val board = if (screen.posture == Posture.UNFOLDED && !carryOver) Board.INNER else Board.MAIN
+    val innerPages = store[S.innerPages].takeIf { it > 0 } ?: store[S.pages]
+    // Switched before anything below reads the layout, so the first frame already shows the right one
+    remember(board) {
+        vm.useBoard(board, store[S.gridCols, Scope.INNER], store[S.gridRows, Scope.INNER], innerPages)
+        true
+    }
     val scope = when (screen.posture) {
         Posture.PHONE -> Scope.PHONE
         Posture.COVER -> Scope.COVER
         Posture.UNFOLDED -> Scope.INNER
         Posture.TABLET -> Scope.TABLET
     }
-    val gridScope = when (screen.posture) {
-        Posture.PHONE -> Scope.PHONE
-        Posture.TABLET -> Scope.TABLET
+    val gridScope = when {
+        screen.posture == Posture.PHONE -> Scope.PHONE
+        screen.posture == Posture.TABLET -> Scope.TABLET
+        board == Board.INNER -> Scope.INNER
         else -> Scope.COVER
     }
     // First run after settings arrived: keep the layout you already had instead of resetting it to defaults
     remember(gridScope) {
-        if (store.owner(S.gridCols, gridScope) == null) {
+        if (board == Board.MAIN && store.owner(S.gridCols, gridScope) == null) {
             store.set(S.gridCols, gridScope, vm.cols)
             store.set(S.gridRows, gridScope, vm.rows)
         }
-        if (store.owner(S.pages, Scope.GLOBAL) == null) store.set(S.pages, value = vm.pages)
+        if (board == Board.MAIN && store.owner(S.pages, Scope.GLOBAL) == null) store.set(S.pages, value = vm.pages)
         if (store.owner(S.coverSide, Scope.GLOBAL) == null) {
             store.set(S.coverSide, value = if (vm.coverLeft) CoverSide.LEFT else CoverSide.RIGHT)
         }
@@ -456,8 +466,8 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         val left = settingSide == CoverSide.LEFT
         if (vm.coverLeft != left) vm.setCoverSide(left)
     }
-    val settingPages = store[S.pages]
-    LaunchedEffect(settingPages) { vm.setPageCount(settingPages) }
+    val settingPages = if (board == Board.INNER) innerPages else store[S.pages]
+    LaunchedEffect(settingPages, board) { vm.setPageCount(settingPages) }
 
     // Phones and the cover screen stay upright unless you allow rotation. The unfolded screen and tablets always
     // follow the device (Android requires it on large screens), and their grids reflow instead.
@@ -554,7 +564,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             drawerOpen = true
         },
         onDockBounds = { dockRect = it },
-        carryOver = store[S.carryOver],
+        carryOver = carryOver,
         innerCols = store[S.gridCols, Scope.INNER],
         innerRows = store[S.gridRows, Scope.INNER],
         dockPosition = store.dockPositionOn(scope),
@@ -583,7 +593,12 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
         else -> DeviceType.PHONE
     }
     val (dockFolded, dockUnfolded) = store.dockCounts(deviceType)
-    LaunchedEffect(dockFolded, dockUnfolded) {
+    LaunchedEffect(dockFolded, dockUnfolded, board) {
+        if (board == Board.INNER) {
+            // The unfolded screen's own dock: just its own icons (the cover's extra slots stay with the cover layout)
+            vm.setDockSizes(if (dockUnfolded == 0) HomeViewModel.UNLIMITED_DOCK else dockUnfolded, vm.dockExtra.size)
+            return@LaunchedEffect
+        }
         val folded = if (dockFolded == 0) HomeViewModel.UNLIMITED_DOCK else dockFolded
         val extra = when {
             deviceType != DeviceType.FOLDABLE || dockFolded == 0 -> 0

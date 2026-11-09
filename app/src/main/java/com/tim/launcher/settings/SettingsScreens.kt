@@ -248,18 +248,34 @@ fun HomeSettings(ctx: SettingsContext) {
                 RowDivider()
                 SettingRow("Held upright", "The grid flips to ${store[S.gridRows, scope]} × ${store[S.gridCols, scope]} and your apps keep their order", enabled = false)
             }
-            if (scope == Scope.INNER && !store[S.carryOver]) {
+            val ownInner = scope == Scope.INNER && !store[S.carryOver]
+            if (ownInner) {
                 RowDivider()
-                SettingRow("Unfolded", "Shows one page at a time, with your apps flowed into this grid", enabled = false)
+                SettingRow("Its own layout", "One page at a time, with its own apps, folders, widgets and dock. Arrange it while unfolded.", enabled = false)
             }
             RowDivider()
-            SettingRow("Pages", "Pinch the home screen to rearrange them or pick your home page") { Stepper(store[S.pages], 1..9) { store.set(S.pages, value = it) } }
+            if (ownInner) {
+                val pages = store[S.innerPages].takeIf { it > 0 } ?: store[S.pages]
+                SettingRow("Pages", "The unfolded screen's own pages. Pinch it to rearrange them or pick its home page") {
+                    Stepper(pages, 1..9) { store.set(S.innerPages, value = it) }
+                }
+            } else {
+                SettingRow(
+                    "Pages",
+                    if (scope == Scope.INNER) "Shared with the cover screen. Pinch the home screen to rearrange them or pick your home page"
+                    else "Pinch the home screen to rearrange them or pick your home page",
+                ) { Stepper(store[S.pages], 1..9) { store.set(S.pages, value = it) } }
+            }
         }
 
         if (ctx.type == DeviceType.FOLDABLE) {
             SectionLabel("Folding")
             GlassPanel {
-                SettingRow("Cover screen carries over", "Your cover layout becomes one half of the unfolded screen") {
+                SettingRow(
+                    "Cover screen carries over",
+                    if (store[S.carryOver]) "On: unfolded shows your cover pages two at a time, side by side"
+                    else "Off: the unfolded screen has its own pages, apps, folders, widgets and dock",
+                ) {
                     Toggle(store[S.carryOver]) { store.set(S.carryOver, value = it) }
                 }
                 if (store[S.carryOver]) {
@@ -410,10 +426,15 @@ fun DockSettings(ctx: SettingsContext) {
                     RowDivider()
                     SettingRow(
                         "Icons when unfolded",
-                        if (folded == 0) "Unlimited, like folded" else "Extra icons go after your folded ones",
-                        enabled = folded != 0,
+                        when {
+                            !store[S.carryOver] -> "Its own dock, with its own apps"
+                            folded == 0 -> "Unlimited, like folded"
+                            else -> "Extra icons go after your folded ones"
+                        },
+                        enabled = folded != 0 || !store[S.carryOver],
                     ) {
-                        Dropdown(unfolded, (folded..16).toList() + 0, { if (it == 0) "Unlimited" else "$it" }, enabled = folded != 0) {
+                        val choices = if (store[S.carryOver]) (folded..16).toList() + 0 else (3..16).toList() + 0
+                        Dropdown(unfolded, choices, { if (it == 0) "Unlimited" else "$it" }, enabled = folded != 0 || !store[S.carryOver]) {
                             store.setAt(S.dockIcons, Scope.INNER, it)
                         }
                     }

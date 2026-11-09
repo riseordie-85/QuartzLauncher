@@ -67,6 +67,13 @@ object Prefs {
     const val L_EXTRA = "layout_extra"
     const val L_DOCK_COVER = "layout_dock_cover"
     const val L_DOCK_EXTRA = "layout_dock_extra"
+    // The unfolded screen's own layout, when the cover screen doesn't carry over (see HomeViewModel.Board)
+    const val L_INNER = "layout_inner"
+    const val L_DOCK_INNER = "layout_dock_inner"
+    const val INNER_COLS = "inner_cols"
+    const val INNER_ROWS = "inner_rows"
+    const val INNER_PAGES = "inner_pages"
+    const val INNER_HOME_PAGE = "inner_home_page" // -1 = automatic
     const val L_FOLDERS = "layout_folders"
     const val DRAWER_TABS = "drawer_tabs"   // your custom drawer tabs, as JSON
     const val DRAWER_SHORTCUTS = "drawer_shortcuts" // apps pinned under the drawer tabs, as a JSON list of keys
