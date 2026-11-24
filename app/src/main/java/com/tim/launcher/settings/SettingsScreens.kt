@@ -911,6 +911,8 @@ fun PrivacySettings(ctx: SettingsContext) {
             RowDivider()
             SettingRow("Internet", "Only for weather: forecasts from Open-Meteo for a rough location, and city search when you type one. Nothing else is sent.") { StatusText("Allowed") }
             RowDivider()
+            SettingRow("Vibration", "Only for a small click as you slide through the app drawer's letters. Follows your touch vibration setting.") { StatusText("Allowed") }
+            RowDivider()
             SettingRow(
                 "Notification access",
                 "Only for badges, if you turn them on. Quartz counts notifications per app; it never reads them.",

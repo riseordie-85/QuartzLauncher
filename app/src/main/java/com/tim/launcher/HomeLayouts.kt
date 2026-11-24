@@ -439,10 +439,7 @@ private fun StripPages(screen: ScreenState, vm: HomeViewModel, drag: DragControl
         pageSpacing = HINGE_GAP_DP.dp,
         maxPage = lastFirst,
     ) { page ->
-        Column(Modifier.fillMaxSize()) {
-            Caption(if (page == vm.currentPage) "Page ${page + 1} · cover" else "Page ${page + 1}")
-            GridArea(Area.COVER, page * vm.perPage, drag.shownList(vm, Area.COVER), vm.cols, vm.rows, vm, drag, Modifier.weight(1f).fillMaxWidth())
-        }
+        GridArea(Area.COVER, page * vm.perPage, drag.shownList(vm, Area.COVER), vm.cols, vm.rows, vm, drag, Modifier.fillMaxSize())
     }
 }
 
@@ -648,18 +645,6 @@ private fun PageDots(count: Int, current: Int) {
             )
         }
     }
-}
-
-@Composable
-private fun Caption(text: String) {
-    Text(
-        text,
-        color = LocalLabelColor.current.copy(alpha = 0.55f),
-        fontSize = 11.sp,
-        modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp),
-        textAlign = TextAlign.Center,
-        style = labelStyle(LocalLabelColor.current),
-    )
 }
 
 /** Width of one half of the unfolded screen, split around the hinge (or the middle if none is reported). */

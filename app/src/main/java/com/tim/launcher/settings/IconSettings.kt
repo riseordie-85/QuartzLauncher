@@ -322,11 +322,11 @@ fun IconsSection(
             })
         }
         RowDivider()
-        SettingRow("Shape", "For icons a pack doesn't cover, and every app's own icon") {
+        SettingRow("Shape", "For icons a pack doesn't cover. A pack's icons stay exactly as the pack drew them") {
             Dropdown(draft.place(place?.shape, S.iconShape), IconShape.entries, { it.label }) { set(S.iconShape, place?.shape, it) }
         }
         RowDivider()
-        SettingRow("Use the shape on every icon", "Pack icons too") {
+        SettingRow("Use the shape on every icon", "Pack icons too, with your background, edge light and shadow") {
             Toggle(draft.place(place?.force, S.iconForceShape)) { set(S.iconForceShape, place?.force, it) }
         }
         RowDivider()

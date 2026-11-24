@@ -1398,7 +1398,8 @@ fun StyledIcon(
     }
     if (drawn != null || s.plain) last[0] = shown
     // Frosted glass: the blurred wallpaper in the icon's shape, under the drawn icon and its see-through tint
-    val frosted = s.background == IconBackground.FROSTED && shown.first !== app.icon
+    // (not behind an icon pack's own picture, which is left exactly as the pack drew it)
+    val frosted = s.background == IconBackground.FROSTED && shown.first !== app.icon && !IconRender.drawnAsIs(app, s)
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
         if (frosted) Box(Modifier.matchParentSize().glass(IconRender.outline(s), Color.Transparent))
         Image(shown.first, contentDescription = contentDescription, modifier = Modifier.requiredSize(size * shown.second))

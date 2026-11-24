@@ -5,6 +5,8 @@
          and only if you put a weather widget on your home screen: Open-Meteo gets a rough location (about 1 km). -->
 
     <!-- Weather for weather widgets (Open-Meteo), and finding a city by name. Nothing else uses the network. -->
+    <!-- A short click under your finger as you slide through the drawer's letters (no prompt; it can't do anything else) -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- Only if a weather widget uses this phone's location (Android asks first). Coarse only; a city works instead. -->

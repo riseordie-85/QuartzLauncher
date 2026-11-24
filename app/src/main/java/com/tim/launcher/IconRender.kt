@@ -175,6 +175,15 @@ object IconRender {
     private val FAILED = ImageBitmap(1, 1)
 
     /** The styled icon for [app], or null while it's being drawn (or when there's nothing to change). */
+    /** Icons drawn exactly as their icon pack drew them (no shape, background or rim), by cache key. */
+    private val asDrawn = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    /**
+     * True when [app]'s icon in [spec] is its pack's own picture, left as the pack drew it: nothing goes behind it
+     * (no frosted glass), whatever background your other icons have.
+     */
+    fun drawnAsIs(app: AppEntry, spec: Spec): Boolean = (spec.key + "|" + app.key) in asDrawn
+
     fun icon(context: Context, app: AppEntry, spec: Spec): ImageBitmap? {
         if (spec.plain) return null
         val key = spec.key + "|" + app.key
@@ -277,14 +286,46 @@ object IconRender {
     private fun render(context: Context, app: AppEntry, spec: Spec): Bitmap? {
         // The outline the rim follows: your shape, or the system's mask when the icon is left as the app drew it
         val outline = path(if (spec.shape == IconShape.SYSTEM) IconShape.SQUIRCLE else spec.shape, SIZE.toFloat())
-        val icon = drawIcon(context, app, spec, outline) ?: return null
-        drawEdge(Canvas(icon), outline, SIZE.toFloat(), spec.edge, isLight(plateColor(spec) ?: 0xFF000000.toInt()))
+        val cacheKey = spec.key + "|" + app.key
+        val drawn = drawIcon(context, app, spec, outline) ?: return null
+        val icon = drawn.first
+        if (drawn.second) {
+            // The pack's own picture: no rim along a shape it doesn't have, just its own shadow if you have one
+            asDrawn += cacheKey
+            return if (spec.shadow == IconShadow.NONE) icon else withShadow(icon, spec.shadow)
+        }
+        asDrawn -= cacheKey
+        val plate = plateColor(spec)
+        val light = isLight(plate ?: 0xFF000000.toInt())
+        if (plate != null) {
+            // On a background, the rim is drawn whole and trimmed to the shape, so it's as bright on a see-through
+            // background (frosted glass) as on a solid one, the same as folders and the dock
+            rimLayer(Canvas(icon), outline, spec.edge, light)
+        } else {
+            drawEdge(Canvas(icon), outline, SIZE.toFloat(), spec.edge, light)
+        }
         if (spec.shadow == IconShadow.NONE) return icon
         // Frosted glass is see-through: no shadow under it, or the glass goes murky
         return withShadow(icon, spec.shadow, cut = if (spec.background == IconBackground.FROSTED) outline else null)
     }
 
-    private fun drawIcon(context: Context, app: AppEntry, spec: Spec, outline: Path): Bitmap? {
+    /** A rim of light along [shape], at full strength whatever's under it, kept inside the shape. */
+    private fun rimLayer(canvas: Canvas, shape: Path, edge: DockEdge, lightPlate: Boolean) {
+        if (edge == DockEdge.NONE) return
+        val s = SIZE.toFloat()
+        val mask = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888)
+        fillShape(Canvas(mask), shape, 0xFF000000.toInt())
+        val rim = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888)
+        val rc = Canvas(rim)
+        drawEdge(rc, shape, s, edge, lightPlate, atop = false)
+        rc.drawBitmap(mask, 0f, 0f, keepPaint)
+        canvas.drawBitmap(rim, 0f, 0f, null)
+        rim.recycle()
+        mask.recycle()
+    }
+
+    /** The icon, and whether it's an icon pack's picture left exactly as the pack drew it. */
+    private fun drawIcon(context: Context, app: AppEntry, spec: Spec, outline: Path): Pair<Bitmap, Boolean>? {
         val density = context.resources.displayMetrics.densityDpi
         val launcherApps = context.getSystemService(LauncherApps::class.java)
         // Quartz Settings isn't a launcher activity, so Android won't resolve it: it wears Quartz's own icon
@@ -313,33 +354,34 @@ object IconRender {
                 mono.colorFilter = PorterDuffColorFilter(ink, PorterDuff.Mode.SRC_IN)
                 drawLayer(canvas, mono, s, adaptive = true)
             } else {
-                val icon = (packIcon ?: own)?.mutate() ?: return out
+                val icon = (packIcon ?: own)?.mutate() ?: return out to false
                 icon.colorFilter = ColorMatrixColorFilter(minimalMatrix(isLight(plate ?: 0xFF000000.toInt())))
                 drawInset(canvas, icon, s, if (plate != null) 0.62f else 0.8f)
                 icon.colorFilter = null
             }
-            return out
+            return out to false
         }
 
-        // An icon from the pack, as the pack drew it
-        if (packIcon != null && !spec.force && plate == null) {
+        // An icon from the pack, exactly as the pack drew it: its own shape (or none), no background, tile or rim.
+        // Your shape and background are for the icons the pack doesn't cover, unless you put them on every icon
+        if (packIcon != null && !spec.force) {
             packIcon.setBounds(0, 0, SIZE, SIZE)
             packIcon.draw(canvas)
-            return out
+            return out to true
         }
         // The pack doesn't have this app: dress the app's icon in the pack's frame, if it has one
         if (theme != null && packIcon == null && !spec.force && plate == null && (theme.back.isNotEmpty() || theme.mask != null)) {
             if (own != null) packFrame(canvas, theme, own, app, s)
-            return out
+            return out to false
         }
         // Left as the app drew it
         if (spec.shape == IconShape.SYSTEM && !spec.force && plate == null) {
-            val icon = packIcon ?: own ?: return out
+            val icon = packIcon ?: own ?: return out to false
             icon.setBounds(0, 0, SIZE, SIZE)
             icon.draw(canvas)
             // Android's own mask (a circle on many phones), scaled to the bounds just set
             (icon as? AdaptiveIconDrawable)?.let { outline.set(it.iconMask) }
-            return out
+            return out to false
         }
 
         // Cut to your shape, on your background if you picked one. The shape goes down first and the icon is drawn
@@ -363,7 +405,7 @@ object IconRender {
             }
         }
         canvas.restoreToCount(layer)
-        return out
+        return out to false
     }
 
     private fun plateColor(spec: Spec): Int? = when (spec.background) {

@@ -1,5 +1,8 @@
 package com.tim.launcher
 
+import android.os.VibrationAttributes
+import android.os.VibrationEffect
+import android.os.VibratorManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -746,12 +749,35 @@ private fun AppsView(
 private val LetterStripWidth = 26.dp
 
 /**
+ * A firm click for each new letter as you slide along the strip: stronger than Android's text-handle tick, which
+ * was hard to feel. Played as touch feedback, so it follows your phone's touch vibration setting.
+ */
+@Composable
+private fun rememberLetterTick(): () -> Unit {
+    val context = LocalContext.current
+    return remember(context) {
+        val vibrator = runCatching { context.getSystemService(VibratorManager::class.java)?.defaultVibrator }.getOrNull()
+            ?.takeIf { it.hasVibrator() }
+        val effect = vibrator?.let { v ->
+            if (v.areAllPrimitivesSupported(VibrationEffect.Composition.PRIMITIVE_CLICK)) {
+                VibrationEffect.startComposition().addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK, 0.9f).compose()
+            } else {
+                VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK)
+            }
+        }
+        val touch = VibrationAttributes.createForUsage(VibrationAttributes.USAGE_TOUCH)
+        val play: () -> Unit = { if (vibrator != null && effect != null) runCatching { vibrator.vibrate(effect, touch) } }
+        play
+    }
+}
+
+/**
  * The letters down the side of the drawer. Touch one, or slide along them, to jump to the apps starting with that
  * letter. [onPick] gets the letter and how far down the strip your finger is; [onDone] when you let go.
  */
 @Composable
 private fun LetterStrip(letters: List<String>, ink: Color, onPick: (Int, Float) -> Unit, onDone: () -> Unit) {
-    val haptics = LocalHapticFeedback.current
+    val tick = rememberLetterTick()
     var active by remember { mutableStateOf<Int?>(null) }
     val pick by rememberUpdatedState(onPick)
     val done by rememberUpdatedState(onDone)
@@ -770,7 +796,7 @@ private fun LetterStrip(letters: List<String>, ink: Color, onPick: (Int, Float) 
                         val i = at(y)
                         if (i != active) {
                             active = i
-                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            tick()
                         }
                         pick(i, y.coerceIn(0f, size.height.toFloat()))
                     }

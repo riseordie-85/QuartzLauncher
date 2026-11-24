@@ -85,9 +85,13 @@ fun rememberScreenState(activity: Activity): ScreenState {
         else -> Posture.PHONE
     }
 
+    // Android sometimes reports the hinge for the window mid-animation (coming back from an app), a quarter of the
+    // way across, and doesn't correct it until the phone turns: the unfolded screen then showed four narrow pages.
+    // A book-style fold's hinge is near the middle, so a report that isn't is ignored (the middle is used instead).
     val hingeCenter = fold
         ?.takeIf { it.orientation == FoldingFeature.Orientation.VERTICAL }
         ?.let { (it.bounds.left + it.bounds.right) / 2 }
+        ?.takeIf { it in (bounds.width() * 0.4f).toInt()..(bounds.width() * 0.6f).toInt() }
 
     val displayId = runCatching { activity.display?.displayId }.getOrNull() ?: -1
 
