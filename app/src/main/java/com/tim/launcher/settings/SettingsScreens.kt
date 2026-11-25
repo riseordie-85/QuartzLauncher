@@ -712,6 +712,18 @@ fun DrawerSettings(ctx: SettingsContext) {
                     Toggle(!store[S.drawerHideDock, ctx.type.primary]) { store.setAt(S.drawerHideDock, ctx.type.primary, !it) }
                 }
             }
+            RowDivider()
+            val anyDock = if (ctx.type == DeviceType.FOLDABLE) {
+                !store[S.drawerHideDock, Scope.COVER] || !store[S.drawerHideDock, Scope.INNER]
+            } else {
+                !store[S.drawerHideDock, ctx.type.primary]
+            }
+            SettingRow(
+                "Drawer goes behind the dock",
+                if (anyDock) "The drawer runs to the edge of the screen and your apps scroll under the dock"
+                else "For when the dock stays showing",
+                enabled = anyDock,
+            ) { Toggle(store[S.drawerBehindDock], enabled = anyDock) { store.set(S.drawerBehindDock, value = it) } }
         }
 
         SectionLabel("Order")

@@ -251,6 +251,8 @@ object S {
     val drawerRemember = Setting("drawer.remember", false, BoolCodec)
     /** Off: the dock stays on screen while the drawer is open. */
     val drawerHideDock = Setting("drawer.hideDock", false, BoolCodec, perScreen = true)
+    /** With the dock showing, the drawer runs under it (to the screen edge) and apps scroll beneath the dock. */
+    val drawerBehindDock = Setting("drawer.behindDock", false, BoolCodec)
     val searchSettings = Setting("search.settings", true, BoolCodec)
     val searchContacts = Setting("search.contacts", false, BoolCodec)
     val labelsDrawer = Setting("drawer.labels", true, BoolCodec)

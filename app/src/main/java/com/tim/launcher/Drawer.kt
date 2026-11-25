@@ -4,6 +4,8 @@ import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.VibratorManager
 import androidx.compose.foundation.Image
+import androidx.compose.runtime.compositionLocalOf
+import com.tim.launcher.settings.DockPosition
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -141,7 +143,18 @@ data class DrawerLook(
     val remember: Boolean = false,
     /** The screen edges this drawer area touches, so only those get system bar padding. */
     val edges: WindowInsetsSides = WindowInsetsSides.Horizontal + WindowInsetsSides.Vertical,
+    /**
+     * When the drawer goes behind the dock: where the dock is (in the home screen's coordinates) and which edge
+     * it's on. The drawer keeps its search, tabs and letters clear of it; apps scroll under a bottom dock.
+     */
+    val underDock: Rect? = null,
+    val dockEdge: DockPosition = DockPosition.BOTTOM,
 )
+
+/** How much of the drawer panel the dock covers, on each side: what to keep clear (and scroll under). */
+private data class DockCover(val top: Dp = 0.dp, val bottom: Dp = 0.dp, val start: Dp = 0.dp, val end: Dp = 0.dp)
+
+private val LocalDockCover = compositionLocalOf { DockCover() }
 
 private val PanelShape = RoundedCornerShape(28.dp)
 
@@ -196,8 +209,26 @@ fun AppDrawer(vm: HomeViewModel, drag: DragController, look: DrawerLook, startWi
                     .width((maxWidth * size).fit(300.dp, minOf(maxWidth, 760.dp)))
                     .height((maxHeight * size * 0.85f).fit(320.dp, maxHeight))
             }
+            // Where the dock overlaps this panel, when the drawer goes behind it
+            val density = LocalDensity.current
+            var cover by remember { mutableStateOf(DockCover()) }
+            val dock = look.underDock
             Box(
                 panel
+                    .then(
+                        if (dock == null) Modifier else Modifier.onGloballyPositioned { c ->
+                            val p = c.boundsInRoot()
+                            val hit = p.intersect(dock)
+                            cover = if (hit.width <= 0f || hit.height <= 0f) DockCover() else with(density) {
+                                when (look.dockEdge) {
+                                    DockPosition.TOP -> DockCover(top = (dock.bottom - p.top).coerceAtLeast(0f).toDp())
+                                    DockPosition.LEFT -> DockCover(start = (dock.right - p.left).coerceAtLeast(0f).toDp())
+                                    DockPosition.RIGHT -> DockCover(end = (p.right - dock.left).coerceAtLeast(0f).toDp())
+                                    else -> DockCover(bottom = (p.bottom - dock.top).coerceAtLeast(0f).toDp())
+                                }
+                            }
+                        },
+                    )
                     .glass(if (full) RectangleShape else PanelShape, home.drawerBg)
                     // The same edge light as the dock (none when the dock has no background)
                     .edgeLight(if (full) RectangleShape else PanelShape, if (home.dock.background) home.dock.edge else DockEdge.NONE, ink)
@@ -205,7 +236,9 @@ fun AppDrawer(vm: HomeViewModel, drag: DragController, look: DrawerLook, startWi
                     .pointerInput(Unit) { detectTapGestures { } }
                     .then(if (full) Modifier.windowInsetsPadding(WindowInsets.systemBars.only(look.edges)) else Modifier),
             ) {
-                DrawerBody(vm, drag, look, ink, full, startWithSearch, onPickUp = { carried = true }, onClose = onClose)
+                CompositionLocalProvider(LocalDockCover provides cover) {
+                    DrawerBody(vm, drag, look, ink, full, startWithSearch, onPickUp = { carried = true }, onClose = onClose)
+                }
             }
         }
     }
@@ -269,11 +302,18 @@ private fun DrawerBody(
         onClose()
     }
 
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    // The dock covering part of the drawer (when it goes behind the dock): everything keeps clear of it, except the
+    // apps, which scroll under a bottom dock
+    val under = LocalDockCover.current
+    BoxWithConstraints(Modifier.fillMaxSize().padding(top = under.top, start = under.start, end = under.end)) {
         val wide = maxWidth >= 560.dp
         val showTabs = look.tabs != TabMode.NONE
         Row(Modifier.fillMaxSize()) {
-            if (showTabs && !look.railOnRight) TabRail(tabs, tab.id, wide, ink, look.tabs == TabMode.CUSTOM, shortcuts, openShortcut, onClose, pick)
+            if (showTabs && !look.railOnRight) {
+                Box(Modifier.fillMaxHeight().padding(bottom = under.bottom)) {
+                    TabRail(tabs, tab.id, wide, ink, look.tabs == TabMode.CUSTOM, shortcuts, openShortcut, onClose, pick)
+                }
+            }
             Column(Modifier.weight(1f).fillMaxHeight()) {
                 if (full) {
                     // Drag the handle down (or tap it) to close
@@ -300,14 +340,18 @@ private fun DrawerBody(
                 }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     if (query.isNotBlank()) {
-                        SearchResults(vm, drag, look, ink, query, onPickUp, onClose)
+                        Box(Modifier.fillMaxSize().padding(bottom = under.bottom)) { SearchResults(vm, drag, look, ink, query, onPickUp, onClose) }
                     } else {
                         // Each tab (and view) keeps its own scroll position
                         key(tab.id, look.view, look.scroll, look.sort, look.dividers) { AppsView(vm, drag, look, ink, tab, onPickUp, onClose) }
                     }
                 }
             }
-            if (showTabs && look.railOnRight) TabRail(tabs, tab.id, wide, ink, look.tabs == TabMode.CUSTOM, shortcuts, openShortcut, onClose, pick)
+            if (showTabs && look.railOnRight) {
+                Box(Modifier.fillMaxHeight().padding(bottom = under.bottom)) {
+                    TabRail(tabs, tab.id, wide, ink, look.tabs == TabMode.CUSTOM, shortcuts, openShortcut, onClose, pick)
+                }
+            }
         }
     }
 }
@@ -634,6 +678,8 @@ private fun AppsView(
         }
     }
     val scope = rememberCoroutineScope()
+    // Room at the end of the list so the last apps can scroll up from under a bottom dock
+    val under = LocalDockCover.current.bottom
     // Letters to slide through: only in A to Z order, scrolling up and down
     val starts = remember(list) { letterStarts(list) }
     val vertical = look.view == DrawerView.LIST || look.scroll != DrawerScroll.HORIZONTAL
@@ -647,19 +693,19 @@ private fun AppsView(
         // Read here: inside the Row and Box below, BoxWithConstraints' maxHeight can't be reached without its scope
         val fullHeight = maxHeight
         val letterStrip: @Composable () -> Unit = {
-            LetterStrip(starts.map { it.first }, ink, onPick = { i, y ->
+            Box(Modifier.fillMaxHeight().padding(bottom = under)) { LetterStrip(starts.map { it.first }, ink, onPick = { i, y ->
                 scrub = starts[i].first to y
                 val row = starts[i].second
                 scope.launch {
                     if (look.view == DrawerView.LIST) listState.scrollToItem(row) else gridState.scrollToItem(row)
                 }
-            }, onDone = { scrub = null })
+            }, onDone = { scrub = null }) }
         }
         Row(Modifier.fillMaxSize()) {
             if (showLetters && lettersLeft) letterStrip()
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 when {
-                    look.view == DrawerView.LIST -> LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) {
+                    look.view == DrawerView.LIST -> LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 6.dp + under)) {
                         items(list, key = { e -> if (e is Entry.App) e.app.key else (e as Entry.Heading).key }) { e ->
                             when (e) {
                                 is Entry.Heading -> Heading(e.text, ink)
@@ -678,7 +724,7 @@ private fun AppsView(
                             pageCount.coerceAtLeast(1)
                         }
                         pager[0] = pagerState
-                        Column(Modifier.fillMaxSize()) {
+                        Column(Modifier.fillMaxSize().padding(bottom = under)) {
                             HorizontalPager(pagerState, Modifier.weight(1f).fillMaxWidth()) { page ->
                                 Column(Modifier.fillMaxSize().padding(horizontal = 10.dp)) {
                                     apps.drop(page * perPage).take(perPage).chunked(cols).forEach { row ->
@@ -712,7 +758,7 @@ private fun AppsView(
                         columns = GridCells.Fixed(cols),
                         modifier = Modifier.fillMaxSize(),
                         state = gridState,
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                        contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 6.dp + under),
                     ) {
                         list.forEach { e ->
                             when (e) {

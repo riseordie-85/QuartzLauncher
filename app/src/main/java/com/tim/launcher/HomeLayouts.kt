@@ -118,6 +118,18 @@ fun HomeLayout(screen: ScreenState, vm: HomeViewModel, drag: DragController, sho
     }
 }
 
+/**
+ * Just the dock, laid out exactly as on the home screen (same frame, nothing else in it), to draw over a drawer that
+ * goes behind the dock.
+ */
+@Composable
+fun DockOverlay(screen: ScreenState, vm: HomeViewModel, drag: DragController) {
+    val unfolded = screen.posture == Posture.UNFOLDED
+    val own = unfolded && vm.board == Board.INNER
+    val dock = if (unfolded && !own) unfoldedDock(vm) else coverDock(vm)
+    HomeFrame(dock, vm, drag) { }
+}
+
 // ---- Frame and dock ----
 
 /**

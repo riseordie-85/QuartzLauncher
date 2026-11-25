@@ -121,6 +121,7 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.tim.launcher.settings.ButtonEnd
@@ -800,9 +801,11 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             val density = LocalDensity.current
             val position = look.dockPosition
             val keepDock = !store[S.drawerHideDock, scope] && position != DockPosition.NONE && dockRect != Rect.Zero
+            // The drawer can run under the dock instead of stopping at it; the dock is then drawn again on top
+            val behindDock = keepDock && store[S.drawerBehindDock]
             val gap = with(density) {
                 when {
-                    !keepDock -> PaddingValues(0.dp)
+                    !keepDock || behindDock -> PaddingValues(0.dp)
                     position == DockPosition.BOTTOM -> PaddingValues(bottom = (screen.heightPx - dockRect.top).coerceAtLeast(0f).toDp())
                     position == DockPosition.TOP -> PaddingValues(top = dockRect.bottom.coerceAtLeast(0f).toDp())
                     position == DockPosition.LEFT -> PaddingValues(start = dockRect.right.coerceAtLeast(0f).toDp())
@@ -837,9 +840,15 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
                 letters = store[S.drawerLetters],
                 remember = store[S.drawerRemember],
                 edges = edges,
+                underDock = if (behindDock) dockRect else null,
+                dockEdge = position,
             )
             Box(Modifier.fillMaxSize().padding(gap)) {
                 AppDrawer(vm, drag, drawerLook, startWithSearch = drawerSearch, onClose = { drawerOpen = false })
+            }
+            // The dock over the drawer, exactly where it is on the home screen, and just as usable
+            if (behindDock) {
+                CompositionLocalProvider(LocalDockCopy provides true) { DockOverlay(screen, vm, drag) }
             }
         }
 
@@ -1216,6 +1225,9 @@ val LocalHomeLook = compositionLocalOf { HomeLook() }
 /** The color of icon labels where they're drawn: white on dark glass and wallpapers, dark on light ones. */
 val LocalLabelColor = compositionLocalOf { Color.White }
 
+/** True inside the dock drawn again over a drawer that goes behind the dock. */
+val LocalDockCopy = staticCompositionLocalOf { false }
+
 @Composable
 internal fun Cell(
     ref: SlotRef,
@@ -1231,8 +1243,10 @@ internal fun Cell(
     val haptics = LocalHapticFeedback.current
     val look = LocalHomeLook.current
 
+    // (The dock drawn again over the drawer shares the real dock's places; it mustn't take them away when it goes)
+    val copy = LocalDockCopy.current
     DisposableEffect(ref) {
-        onDispose { drag.bounds.remove(ref) }
+        onDispose { if (!copy) drag.bounds.remove(ref) }
     }
 
     // Slide in from wherever this icon was last drawn, when the icons make room for a drag (or spring back after)
