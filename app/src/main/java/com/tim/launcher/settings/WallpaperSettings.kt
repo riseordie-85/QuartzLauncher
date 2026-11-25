@@ -188,6 +188,7 @@ fun WallpaperSettings(ctx: SettingsContext) {
                         update(cfg.copy(patternSize = it))
                     }
                     PatternWeightSlider(cfg.pattern, cfg.patternWeight) { update(cfg.copy(patternWeight = it)) }
+                    PatternAnchorRow(cfg.pattern, cfg.patternAnchor, "A point of the screen") { update(cfg.copy(patternAnchor = it)) }
                 }
             }
 

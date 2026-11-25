@@ -161,11 +161,16 @@ object WallRenderer {
      * A pattern on its own (the dock's, an icon's). [scale] runs 0–1 with 0.5 the usual size: lower is finer, down
      * to about a third, higher is bolder, up to about three times.
      */
-    fun drawPatternOnly(canvas: Canvas, w: Float, h: Float, clip: Rect, style: PatternStyle, strength: Float, scale: Float = 0.5f, weight: Float = 0.5f) {
-        val c = WallConfig(pattern = style, patternStrength = strength, patternSize = 0.3f, patternColor = Color.WHITE, patternWeight = weight)
+    fun drawPatternOnly(
+        canvas: Canvas, w: Float, h: Float, clip: Rect, style: PatternStyle, strength: Float, scale: Float = 0.5f, weight: Float = 0.5f,
+        anchor: PatternAnchor = PatternAnchor.CENTER,
+        /** What [anchor] is a point of (an icon passes itself); the screen when null. */
+        area: RectF? = null,
+    ) {
+        val c = WallConfig(pattern = style, patternStrength = strength, patternSize = 0.3f, patternColor = Color.WHITE, patternWeight = weight, patternAnchor = anchor)
         val f = Math.pow(2.0, ((scale.coerceIn(0f, 1f) - 0.5f) * 3f).toDouble()).toFloat()
         // The shapes themselves get bigger or smaller; the area they cover stays the same
-        if (style.faceted) Facets.draw(canvas, w, h, clip, c, cellScale = f) else drawPattern(canvas, w, h, c, cellScale = f)
+        if (style.faceted) Facets.draw(canvas, w, h, clip, c, cellScale = f) else drawPattern(canvas, w, h, c, cellScale = f, area = area)
     }
 
     /** A small copy of a screen's wallpaper ([scale] of full size), for glass, previews and colors. */
@@ -251,12 +256,12 @@ object WallRenderer {
         canvas.drawBitmap(bmp, null, RectF(left, top, left + dw, top + dh), smooth)
     }
 
-    private fun drawPattern(canvas: Canvas, w: Float, h: Float, c: WallConfig, cellScale: Float = 1f) {
+    private fun drawPattern(canvas: Canvas, w: Float, h: Float, c: WallConfig, cellScale: Float = 1f, area: RectF? = null) {
         val cell = h * (0.025f + c.patternSize.coerceIn(0f, 1f) * 0.075f) * cellScale
         val alpha = (c.patternStrength.coerceIn(0f, 1f) * 255).toInt()
         // Only the part that's on screen
         val clip = canvas.clipBounds.takeUnless { it.isEmpty } ?: Rect(0, 0, w.toInt(), h.toInt())
-        Patterns.draw(canvas, w, h, clip, c.pattern, (c.patternColor and 0x00FFFFFF) or (alpha shl 24), cell, c.patternWeight)
+        Patterns.draw(canvas, w, h, clip, c.pattern, (c.patternColor and 0x00FFFFFF) or (alpha shl 24), cell, c.patternWeight, c.patternAnchor, area)
     }
 
     // ---- Test pattern (kept from phase 0, for checking how screens line up) ----

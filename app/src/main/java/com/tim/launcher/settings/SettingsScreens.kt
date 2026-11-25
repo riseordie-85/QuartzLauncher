@@ -602,6 +602,9 @@ fun DockColorControls(store: SettingsStore) {
         val size = store[S.dockPatternSize]
         SliderRow("Pattern size", size, 0f..1f, patternSizeLabel(size)) { store.set(S.dockPatternSize, value = it) }
         PatternWeightSlider(store[S.dockPattern], store[S.dockPatternWeight]) { store.set(S.dockPatternWeight, value = it) }
+        PatternAnchorRow(store[S.dockPattern], store[S.dockPatternAnchor], "A point of the screen, so they line up with the wallpaper's") {
+            store.set(S.dockPatternAnchor, value = it)
+        }
     }
 }
 

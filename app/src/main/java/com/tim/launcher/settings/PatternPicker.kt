@@ -40,6 +40,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tim.launcher.ui.Q
+import com.tim.launcher.wallpaper.PatternAnchor
 import com.tim.launcher.wallpaper.PatternGroup
 import com.tim.launcher.wallpaper.PatternStyle
 import com.tim.launcher.wallpaper.WallRenderer
@@ -157,6 +158,15 @@ private fun Thumb(image: ImageBitmap?, selected: Boolean, size: Int) {
             .border(if (selected) 3.dp else 1.dp, if (selected) Color.White else Q.Edge, shape),
     ) {
         if (image != null) Image(image, contentDescription = null, modifier = Modifier.fillMaxSize())
+    }
+}
+
+/** Where a pattern spreads from (the rings), for the patterns that spread from a point. [on] says of what. */
+@Composable
+fun PatternAnchorRow(style: PatternStyle, anchor: PatternAnchor, on: String, onChange: (PatternAnchor) -> Unit) {
+    if (!style.anchored) return
+    com.tim.launcher.ui.SettingRow("Rings from", on) {
+        com.tim.launcher.ui.Dropdown(anchor, PatternAnchor.entries, { it.label }) { onChange(it) }
     }
 }
 

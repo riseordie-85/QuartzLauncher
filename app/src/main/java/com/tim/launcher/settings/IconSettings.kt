@@ -391,6 +391,9 @@ fun IconsSection(
                 PatternWeightSlider(pattern, draft.place(place?.patternWeight, S.iconPatternWeight)) {
                     set(S.iconPatternWeight, place?.patternWeight, it)
                 }
+                PatternAnchorRow(pattern, draft.place(place?.patternAnchor, S.iconPatternAnchor), "A point of each icon") {
+                    set(S.iconPatternAnchor, place?.patternAnchor, it)
+                }
             }
         }
         RowDivider()

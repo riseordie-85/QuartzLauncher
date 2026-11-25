@@ -10,6 +10,11 @@ enum class WallKind(val label: String) { GRADIENT("Gradient"), SOLID("Color"), I
 
 enum class GradientStyle(val label: String) { LINEAR("Linear"), RADIAL("Radial"), CORNERS("Corners") }
 
+/** Where a pattern that spreads from a point (rings) starts: the middle, or a corner. */
+enum class PatternAnchor(val label: String) {
+    CENTER("Middle"), TOP_LEFT("Top left"), TOP_RIGHT("Top right"), BOTTOM_LEFT("Bottom left"), BOTTOM_RIGHT("Bottom right"),
+}
+
 /** Kinds of pattern, for grouping them in the picker. */
 enum class PatternGroup(val label: String) {
     CRYSTAL("Crystal"), DOTS("Dots"), LINES("Lines"), GRIDS("Grids"), SHAPES("Shapes"), CURVES("Curves"),
@@ -64,6 +69,10 @@ enum class PatternStyle(val label: String, val faceted: Boolean = false, val gro
     ARCS("Interlocking arcs", group = PatternGroup.CURVES),
     CIRCLES("Overlapping circles", group = PatternGroup.CURVES),
     RINGS("Rings", group = PatternGroup.CURVES),
+    ;
+
+    /** Spreads out from a point you can choose. */
+    val anchored get() = this == RINGS
 }
 
 /** How one wallpaper spans a folding phone's two screens. */
@@ -107,6 +116,8 @@ data class WallConfig(
     val patternSize: Float = 0.5f,
     /** How heavy a drawn pattern's lines and dots are, 0–1 (0.5 usual). */
     val patternWeight: Float = 0.5f,
+    /** Where rings spread out from. */
+    val patternAnchor: PatternAnchor = PatternAnchor.CENTER,
     /** Picks a different arrangement for patterns with randomness in them (Crystal, Shards, sparkles). */
     val patternSeed: Int = 0,
     /** Tiny glints over the pattern. */
@@ -141,6 +152,7 @@ data class WallConfig(
         put("patternStrength", patternStrength.toDouble())
         put("patternSize", patternSize.toDouble())
         put("patternWeight", patternWeight.toDouble())
+        put("patternAnchor", patternAnchor.name)
         put("patternSeed", patternSeed)
         put("sparkles", sparkles)
         put("dim", dim.toDouble())
@@ -175,6 +187,7 @@ data class WallConfig(
                 patternStrength = f("patternStrength", d.patternStrength),
                 patternSize = f("patternSize", d.patternSize),
                 patternWeight = f("patternWeight", d.patternWeight),
+                patternAnchor = PatternAnchor.entries.firstOrNull { it.name == j.optString("patternAnchor") } ?: d.patternAnchor,
                 patternSeed = j.optInt("patternSeed", d.patternSeed),
                 sparkles = j.optBoolean("sparkles", d.sparkles),
                 dim = f("dim", d.dim),

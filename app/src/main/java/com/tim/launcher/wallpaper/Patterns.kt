@@ -25,7 +25,14 @@ import kotlin.math.sqrt
  */
 object Patterns {
 
-    fun draw(canvas: Canvas, w: Float, h: Float, clip: Rect, style: PatternStyle, color: Int, cell: Float, weight: Float) {
+    /**
+     * [anchor] is where rings spread from, as a point of [area] (the screen when null; an icon passes itself, so
+     * its rings start from its own middle or corner).
+     */
+    fun draw(
+        canvas: Canvas, w: Float, h: Float, clip: Rect, style: PatternStyle, color: Int, cell: Float, weight: Float,
+        anchor: PatternAnchor = PatternAnchor.CENTER, area: RectF? = null,
+    ) {
         if (cell < 2f || style == PatternStyle.NONE || style.faceted) return
         val wt = weight.coerceIn(0f, 1f)
         val line = max(1f, cell * (0.015f + 0.08f * wt))
@@ -262,10 +269,19 @@ object Patterns {
                 eachCell(RectF(box.left - s, box.top - s, box.right + s, box.bottom + s), s, s) { x, y -> canvas.drawCircle(x, y, s, p) }
             }
             PatternStyle.RINGS -> {
-                // Circles out from the middle of the screen
+                // Circles out from the chosen point: the middle or a corner (of the screen, or of an icon)
                 stroke()
-                val cx = w / 2f
-                val cy = h / 2f
+                val ar = area ?: RectF(0f, 0f, w, h)
+                val cx = when (anchor) {
+                    PatternAnchor.TOP_LEFT, PatternAnchor.BOTTOM_LEFT -> ar.left
+                    PatternAnchor.TOP_RIGHT, PatternAnchor.BOTTOM_RIGHT -> ar.right
+                    PatternAnchor.CENTER -> ar.centerX()
+                }
+                val cy = when (anchor) {
+                    PatternAnchor.TOP_LEFT, PatternAnchor.TOP_RIGHT -> ar.top
+                    PatternAnchor.BOTTOM_LEFT, PatternAnchor.BOTTOM_RIGHT -> ar.bottom
+                    PatternAnchor.CENTER -> ar.centerY()
+                }
                 val near = hypot(max(0f, max(box.left - cx, cx - box.right)), max(0f, max(box.top - cy, cy - box.bottom)))
                 val far = maxOf(hypot(box.left - cx, box.top - cy), hypot(box.right - cx, box.top - cy), hypot(box.left - cx, box.bottom - cy), hypot(box.right - cx, box.bottom - cy))
                 val step = cell * 0.5f

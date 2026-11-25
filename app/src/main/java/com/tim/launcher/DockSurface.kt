@@ -72,6 +72,7 @@ data class DockStyle(
     val patternStrength: Float = 0.3f,
     val patternSize: Float = 0.5f,
     val patternWeight: Float = 0.5f,
+    val patternAnchor: com.tim.launcher.wallpaper.PatternAnchor = com.tim.launcher.wallpaper.PatternAnchor.CENTER,
     val gradientDirection: GradientDirection = GradientDirection.HORIZONTAL,
     val edge: DockEdge = DockEdge.SOFT,
     /** Extra room across the dock (above and below a bottom dock's icons), in dp. */
@@ -148,6 +149,7 @@ data class DockStyle(
             patternStrength = store[S.dockPatternStrength],
             patternSize = store[S.dockPatternSize],
             patternWeight = store[S.dockPatternWeight],
+            patternAnchor = store[S.dockPatternAnchor],
             gradientDirection = store[S.dockGradientDirection],
             edge = store[S.dockEdge],
             padding = store[S.dockPadding],
@@ -512,9 +514,9 @@ fun Modifier.dockSurface(style: DockStyle, tint: Color, edge: DockPosition, ink:
                 val oy = origin.y.roundToInt()
                 val bw = size.width.roundToInt().coerceAtLeast(1)
                 val bh = size.height.roundToInt().coerceAtLeast(1)
-                val look = "${style.pattern}|${style.patternStrength}|${style.patternSize}|${style.patternWeight}|$screenW|$screenH"
+                val look = "${style.pattern}|${style.patternStrength}|${style.patternSize}|${style.patternWeight}|${style.patternAnchor}|$screenW|$screenH"
                 val tile = patternCache.get(look, ox, oy, bw, bh) { native, clip ->
-                    WallRenderer.drawPatternOnly(native, screenW, screenH, clip, style.pattern, style.patternStrength, style.patternSize, style.patternWeight)
+                    WallRenderer.drawPatternOnly(native, screenW, screenH, clip, style.pattern, style.patternStrength, style.patternSize, style.patternWeight, style.patternAnchor)
                 }
                 // On whole pixels, so fine lines stay sharp
                 drawImage(tile, topLeft = Offset((ox - origin.x).roundToInt().toFloat(), (oy - origin.y).roundToInt().toFloat()))
