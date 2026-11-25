@@ -378,9 +378,7 @@ fun IconsSection(
         }
         if (background != IconBackground.NONE) {
             val pattern = draft.place(place?.pattern, S.iconPattern)
-            SettingRow("Pattern", "Over the background") {
-                Dropdown(pattern, PatternStyle.entries, { if (it.faceted) "◆ ${it.label}" else it.label }) { set(S.iconPattern, place?.pattern, it) }
-            }
+            PatternPicker("Pattern", "Over the background", pattern) { set(S.iconPattern, place?.pattern, it) }
             if (pattern != PatternStyle.NONE) {
                 val strength = draft.place(place?.patternStrength, S.iconPatternStrength)
                 SliderRow("Pattern strength", strength, 0.05f..0.6f, "${(strength * 100).roundToInt()}%") {
@@ -389,6 +387,9 @@ fun IconsSection(
                 val size = draft.place(place?.patternSize, S.iconPatternSize)
                 SliderRow("Pattern size", size, 0f..1f, patternSizeLabel(size)) {
                     set(S.iconPatternSize, place?.patternSize, it)
+                }
+                PatternWeightSlider(pattern, draft.place(place?.patternWeight, S.iconPatternWeight)) {
+                    set(S.iconPatternWeight, place?.patternWeight, it)
                 }
             }
         }

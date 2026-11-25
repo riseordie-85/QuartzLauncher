@@ -161,8 +161,8 @@ object WallRenderer {
      * A pattern on its own (the dock's, an icon's). [scale] runs 0–1 with 0.5 the usual size: lower is finer, down
      * to about a third, higher is bolder, up to about three times.
      */
-    fun drawPatternOnly(canvas: Canvas, w: Float, h: Float, clip: Rect, style: PatternStyle, strength: Float, scale: Float = 0.5f) {
-        val c = WallConfig(pattern = style, patternStrength = strength, patternSize = 0.3f, patternColor = Color.WHITE)
+    fun drawPatternOnly(canvas: Canvas, w: Float, h: Float, clip: Rect, style: PatternStyle, strength: Float, scale: Float = 0.5f, weight: Float = 0.5f) {
+        val c = WallConfig(pattern = style, patternStrength = strength, patternSize = 0.3f, patternColor = Color.WHITE, patternWeight = weight)
         val f = Math.pow(2.0, ((scale.coerceIn(0f, 1f) - 0.5f) * 3f).toDouble()).toFloat()
         // The shapes themselves get bigger or smaller; the area they cover stays the same
         if (style.faceted) Facets.draw(canvas, w, h, clip, c, cellScale = f) else drawPattern(canvas, w, h, c, cellScale = f)
@@ -251,72 +251,12 @@ object WallRenderer {
         canvas.drawBitmap(bmp, null, RectF(left, top, left + dw, top + dh), smooth)
     }
 
-    private val pat = Paint(Paint.ANTI_ALIAS_FLAG)
-
     private fun drawPattern(canvas: Canvas, w: Float, h: Float, c: WallConfig, cellScale: Float = 1f) {
         val cell = h * (0.025f + c.patternSize.coerceIn(0f, 1f) * 0.075f) * cellScale
-        if (cell < 2f) return
         val alpha = (c.patternStrength.coerceIn(0f, 1f) * 255).toInt()
-        pat.color = (c.patternColor and 0x00FFFFFF) or (alpha shl 24)
-        pat.shader = null
         // Only the part that's on screen
         val clip = canvas.clipBounds.takeUnless { it.isEmpty } ?: Rect(0, 0, w.toInt(), h.toInt())
-        val x0 = floor(clip.left / cell).toInt() - 1
-        val x1 = ceil(clip.right / cell).toInt() + 1
-        val y0 = floor(clip.top / cell).toInt() - 1
-        val y1 = ceil(clip.bottom / cell).toInt() + 1
-        when (c.pattern) {
-            PatternStyle.DOTS -> {
-                pat.style = Paint.Style.FILL
-                for (r in y0..y1) for (col in x0..x1) {
-                    val shift = if (r % 2 == 0) 0f else cell / 2f
-                    canvas.drawCircle(col * cell + shift + cell / 2f, r * cell + cell / 2f, cell * 0.13f, pat)
-                }
-            }
-            PatternStyle.GRID -> {
-                pat.style = Paint.Style.STROKE
-                pat.strokeWidth = max(1f, cell * 0.04f)
-                for (col in x0..x1) canvas.drawLine(col * cell, clip.top.toFloat(), col * cell, clip.bottom.toFloat(), pat)
-                for (r in y0..y1) canvas.drawLine(clip.left.toFloat(), r * cell, clip.right.toFloat(), r * cell, pat)
-            }
-            PatternStyle.STRIPES -> {
-                pat.style = Paint.Style.STROKE
-                pat.strokeWidth = cell * 0.3f
-                // 45° lines: x - y = k·cell
-                val k0 = floor((clip.left - clip.bottom) / cell).toInt() - 1
-                val k1 = ceil((clip.right - clip.top) / cell).toInt() + 1
-                for (k in k0..k1) {
-                    val b = k * cell
-                    canvas.drawLine(clip.top + b, clip.top.toFloat(), clip.bottom + b, clip.bottom.toFloat(), pat)
-                }
-            }
-            PatternStyle.CHECKS -> {
-                pat.style = Paint.Style.FILL
-                for (r in y0..y1) for (col in x0..x1) {
-                    if ((r + col) % 2 == 0) canvas.drawRect(col * cell, r * cell, (col + 1) * cell, (r + 1) * cell, pat)
-                }
-            }
-            PatternStyle.WAVES -> {
-                pat.style = Paint.Style.STROKE
-                pat.strokeWidth = max(1f, cell * 0.07f)
-                val path = Path()
-                val amp = cell * 0.22f
-                val step = cell / 8f
-                for (r in y0..y1) {
-                    path.reset()
-                    val base = r * cell + cell / 2f
-                    var x = clip.left - cell
-                    path.moveTo(x, base + amp * sin(x / cell * PI).toFloat())
-                    while (x < clip.right + cell) {
-                        x += step
-                        path.lineTo(x, base + amp * sin(x / cell * PI).toFloat())
-                    }
-                    canvas.drawPath(path, pat)
-                }
-            }
-            // None, and the faceted ones (drawn by Facets)
-            else -> Unit
-        }
+        Patterns.draw(canvas, w, h, clip, c.pattern, (c.patternColor and 0x00FFFFFF) or (alpha shl 24), cell, c.patternWeight)
     }
 
     // ---- Test pattern (kept from phase 0, for checking how screens line up) ----

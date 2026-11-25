@@ -10,14 +10,60 @@ enum class WallKind(val label: String) { GRADIENT("Gradient"), SOLID("Color"), I
 
 enum class GradientStyle(val label: String) { LINEAR("Linear"), RADIAL("Radial"), CORNERS("Corners") }
 
-enum class PatternStyle(val label: String, val faceted: Boolean = false) {
+/** Kinds of pattern, for grouping them in the picker. */
+enum class PatternGroup(val label: String) {
+    CRYSTAL("Crystal"), DOTS("Dots"), LINES("Lines"), GRIDS("Grids"), SHAPES("Shapes"), CURVES("Curves"),
+}
+
+/**
+ * Patterns over the wallpaper, an icon's background, the dock and widget panels. Crystal ones are cut and lit
+ * (Facets); the rest are drawn (Patterns). Saved by name, so names stay put.
+ */
+enum class PatternStyle(val label: String, val faceted: Boolean = false, val group: PatternGroup? = null, val weighted: Boolean = true) {
     NONE("None"),
-    CRYSTAL("Crystal", true),
-    RIPPLE("Ripple", true),
-    DIAMONDS("Diamonds", true),
-    PYRAMIDS("Pyramids", true),
-    SHARDS("Shards", true),
-    DOTS("Dots"), GRID("Grid"), STRIPES("Stripes"), CHECKS("Checks"), WAVES("Waves"),
+    CRYSTAL("Crystal", true, PatternGroup.CRYSTAL, false),
+    RIPPLE("Ripple", true, PatternGroup.CRYSTAL, false),
+    DIAMONDS("Diamonds", true, PatternGroup.CRYSTAL, false),
+    PYRAMIDS("Pyramids", true, PatternGroup.CRYSTAL, false),
+    SHARDS("Shards", true, PatternGroup.CRYSTAL, false),
+
+    DOTS("Dots", group = PatternGroup.DOTS),
+    DOT_GRID("Dot grid", group = PatternGroup.DOTS),
+    POLKA("Polka dots", group = PatternGroup.DOTS),
+    HALFTONE("Halftone", group = PatternGroup.DOTS),
+    CROSSES("Crosses", group = PatternGroup.DOTS),
+
+    STRIPES("Diagonal stripes", group = PatternGroup.LINES),
+    STRIPES_BACK("Diagonal, other way", group = PatternGroup.LINES),
+    PINSTRIPES("Pinstripes", group = PatternGroup.LINES),
+    CANDY("Candy stripes", group = PatternGroup.LINES),
+    LINES_ACROSS("Lines across", group = PatternGroup.LINES),
+    LINES_DOWN("Lines down", group = PatternGroup.LINES),
+    DASHED_LINES("Dashed lines", group = PatternGroup.LINES),
+    DOTTED_LINES("Dotted lines", group = PatternGroup.LINES),
+    SCANLINES("Scanlines", group = PatternGroup.LINES),
+
+    GRID("Grid", group = PatternGroup.GRIDS),
+    GRAPH("Graph paper", group = PatternGroup.GRIDS),
+    GRID_DASHED("Dashed grid", group = PatternGroup.GRIDS),
+    GRID_DOTTED("Dotted grid", group = PatternGroup.GRIDS),
+    GRID_DIAGONAL("Diagonal grid", group = PatternGroup.GRIDS),
+    TARTAN("Tartan", group = PatternGroup.GRIDS),
+
+    CHECKS("Checkerboard", group = PatternGroup.SHAPES, weighted = false),
+    HARLEQUIN("Harlequin", group = PatternGroup.SHAPES, weighted = false),
+    HONEYCOMB("Honeycomb", group = PatternGroup.SHAPES),
+    HONEYCOMB_FILLED("Honeycomb, filled", group = PatternGroup.SHAPES),
+    TRIANGLES("Triangles", group = PatternGroup.SHAPES, weighted = false),
+    CUBES("Cubes", group = PatternGroup.SHAPES, weighted = false),
+    ZIGZAG("Zigzag", group = PatternGroup.SHAPES),
+    CHEVRON("Chevron", group = PatternGroup.SHAPES),
+
+    WAVES("Waves", group = PatternGroup.CURVES),
+    SCALES("Scales", group = PatternGroup.CURVES),
+    ARCS("Interlocking arcs", group = PatternGroup.CURVES),
+    CIRCLES("Overlapping circles", group = PatternGroup.CURVES),
+    RINGS("Rings", group = PatternGroup.CURVES),
 }
 
 /** How one wallpaper spans a folding phone's two screens. */
@@ -59,6 +105,8 @@ data class WallConfig(
     val patternColor: Int = 0xFFFFFFFF.toInt(),
     val patternStrength: Float = 0.12f,
     val patternSize: Float = 0.5f,
+    /** How heavy a drawn pattern's lines and dots are, 0–1 (0.5 usual). */
+    val patternWeight: Float = 0.5f,
     /** Picks a different arrangement for patterns with randomness in them (Crystal, Shards, sparkles). */
     val patternSeed: Int = 0,
     /** Tiny glints over the pattern. */
@@ -92,6 +140,7 @@ data class WallConfig(
         put("patternColor", patternColor)
         put("patternStrength", patternStrength.toDouble())
         put("patternSize", patternSize.toDouble())
+        put("patternWeight", patternWeight.toDouble())
         put("patternSeed", patternSeed)
         put("sparkles", sparkles)
         put("dim", dim.toDouble())
@@ -125,6 +174,7 @@ data class WallConfig(
                 patternColor = j.optInt("patternColor", d.patternColor),
                 patternStrength = f("patternStrength", d.patternStrength),
                 patternSize = f("patternSize", d.patternSize),
+                patternWeight = f("patternWeight", d.patternWeight),
                 patternSeed = j.optInt("patternSeed", d.patternSeed),
                 sparkles = j.optBoolean("sparkles", d.sparkles),
                 dim = f("dim", d.dim),

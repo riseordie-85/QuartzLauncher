@@ -158,12 +158,10 @@ fun WallpaperSettings(ctx: SettingsContext) {
         if (cfg.kind != WallKind.TEST) {
             SectionLabel("Pattern")
             GlassPanel {
-                SettingRow("Pattern", if (cfg.pattern.faceted) "Cut like crystal, lit from the top left" else "Drawn over the wallpaper") {
-                    Dropdown(cfg.pattern, PatternStyle.entries, { if (it.faceted) "◆ ${it.label}" else it.label }) {
-                        // Crystal patterns need a bit more strength than lines and dots to show
-                        val strength = if (it.faceted && cfg.patternStrength < 0.15f) 0.3f else cfg.patternStrength
-                        update(cfg.copy(pattern = it, patternStrength = strength))
-                    }
+                PatternPicker("Pattern", "Drawn over the wallpaper", cfg.pattern) {
+                    // Crystal patterns need a bit more strength than lines and dots to show
+                    val strength = if (it.faceted && cfg.patternStrength < 0.15f) 0.3f else cfg.patternStrength
+                    update(cfg.copy(pattern = it, patternStrength = strength))
                 }
                 if (cfg.pattern != PatternStyle.NONE) {
                     RowDivider()
@@ -189,6 +187,7 @@ fun WallpaperSettings(ctx: SettingsContext) {
                     SliderRow("Size", cfg.patternSize, 0f..1f, "${(cfg.patternSize * 100).roundToInt()}%") {
                         update(cfg.copy(patternSize = it))
                     }
+                    PatternWeightSlider(cfg.pattern, cfg.patternWeight) { update(cfg.copy(patternWeight = it)) }
                 }
             }
 

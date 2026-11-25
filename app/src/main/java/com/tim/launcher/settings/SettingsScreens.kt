@@ -595,16 +595,13 @@ fun DockColorControls(store: SettingsStore) {
     }
     GlassSliders(store)
     RowDivider()
-    SettingRow("Pattern", "Cut into the dock's glass") {
-        Dropdown(store[S.dockPattern], PatternStyle.entries, { if (it.faceted) "◆ ${it.label}" else it.label }) {
-            store.set(S.dockPattern, value = it)
-        }
-    }
+    PatternPicker("Pattern", "Cut into the dock's glass", store[S.dockPattern]) { store.set(S.dockPattern, value = it) }
     if (store[S.dockPattern] != PatternStyle.NONE) {
         val p = store[S.dockPatternStrength]
         SliderRow("Pattern strength", p, 0.05f..0.6f, "${(p * 100).roundToInt()}%") { store.set(S.dockPatternStrength, value = it) }
         val size = store[S.dockPatternSize]
         SliderRow("Pattern size", size, 0f..1f, patternSizeLabel(size)) { store.set(S.dockPatternSize, value = it) }
+        PatternWeightSlider(store[S.dockPattern], store[S.dockPatternWeight]) { store.set(S.dockPatternWeight, value = it) }
     }
 }
 

@@ -71,6 +71,7 @@ data class DockStyle(
     val pattern: PatternStyle = PatternStyle.NONE,
     val patternStrength: Float = 0.3f,
     val patternSize: Float = 0.5f,
+    val patternWeight: Float = 0.5f,
     val gradientDirection: GradientDirection = GradientDirection.HORIZONTAL,
     val edge: DockEdge = DockEdge.SOFT,
     /** Extra room across the dock (above and below a bottom dock's icons), in dp. */
@@ -146,6 +147,7 @@ data class DockStyle(
             pattern = store[S.dockPattern],
             patternStrength = store[S.dockPatternStrength],
             patternSize = store[S.dockPatternSize],
+            patternWeight = store[S.dockPatternWeight],
             gradientDirection = store[S.dockGradientDirection],
             edge = store[S.dockEdge],
             padding = store[S.dockPadding],
@@ -460,6 +462,8 @@ fun Modifier.dockSurface(style: DockStyle, tint: Color, edge: DockPosition, ink:
     val view = LocalView.current
     val shape = remember(style.outline, style.radius, edge, style.floating, slant, style.depth) { style.shape(edge, slant) }
     val fade = style.outline == DockOutline.FADE
+    // The pattern, drawn once for this panel's place and size and kept, rather than redrawn every frame
+    val patternCache = remember { arrayOfNulls<Pair<String, androidx.compose.ui.graphics.ImageBitmap>>(1) }
     if (!style.background) this else this
         .onGloballyPositioned { origin = it.positionInWindow() }
         // The stroke goes over the panel and its icons, outside the clip so none of it is cut off (not on a fade,
@@ -504,18 +508,21 @@ fun Modifier.dockSurface(style: DockStyle, tint: Color, edge: DockPosition, ink:
                 // Drawn in screen coordinates, so a dock pattern lines up with the same pattern on the wallpaper
                 val screenW = view.rootView.width.toFloat().coerceAtLeast(1f)
                 val screenH = view.rootView.height.toFloat().coerceAtLeast(1f)
-                drawIntoCanvas { canvas ->
-                    val native = canvas.nativeCanvas
-                    native.save()
-                    native.translate(-origin.x, -origin.y)
-                    val clip = android.graphics.Rect(
-                        origin.x.toInt(), origin.y.toInt(),
-                        (origin.x + size.width).toInt() + 1, (origin.y + size.height).toInt() + 1,
-                    )
+                val ox = origin.x.roundToInt()
+                val oy = origin.y.roundToInt()
+                val bw = size.width.roundToInt().coerceAtLeast(1)
+                val bh = size.height.roundToInt().coerceAtLeast(1)
+                val key = "${style.pattern}|${style.patternStrength}|${style.patternSize}|${style.patternWeight}|$ox|$oy|$bw|$bh|$screenW|$screenH"
+                val tile = patternCache[0]?.takeIf { it.first == key }?.second ?: run {
+                    val bmp = android.graphics.Bitmap.createBitmap(bw, bh, android.graphics.Bitmap.Config.ARGB_8888)
+                    val native = android.graphics.Canvas(bmp)
+                    native.translate(-ox.toFloat(), -oy.toFloat())
+                    val clip = android.graphics.Rect(ox, oy, ox + bw, oy + bh)
                     native.clipRect(clip)
-                    WallRenderer.drawPatternOnly(native, screenW, screenH, clip, style.pattern, style.patternStrength, style.patternSize)
-                    native.restore()
+                    WallRenderer.drawPatternOnly(native, screenW, screenH, clip, style.pattern, style.patternStrength, style.patternSize, style.patternWeight)
+                    bmp.asImageBitmap().also { patternCache[0] = key to it }
                 }
+                drawImage(tile, topLeft = Offset(ox - origin.x, oy - origin.y))
             }
             if (fade) {
                 // Solid at the screen edge, clear toward the middle of the screen

@@ -81,11 +81,12 @@ object IconRender {
         val patternSize: Float = 0.5f,
         val gradient: GradientDirection = GradientDirection.DIAGONAL,
         val stroke: StrokeSpec = StrokeSpec(),
+        val patternWeight: Float = 0.5f,
     ) {
         /** Nothing to change: the app's own icon is used as it is. */
         val plain get() = pack.isEmpty() && shape == IconShape.SYSTEM && style == IconStyle.DEFAULT &&
             background == IconBackground.NONE && edge == DockEdge.NONE && shadow == IconShadow.NONE && stroke.none
-        val key get() = "$pack|$shape|$force|$style|$background|$color|$color2|$pattern|$patternStrength|$edge|$shadow|$patternSize|$gradient|" +
+        val key get() = "$pack|$shape|$force|$style|$background|$color|$color2|$pattern|$patternStrength|$edge|$shadow|$patternSize|$patternWeight|$gradient|" +
             if (stroke.none) "-" else "${stroke.style}|${stroke.color}|${stroke.width}"
 
         /** How much bigger than the icon its picture is drawn, to leave room for the shadow. */
@@ -137,6 +138,7 @@ object IconRender {
             v.place(place?.shadow, S.iconShadow),
             patternSize = v.place(place?.patternSize, S.iconPatternSize),
             gradient = v.place(place?.gradient, S.iconGradient),
+            patternWeight = v.place(place?.patternWeight, S.iconPatternWeight),
             stroke = StrokeSpec(
                 v.place(place?.stroke, S.iconStroke),
                 v.place(place?.strokeColor, S.iconStrokeColor),
@@ -489,7 +491,7 @@ object IconRender {
         }
         if (spec.pattern != PatternStyle.NONE) {
             // Sized as if the icon were a small piece of a screen, so a few facets or dots show across it
-            WallRenderer.drawPatternOnly(canvas, s, s * 3.5f, Rect(0, 0, s.toInt(), s.toInt()), spec.pattern, spec.patternStrength, spec.patternSize)
+            WallRenderer.drawPatternOnly(canvas, s, s * 3.5f, Rect(0, 0, s.toInt(), s.toInt()), spec.pattern, spec.patternStrength, spec.patternSize, spec.patternWeight)
         }
     }
 

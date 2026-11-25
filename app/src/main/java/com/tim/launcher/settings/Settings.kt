@@ -180,6 +180,7 @@ class IconPlaceSettings(id: String) {
     val pattern = Setting("look.$id.iconPattern", PatternStyle.NONE, EnumCodec(PatternStyle.entries.toTypedArray()))
     val patternStrength = Setting("look.$id.iconPatternStrength", 0.3f, FloatCodec)
     val patternSize = Setting("look.$id.iconPatternScale", 0.5f, FloatCodec)
+    val patternWeight = Setting("look.$id.iconPatternWeight", 0.5f, FloatCodec)
     val gradient = Setting("look.$id.iconGradient", GradientDirection.DIAGONAL, EnumCodec(GradientDirection.entries.toTypedArray()))
     val edge = Setting("look.$id.iconEdge", DockEdge.NONE, EnumCodec(DockEdge.entries.toTypedArray()))
     val shadow = Setting("look.$id.iconShadow", IconShadow.NONE, EnumCodec(IconShadow.entries.toTypedArray()))
@@ -238,6 +239,8 @@ object S {
     val dockPatternStrength = Setting("dock.patternStrength", 0.3f, FloatCodec)
     /** How big the pattern's shapes are, 0–1, with 0.5 the usual size. */
     val dockPatternSize = Setting("dock.patternScale", 0.5f, FloatCodec)
+    /** How heavy the dock pattern's lines and dots are, 0–1. */
+    val dockPatternWeight = Setting("dock.patternWeight", 0.5f, FloatCodec)
     val dockGradientDirection = Setting("dock.gradientDirection", GradientDirection.HORIZONTAL, EnumCodec(GradientDirection.entries.toTypedArray()))
     val dockEdge = Setting("dock.edge", DockEdge.SOFT, EnumCodec(DockEdge.entries.toTypedArray()))
     /** Tooth size for Zigzag and Ribbon, or how deep Arch, Bowl and Tilt go: 0 small, 1 big. */
@@ -299,6 +302,7 @@ object S {
     val iconPattern = Setting("look.iconPattern", PatternStyle.NONE, EnumCodec(PatternStyle.entries.toTypedArray()))
     val iconPatternStrength = Setting("look.iconPatternStrength", 0.3f, FloatCodec)
     val iconPatternSize = Setting("look.iconPatternScale", 0.5f, FloatCodec)
+    val iconPatternWeight = Setting("look.iconPatternWeight", 0.5f, FloatCodec)
     val iconGradient = Setting("look.iconGradient", GradientDirection.DIAGONAL, EnumCodec(GradientDirection.entries.toTypedArray()))
     /** A lit rim around each icon, like the dock's. */
     val iconEdge = Setting("look.iconEdge", DockEdge.NONE, EnumCodec(DockEdge.entries.toTypedArray()))
