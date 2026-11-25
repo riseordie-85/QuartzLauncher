@@ -91,14 +91,21 @@ enum class DockAlign(val label: String) { START("Start"), CENTER("Center"), END(
 enum class DockShape(val label: String) { SQUARE("Square"), ROUNDED("Rounded"), NONE("No background") }
 enum class DockOutline(val label: String) {
     STRAIGHT("Straight"), SLANTED("Slanted"), POINTED("Pointed"), WAVE("Wave"), FADE("Fade"),
-    ZIGZAG("Zigzag"), RIBBON("Ribbon"), ARCH("Arch"), BOWL("Bowl"), TILT_LEFT("Tilt, left high"), TILT_RIGHT("Tilt, right high"),
+    ZIGZAG("Zigzag"), SAWTOOTH("Sawtooth"), ARCH("Arch"), BOWL("Bowl"), TILT_LEFT("Tilt, left high"), TILT_RIGHT("Tilt, right high"),
+    WAVY("Wavy band"), RIBBON("Ribbon"), WAVY_RIBBON("Wavy ribbon"),
     ;
 
     /** Shapes whose inner edge has teeth (their depth setting is the tooth size). */
-    val toothed get() = this == ZIGZAG || this == RIBBON
+    val toothed get() = this == ZIGZAG || this == SAWTOOTH
 
-    /** Shapes with a depth setting: how big the teeth are, or how far the curve or tilt goes. */
-    val hasDepth get() = toothed || this == ARCH || this == BOWL || this == TILT_LEFT || this == TILT_RIGHT
+    /** Bands that ripple along their length (their depth setting is how high the ripple goes). */
+    val wavy get() = this == WAVY || this == WAVY_RIBBON
+
+    /** Banners with folded tails tucked behind each end. */
+    val tailed get() = this == RIBBON || this == WAVY_RIBBON
+
+    /** Shapes with a depth setting: how big the teeth are, or how far the curve, tilt or ripple goes. */
+    val hasDepth get() = toothed || wavy || this == ARCH || this == BOWL || this == TILT_LEFT || this == TILT_RIGHT
 }
 
 /** A line drawn around an icon, the dock or a widget panel. Pen thickens and thins like a fountain pen's nib. */

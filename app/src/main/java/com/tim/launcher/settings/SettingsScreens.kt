@@ -522,7 +522,8 @@ fun DockStyleControls(store: SettingsStore, vertical: Boolean = false) {
     }
     if (store[S.dockOutline].hasDepth) {
         val d = store[S.dockDepth]
-        SliderRow(if (store[S.dockOutline].toothed) "Tooth size" else "Depth", d, 0f..1f, "${(d * 100).roundToInt()}%") {
+        val outline = store[S.dockOutline]
+        SliderRow(if (outline.toothed) "Tooth size" else if (outline.wavy) "Ripple" else "Depth", d, 0f..1f, "${(d * 100).roundToInt()}%") {
             store.set(S.dockDepth, value = it)
         }
     }

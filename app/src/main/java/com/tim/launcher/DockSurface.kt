@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawOutline
@@ -52,6 +53,12 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
+/** How far a ribbon's tails hang below its band, in dp. */
+const val RIBBON_DROP = 9f
+
+/** How long a ribbon's tails reach out past the band's ends, as a share of the dock's depth. */
+const val RIBBON_TAIL = 0.32f
+
 /** Everything about how the dock looks (where it sits is separate). */
 data class DockStyle(
     val background: Boolean = true,
@@ -81,6 +88,12 @@ data class DockStyle(
     /** How far Arch, Bowl and Tilt reach in from the straight line. */
     val curve: Dp get() = (8f + 32f * depth.coerceIn(0f, 1f)).dp
 
+    /** How high a wavy band's ripple rises and falls (each way). */
+    val ripple: Dp get() = if (outline.wavy) (3f + 9f * depth.coerceIn(0f, 1f)).dp else 0.dp
+
+    /** How far a ribbon's tails hang below the band. */
+    val drop: Dp get() = if (outline.tailed) RIBBON_DROP.dp else 0.dp
+
     /**
      * How far a slanted or pointed dock's inner edge is cut back at each end, for a dock whose icons and padding
      * are [contentThick] deep.
@@ -88,7 +101,9 @@ data class DockStyle(
     fun slant(contentThick: Dp): Dp = when {
         !background -> 0.dp
         outline == DockOutline.SLANTED -> contentThick * 0.5f
-        outline == DockOutline.POINTED || outline == DockOutline.RIBBON -> contentThick * 0.42f
+        outline == DockOutline.POINTED || outline == DockOutline.SAWTOOTH -> contentThick * 0.42f
+        // Room at each end for a ribbon's tails
+        outline.tailed -> contentThick * RIBBON_TAIL
         else -> 0.dp
     }
 
@@ -98,17 +113,27 @@ data class DockStyle(
     /** A wavy, toothed, curved or tilted inner edge needs room so it doesn't run through the icons. */
     val waveRoom: Dp get() = if (!background) 0.dp else when (outline) {
         DockOutline.WAVE -> 8.dp
-        DockOutline.ZIGZAG, DockOutline.RIBBON -> tooth / 2
+        DockOutline.ZIGZAG, DockOutline.SAWTOOTH -> tooth / 2
         DockOutline.ARCH, DockOutline.BOWL, DockOutline.TILT_LEFT, DockOutline.TILT_RIGHT -> curve
+        // A ripple rises and falls on both edges: room for both
+        DockOutline.WAVY, DockOutline.WAVY_RIBBON -> ripple * 2
         else -> 0.dp
     }
 
     /** A floating ribbon has teeth on its outer edge too, so room there as well. */
-    val outerRoom: Dp get() = if (background && floating && outline == DockOutline.RIBBON) tooth / 2 else 0.dp
+    val outerRoom: Dp get() = when {
+        !background -> 0.dp
+        floating && outline == DockOutline.SAWTOOTH -> tooth / 2
+        // A ripple on the outer edge too, and a ribbon's tails hanging below
+        else -> ripple * 2 + drop
+    }
 
     /** The outline to draw this dock with. */
     fun shape(edge: DockPosition, slant: Dp = 0.dp) =
-        DockOutlineShape(outline, radius.toFloat(), edge, flush = !floating, slantDp = slant.value, toothDp = tooth.value, curveDp = curve.value)
+        DockOutlineShape(
+            outline, radius.toFloat(), edge, flush = !floating, slantDp = slant.value, toothDp = tooth.value, curveDp = curve.value,
+            rippleDp = ripple.value,
+        )
 
     companion object {
         fun of(store: SettingsStore) = DockStyle(
@@ -146,7 +171,96 @@ class DockOutlineShape(
     private val toothDp: Float = 28f,
     /** Depth of Arch, Bowl and Tilt. */
     private val curveDp: Float = 20f,
+    /** How high a wavy band ripples. */
+    private val rippleDp: Float = 0f,
 ) : Shape {
+
+    /** A ribbon's parts: the band, the tails tucked behind it, and the shaded folds where they turn under. */
+    class RibbonParts(val band: Path, val tails: Path, val folds: Path)
+
+    /**
+     * A ribbon or wavy band, in the dock's own coordinates. The band ripples (when wavy) as one smooth S along its
+     * length, edges parallel; a ribbon's tails sit behind each end, dropped a little, notched at the far end, and
+     * turned to follow the band where it meets them.
+     */
+    fun ribbon(size: Size, density: Density): RibbonParts? {
+        if (outline != DockOutline.WAVY && !outline.tailed) return null
+        val vertical = edge == DockPosition.LEFT || edge == DockPosition.RIGHT
+        val length = if (vertical) size.height else size.width
+        val thick = if (vertical) size.width else size.height
+        fun at(u: Float, v: Float): Offset = when (edge) {
+            DockPosition.TOP -> Offset(u, thick - v)
+            DockPosition.LEFT -> Offset(thick - v, u)
+            DockPosition.RIGHT -> Offset(v, u)
+            else -> Offset(u, v)
+        }
+        val a = min(with(density) { rippleDp.dp.toPx() }, thick * 0.15f)
+        val drop = if (outline.tailed) min(with(density) { RIBBON_DROP.dp.toPx() }, thick * 0.2f) else 0f
+        val tail = if (outline.tailed) min(with(density) { slantDp.dp.toPx() }, length / 5f) else 0f
+        val bandLen = (length - tail * 2f).coerceAtLeast(1f)
+        val band = thick - a * 2f - drop
+        // Top of the band along its length: one smooth S, first rising then falling
+        fun top(u: Float): Float {
+            val t = ((u - tail) / bandLen).coerceIn(0f, 1f)
+            return a - a * sin(2f * PI.toFloat() * t)
+        }
+        val slope = -a * 2f * PI.toFloat() / bandLen // the S's slope at both ends (it starts and ends the same way)
+
+        val steps = if (a > 0f) 64 else 1
+        val bandPath = Path()
+        for (k in 0..steps) {
+            val u = tail + bandLen * k / steps
+            val p = at(u, top(u))
+            if (k == 0) bandPath.moveTo(p.x, p.y) else bandPath.lineTo(p.x, p.y)
+        }
+        for (k in steps downTo 0) {
+            val u = tail + bandLen * k / steps
+            val p = at(u, top(u) + band)
+            bandPath.lineTo(p.x, p.y)
+        }
+        bandPath.close()
+
+        val tails = Path()
+        val folds = Path()
+        if (outline.tailed) {
+            // Each tail: from its notched far end to a little way under the band, as deep as the band, dropped
+            val under = tail * 0.9f
+            val notch = tail * 0.45f
+            val angle = kotlin.math.atan(slope)
+            fun side(left: Boolean) {
+                // Built for the left end (u running outward to 0), mirrored for the right; then turned about where
+                // the band's end meets it, to follow the band's slope there
+                val anchorU = if (left) tail else length - tail
+                val anchorV = top(anchorU)
+                val cos = kotlin.math.cos(angle)
+                val sinA = kotlin.math.sin(angle)
+                fun pt(du: Float, dv: Float): Offset {
+                    // du: distance outward from the band's end (negative is under the band); dv: down from its top
+                    val ux = if (left) -du else du
+                    val ru = ux * cos - dv * sinA
+                    val rv = ux * sinA + dv * cos
+                    return at(anchorU + ru, anchorV + rv)
+                }
+                val shape = listOf(
+                    pt(-under, drop), pt(tail, drop), pt(tail - notch, drop + band / 2f), pt(tail, drop + band), pt(-under, drop + band),
+                )
+                tails.moveTo(shape[0].x, shape[0].y)
+                shape.drop(1).forEach { tails.lineTo(it.x, it.y) }
+                tails.close()
+                // The fold: where the tail turns under the band's bottom corner
+                val fold = listOf(pt(0f, band), pt(-under, band), pt(-under, band + drop))
+                folds.moveTo(fold[0].x, fold[0].y)
+                fold.drop(1).forEach { folds.lineTo(it.x, it.y) }
+                folds.close()
+            }
+            side(true)
+            side(false)
+        }
+        // The tails and folds show only where the band doesn't cover them
+        val tailsBehind = Path.combine(PathOperation.Difference, tails, bandPath)
+        val foldsBehind = Path.combine(PathOperation.Difference, folds, bandPath)
+        return RibbonParts(bandPath, tailsBehind, foldsBehind)
+    }
 
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
         val vertical = edge == DockPosition.LEFT || edge == DockPosition.RIGHT
@@ -164,7 +278,14 @@ class DockOutlineShape(
             else -> Offset(u, v)
         }
 
+        ribbon(size, density)?.let { parts ->
+            // The band and its tails together, so the glass and edge cover all of it
+            return Outline.Generic(Path.combine(PathOperation.Union, parts.band, parts.tails).also {
+                it.addPath(parts.folds)
+            })
+        }
         return when (outline) {
+            DockOutline.WAVY, DockOutline.RIBBON, DockOutline.WAVY_RIBBON -> Outline.Rectangle(Rect(Offset.Zero, size)) // drawn above
             DockOutline.STRAIGHT, DockOutline.FADE -> {
                 val inner = CornerRadius(r)
                 val out = CornerRadius(outer)
@@ -214,7 +335,7 @@ class DockOutlineShape(
                 points += at(length, thick); radii += outer
                 Outline.Generic(rounded(points, radii))
             }
-            DockOutline.RIBBON -> {
+            DockOutline.SAWTOOTH -> {
                 // Pointed ends, teeth on the inner edge, and on the outer edge too unless it runs to the screen edge
                 val p = min(with(density) { slantDp.dp.toPx() }, length / 4f)
                 val tooth = with(density) { toothDp.dp.toPx() }
@@ -320,10 +441,10 @@ class DockOutlineShape(
 
     override fun equals(other: Any?) = other is DockOutlineShape && other.outline == outline &&
         other.radiusDp == radiusDp && other.edge == edge && other.flush == flush && other.slantDp == slantDp &&
-        other.toothDp == toothDp && other.curveDp == curveDp
+        other.toothDp == toothDp && other.curveDp == curveDp && other.rippleDp == rippleDp
 
-    override fun hashCode() = (((((outline.hashCode() * 31 + radiusDp.hashCode()) * 31 + edge.hashCode()) * 31 + flush.hashCode()) * 31 +
-        slantDp.hashCode()) * 31 + toothDp.hashCode()) * 31 + curveDp.hashCode()
+    override fun hashCode() = ((((((outline.hashCode() * 31 + radiusDp.hashCode()) * 31 + edge.hashCode()) * 31 + flush.hashCode()) * 31 +
+        slantDp.hashCode()) * 31 + toothDp.hashCode()) * 31 + curveDp.hashCode()) * 31 + rippleDp.hashCode()
 }
 
 /**
@@ -408,6 +529,11 @@ fun Modifier.dockSurface(style: DockStyle, tint: Color, edge: DockPosition, ink:
                 }
                 drawRect(mask, blendMode = BlendMode.DstIn)
                 return@drawBehind
+            }
+            // A ribbon's tails sit behind the band: shaded darker, and darker still where they fold under it
+            shape.ribbon(size, this)?.let { parts ->
+                drawPath(parts.tails, Color.Black.copy(alpha = 0.22f))
+                drawPath(parts.folds, Color.Black.copy(alpha = 0.45f))
             }
             drawEdgeLight(shape.createOutline(size, layoutDirection, this), style.edge, ink)
         }
