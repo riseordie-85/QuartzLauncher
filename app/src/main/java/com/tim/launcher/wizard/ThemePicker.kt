@@ -96,13 +96,15 @@ internal fun ThemeCarousel(selected: Int, onSelect: (Int) -> Unit) {
 
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val tall = (config.screenHeightDp * 0.46f).coerceIn(220f, 460f).dp
-        val cardW = minOf(tall * aspect, maxWidth * 0.78f)
+        // Read here: inside the Column below, BoxWithConstraints' maxWidth can't be reached
+        val fullW = maxWidth
+        val cardW = minOf(tall * aspect, fullW * 0.78f)
         val cardH = cardW / aspect
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             HorizontalPager(
                 pager,
                 Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = ((maxWidth - cardW) / 2).coerceAtLeast(0.dp)),
+                contentPadding = PaddingValues(horizontal = ((fullW - cardW) / 2).coerceAtLeast(0.dp)),
                 pageSize = PageSize.Fixed(cardW),
                 pageSpacing = 14.dp,
                 beyondViewportPageCount = 1,
