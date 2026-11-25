@@ -47,6 +47,8 @@ object Patterns {
             p.color = shade(f)
         }
         val box = RectF(clip)
+        // One path, reused for every shape (thousands of them on a wallpaper)
+        val tmp = Path()
 
         when (style) {
             // ---- Dots ----
@@ -76,8 +78,9 @@ object Patterns {
             }
 
             // ---- Lines ----
-            PatternStyle.STRIPES -> rotated(canvas, clip, -45f) { r -> fill(); bands(canvas, r, cell, cell * (0.12f + 0.4f * wt), p) }
-            PatternStyle.STRIPES_BACK -> rotated(canvas, clip, 45f) { r -> fill(); bands(canvas, r, cell, cell * (0.12f + 0.4f * wt), p) }
+            // (Diagonal stripes run top-left to bottom-right, as they always have)
+            PatternStyle.STRIPES -> rotated(canvas, clip, 45f) { r -> fill(); bands(canvas, r, cell * 0.71f, cell * (0.09f + 0.3f * wt), p) }
+            PatternStyle.STRIPES_BACK -> rotated(canvas, clip, -45f) { r -> fill(); bands(canvas, r, cell * 0.71f, cell * (0.09f + 0.3f * wt), p) }
             PatternStyle.PINSTRIPES -> rotated(canvas, clip, -45f) { r -> fill(); bands(canvas, r, cell * 0.45f, max(1f, line * 0.7f), p) }
             PatternStyle.CANDY -> rotated(canvas, clip, -45f) { r ->
                 fill()
@@ -88,13 +91,18 @@ object Patterns {
             PatternStyle.LINES_DOWN -> rotated(canvas, clip, 90f) { r -> fill(); bands(canvas, r, cell * 0.5f, line, p) }
             PatternStyle.DASHED_LINES -> {
                 stroke()
+                val period = cell * 0.7f
                 p.pathEffect = DashPathEffect(floatArrayOf(cell * 0.45f, cell * 0.25f), 0f)
-                rows(box, cell * 0.5f) { y -> canvas.drawPath(segment(box.left - cell, y, box.right + cell, y), p) }
+                // Each line starts on a whole number of dashes, so they line up wherever they're drawn
+                val x0 = floor(box.left / period) * period - period
+                rows(box, cell * 0.5f) { y -> canvas.drawPath(segment(tmp, x0, y, box.right + period, y), p) }
             }
             PatternStyle.DOTTED_LINES -> {
                 stroke(line * 1.6f, cap = Paint.Cap.ROUND)
-                p.pathEffect = DashPathEffect(floatArrayOf(0.01f, cell * 0.22f), 0f)
-                rows(box, cell * 0.5f) { y -> canvas.drawPath(segment(box.left - cell, y, box.right + cell, y), p) }
+                val period = cell * 0.25f
+                p.pathEffect = DashPathEffect(floatArrayOf(0.01f, period - 0.01f), 0f)
+                val x0 = floor(box.left / period) * period - period
+                rows(box, cell * 0.5f) { y -> canvas.drawPath(segment(tmp, x0, y, box.right + period, y), p) }
             }
             PatternStyle.SCANLINES -> { fill(); bands(canvas, box, max(2f, cell * 0.2f), max(1f, cell * 0.05f * (0.5f + wt)), p) }
 
@@ -109,13 +117,15 @@ object Patterns {
             }
             PatternStyle.GRID_DASHED -> {
                 stroke()
-                p.pathEffect = DashPathEffect(floatArrayOf(cell * 0.2f, cell * 0.12f), 0f)
-                gridPaths(canvas, box, cell, p)
+                // Four dashes to a square, centred so they cross at the corners
+                p.pathEffect = DashPathEffect(floatArrayOf(cell * 0.15f, cell * 0.1f), cell * 0.075f)
+                gridPaths(canvas, box, cell, p, tmp)
             }
             PatternStyle.GRID_DOTTED -> {
                 stroke(line * 1.5f, cap = Paint.Cap.ROUND)
-                p.pathEffect = DashPathEffect(floatArrayOf(0.01f, cell * 0.125f), 0f)
-                gridPaths(canvas, box, cell, p)
+                // Eight dots to a side, one on every corner
+                p.pathEffect = DashPathEffect(floatArrayOf(0.01f, cell * 0.125f - 0.01f), 0f)
+                gridPaths(canvas, box, cell, p, tmp)
             }
             PatternStyle.GRID_DIAGONAL -> rotated(canvas, clip, 45f) { r -> stroke(); grid(canvas, r, cell * 0.75f, p) }
             PatternStyle.TARTAN -> {
@@ -144,18 +154,18 @@ object Patterns {
                 if (filled) fill() else stroke()
                 val rad = cell * 0.58f
                 val shrink = if (filled) 0.9f - 0.25f * wt else 1f
-                hexes(box, rad) { cx, cy -> canvas.drawPath(hexagon(cx, cy, rad * shrink), p) }
+                hexes(box, rad) { cx, cy -> canvas.drawPath(hexagon(tmp, cx, cy, rad * shrink), p) }
             }
             PatternStyle.TRIANGLES -> {
                 fill()
                 val th = cell * 0.866f
-                rows(box, th, pad = 1) { y ->
-                    val row = floor(y / th).toInt()
+                rowsAt(box, th, pad = 1) { y, row ->
                     val shift = if (row % 2 == 0) 0f else cell / 2f
                     var x = floor((box.left - shift) / cell) * cell + shift - cell
                     while (x < box.right + cell) {
-                        val t = Path().apply { moveTo(x, y + th); lineTo(x + cell / 2f, y); lineTo(x + cell, y + th); close() }
-                        canvas.drawPath(t, p)
+                        tmp.reset()
+                        tmp.moveTo(x, y + th); tmp.lineTo(x + cell / 2f, y); tmp.lineTo(x + cell, y + th); tmp.close()
+                        canvas.drawPath(tmp, p)
                         x += cell
                     }
                 }
@@ -165,39 +175,41 @@ object Patterns {
                 val rad = cell * 0.6f
                 val s3 = sqrt(3f) / 2f
                 hexes(box, rad) { cx, cy ->
-                    val top = Path().apply { moveTo(cx, cy); lineTo(cx - rad * s3, cy - rad / 2f); lineTo(cx, cy - rad); lineTo(cx + rad * s3, cy - rad / 2f); close() }
-                    val left = Path().apply { moveTo(cx, cy); lineTo(cx - rad * s3, cy - rad / 2f); lineTo(cx - rad * s3, cy + rad / 2f); lineTo(cx, cy + rad); close() }
-                    val right = Path().apply { moveTo(cx, cy); lineTo(cx, cy + rad); lineTo(cx + rad * s3, cy + rad / 2f); lineTo(cx + rad * s3, cy - rad / 2f); close() }
-                    fill(1f); canvas.drawPath(top, p)
-                    fill(0.5f); canvas.drawPath(left, p)
-                    fill(0.2f); canvas.drawPath(right, p)
+                    fill(1f)
+                    tmp.reset()
+                    tmp.moveTo(cx, cy); tmp.lineTo(cx - rad * s3, cy - rad / 2f); tmp.lineTo(cx, cy - rad); tmp.lineTo(cx + rad * s3, cy - rad / 2f); tmp.close()
+                    canvas.drawPath(tmp, p)
+                    fill(0.5f)
+                    tmp.reset()
+                    tmp.moveTo(cx, cy); tmp.lineTo(cx - rad * s3, cy - rad / 2f); tmp.lineTo(cx - rad * s3, cy + rad / 2f); tmp.lineTo(cx, cy + rad); tmp.close()
+                    canvas.drawPath(tmp, p)
+                    fill(0.2f)
+                    tmp.reset()
+                    tmp.moveTo(cx, cy); tmp.lineTo(cx, cy + rad); tmp.lineTo(cx + rad * s3, cy + rad / 2f); tmp.lineTo(cx + rad * s3, cy - rad / 2f); tmp.close()
+                    canvas.drawPath(tmp, p)
                 }
             }
             PatternStyle.ZIGZAG -> {
                 stroke()
                 val amp = cell * 0.18f
-                rows(box, cell * 0.6f) { y -> canvas.drawPath(zigzag(box, cell, y, amp), p) }
+                rows(box, cell * 0.6f) { y ->
+                    tmp.reset()
+                    zigzagCorners(box, cell, y, amp).forEachIndexed { i, (x, yy) -> if (i == 0) tmp.moveTo(x, yy) else tmp.lineTo(x, yy) }
+                    canvas.drawPath(tmp, p)
+                }
             }
             PatternStyle.CHEVRON -> {
                 fill()
                 val amp = cell * 0.25f
                 val thick = cell * (0.2f + 0.25f * wt)
                 rows(box, cell) { y ->
-                    val band = zigzag(box, cell, y, amp)
-                    val lower = zigzag(box, cell, y + thick, amp)
-                    // The top edge left to right, then the lower edge back
-                    val pts = FloatArray(2)
-                    val measure = android.graphics.PathMeasure(lower, false)
-                    val back = ArrayList<Pair<Float, Float>>()
-                    var d = 0f
-                    while (d <= measure.length) {
-                        measure.getPosTan(d, pts, null)
-                        back += pts[0] to pts[1]
-                        d += cell / 2f
-                    }
-                    back.asReversed().forEach { (x, yy) -> band.lineTo(x, yy) }
-                    band.close()
-                    canvas.drawPath(band, p)
+                    // The zigzag's corners along the top, then the same corners lower down, back the other way
+                    val corners = zigzagCorners(box, cell, y, amp)
+                    tmp.reset()
+                    corners.forEachIndexed { i, (x, yy) -> if (i == 0) tmp.moveTo(x, yy) else tmp.lineTo(x, yy) }
+                    corners.asReversed().forEach { (x, yy) -> tmp.lineTo(x, yy + thick) }
+                    tmp.close()
+                    canvas.drawPath(tmp, p)
                 }
             }
 
@@ -221,8 +233,7 @@ object Patterns {
                 // Rows of overlapping half-circles, like fish scales
                 stroke()
                 val r = cell / 2f
-                rows(box, r, pad = 2) { y ->
-                    val row = floor(y / r).toInt()
+                rowsAt(box, r, pad = 2) { y, row ->
                     val shift = if (row % 2 == 0) 0f else r
                     var x = floor((box.left - shift) / cell) * cell + shift - cell
                     while (x < box.right + cell) {
@@ -285,10 +296,14 @@ object Patterns {
     }
 
     /** Calls [block] with the y of each row [step] apart across [box]. */
-    private inline fun rows(box: RectF, step: Float, pad: Int = 1, block: (y: Float) -> Unit) {
+    private inline fun rows(box: RectF, step: Float, pad: Int = 1, block: (y: Float) -> Unit) =
+        rowsAt(box, step, pad) { y, _ -> block(y) }
+
+    /** [rows], with each row's number too (worked out exactly, not back from its y). */
+    private inline fun rowsAt(box: RectF, step: Float, pad: Int = 1, block: (y: Float, row: Int) -> Unit) {
         val r0 = floor(box.top / step).toInt() - pad
         val r1 = ceil(box.bottom / step).toInt() + pad
-        for (r in r0..r1) block(r * step)
+        for (r in r0..r1) block(r * step, r)
     }
 
     private fun dots(canvas: Canvas, box: RectF, cell: Float, radius: Float, offset: Boolean, p: Paint) {
@@ -310,27 +325,38 @@ object Patterns {
         rows(box, step) { y -> canvas.drawLine(box.left - step, y, box.right + step, y, p) }
     }
 
-    /** A grid drawn as paths, so dashes and dots apply (lines don't take path effects everywhere). */
-    private fun gridPaths(canvas: Canvas, box: RectF, step: Float, p: Paint) {
+    /**
+     * A grid drawn as paths, so dashes and dots apply (lines don't take path effects everywhere). Each line starts
+     * on a grid line (a whole number of dash patterns), so dashes line up wherever the grid is drawn.
+     */
+    private fun gridPaths(canvas: Canvas, box: RectF, step: Float, p: Paint, tmp: Path) {
         val c0 = floor(box.left / step).toInt() - 1
         val c1 = ceil(box.right / step).toInt() + 1
-        for (c in c0..c1) canvas.drawPath(segment(c * step, box.top - step, c * step, box.bottom + step), p)
-        rows(box, step) { y -> canvas.drawPath(segment(box.left - step, y, box.right + step, y), p) }
+        val y0 = floor(box.top / step) * step - step
+        val x0 = floor(box.left / step) * step - step
+        for (c in c0..c1) canvas.drawPath(segment(tmp, c * step, y0, c * step, box.bottom + step), p)
+        rows(box, step) { y -> canvas.drawPath(segment(tmp, x0, y, box.right + step, y), p) }
     }
 
-    private fun segment(x0: Float, y0: Float, x1: Float, y1: Float) = Path().apply { moveTo(x0, y0); lineTo(x1, y1) }
+    private fun segment(path: Path, x0: Float, y0: Float, x1: Float, y1: Float): Path {
+        path.reset()
+        path.moveTo(x0, y0)
+        path.lineTo(x1, y1)
+        return path
+    }
 
-    private fun zigzag(box: RectF, cell: Float, y: Float, amp: Float): Path {
-        val path = Path()
+    /** The corners of a zigzag along y, rising and falling [amp], one point every half [cell], starting on a cell. */
+    private fun zigzagCorners(box: RectF, cell: Float, y: Float, amp: Float): List<Pair<Float, Float>> {
+        val out = ArrayList<Pair<Float, Float>>()
         var x = floor(box.left / cell) * cell - cell
-        var up = true
-        path.moveTo(x, y + amp)
+        var up = false
+        out += x to y + amp
         while (x < box.right + cell) {
             x += cell / 2f
-            path.lineTo(x, if (up) y - amp else y + amp)
             up = !up
+            out += x to (if (up) y - amp else y + amp)
         }
-        return path
+        return out
     }
 
     /** Centres of pointy-topped hexagons of [rad] tiling [box]. */
@@ -347,7 +373,8 @@ object Patterns {
         }
     }
 
-    private fun hexagon(cx: Float, cy: Float, rad: Float): Path = Path().apply {
+    private fun hexagon(path: Path, cx: Float, cy: Float, rad: Float): Path = path.apply {
+        reset()
         for (i in 0 until 6) {
             val ang = (PI / 3.0 * i - PI / 2.0)
             val x = cx + rad * kotlin.math.cos(ang).toFloat()

@@ -463,7 +463,7 @@ fun Modifier.dockSurface(style: DockStyle, tint: Color, edge: DockPosition, ink:
     val shape = remember(style.outline, style.radius, edge, style.floating, slant, style.depth) { style.shape(edge, slant) }
     val fade = style.outline == DockOutline.FADE
     // The pattern, drawn once for this panel's place and size and kept, rather than redrawn every frame
-    val patternCache = remember { arrayOfNulls<Pair<String, androidx.compose.ui.graphics.ImageBitmap>>(1) }
+    val patternCache = remember { PatternTile() }
     if (!style.background) this else this
         .onGloballyPositioned { origin = it.positionInWindow() }
         // The stroke goes over the panel and its icons, outside the clip so none of it is cut off (not on a fade,
@@ -512,17 +512,12 @@ fun Modifier.dockSurface(style: DockStyle, tint: Color, edge: DockPosition, ink:
                 val oy = origin.y.roundToInt()
                 val bw = size.width.roundToInt().coerceAtLeast(1)
                 val bh = size.height.roundToInt().coerceAtLeast(1)
-                val key = "${style.pattern}|${style.patternStrength}|${style.patternSize}|${style.patternWeight}|$ox|$oy|$bw|$bh|$screenW|$screenH"
-                val tile = patternCache[0]?.takeIf { it.first == key }?.second ?: run {
-                    val bmp = android.graphics.Bitmap.createBitmap(bw, bh, android.graphics.Bitmap.Config.ARGB_8888)
-                    val native = android.graphics.Canvas(bmp)
-                    native.translate(-ox.toFloat(), -oy.toFloat())
-                    val clip = android.graphics.Rect(ox, oy, ox + bw, oy + bh)
-                    native.clipRect(clip)
+                val look = "${style.pattern}|${style.patternStrength}|${style.patternSize}|${style.patternWeight}|$screenW|$screenH"
+                val tile = patternCache.get(look, ox, oy, bw, bh) { native, clip ->
                     WallRenderer.drawPatternOnly(native, screenW, screenH, clip, style.pattern, style.patternStrength, style.patternSize, style.patternWeight)
-                    bmp.asImageBitmap().also { patternCache[0] = key to it }
                 }
-                drawImage(tile, topLeft = Offset(ox - origin.x, oy - origin.y))
+                // On whole pixels, so fine lines stay sharp
+                drawImage(tile, topLeft = Offset((ox - origin.x).roundToInt().toFloat(), (oy - origin.y).roundToInt().toFloat()))
             }
             if (fade) {
                 // Solid at the screen edge, clear toward the middle of the screen
@@ -546,6 +541,38 @@ fun Modifier.dockSurface(style: DockStyle, tint: Color, edge: DockPosition, ink:
         }
 }
 
+
+/**
+ * A panel's pattern, drawn for its place on screen and kept: drawn again only when the pattern or the panel's place
+ * or size changes. While a panel moves (a page swipe, an animation) the same picture is reused and redrawn, rather
+ * than a new one made every frame.
+ */
+class PatternTile {
+    private var bitmap: android.graphics.Bitmap? = null
+    private var image: androidx.compose.ui.graphics.ImageBitmap? = null
+    private var key = ""
+
+    fun get(look: String, x: Int, y: Int, w: Int, h: Int, draw: (android.graphics.Canvas, android.graphics.Rect) -> Unit): androidx.compose.ui.graphics.ImageBitmap {
+        val full = "$look|$x|$y|$w|$h"
+        image?.let { if (key == full) return it }
+        var bmp = bitmap
+        if (bmp == null || bmp.width != w || bmp.height != h) {
+            // (The old one isn't recycled: a frame being drawn may still be using it)
+            bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+            bitmap = bmp
+            image = bmp.asImageBitmap()
+        } else {
+            bmp.eraseColor(android.graphics.Color.TRANSPARENT)
+        }
+        val canvas = android.graphics.Canvas(bmp!!)
+        canvas.translate(-x.toFloat(), -y.toFloat())
+        val clip = android.graphics.Rect(x, y, x + w, y + h)
+        canvas.clipRect(clip)
+        draw(canvas, clip)
+        key = full
+        return image!!
+    }
+}
 
 /**
  * The edge of a glass panel: a hairline, or a rim of light brightest at the top left with a glint at the bottom
