@@ -58,6 +58,7 @@ import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -787,13 +788,23 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             },
     ) {
       CompositionLocalProvider(LocalHomeLook provides look, LocalGlass provides glass, LocalLabelColor provides homeLabels) {
+        // The drawer, and whether it's showing at all (opening, open or closing)
+        val drawerVis = remember { MutableTransitionState(false) }
+        drawerVis.targetState = drawerOpen
+        val drawerShowing = drawerVis.currentState || drawerVis.targetState
+        // A drawer that goes behind the dock: while it's showing, the dock is lifted above it. The same dock is drawn
+        // over the drawer (it doesn't move or fade with it) and the one in the home layout steps aside, so the drawer
+        // slides in underneath and there's only ever one dock to see.
+        val liftDock = drawerShowing && store[S.drawerBehindDock] && !store[S.drawerHideDock, scope] &&
+            look.dockPosition != DockPosition.NONE && dockRect != Rect.Zero
+
         // Covered by the drawer or the page overview: the widgets underneath hold still
-        CompositionLocalProvider(LocalWidgetsPaused provides (drawerOpen || overviewOpen)) {
+        CompositionLocalProvider(LocalWidgetsPaused provides (drawerOpen || overviewOpen), LocalDockHidden provides liftDock) {
             HomeLayout(screen, vm, drag, showHint = !hintSeen)
         }
 
         AnimatedVisibility(
-            visible = drawerOpen,
+            visibleState = drawerVis,
             enter = slideInVertically { it / 3 } + fadeIn(),
             exit = slideOutVertically { it / 3 } + fadeOut(),
         ) {
@@ -846,10 +857,10 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             Box(Modifier.fillMaxSize().padding(gap)) {
                 AppDrawer(vm, drag, drawerLook, startWithSearch = drawerSearch, onClose = { drawerOpen = false })
             }
-            // The dock over the drawer, exactly where it is on the home screen, and just as usable
-            if (behindDock) {
-                CompositionLocalProvider(LocalDockCopy provides true) { DockOverlay(screen, vm, drag) }
-            }
+        }
+        // The dock over the drawer, exactly where it is on the home screen, and just as usable
+        if (liftDock) {
+            CompositionLocalProvider(LocalDockCopy provides true) { DockOverlay(screen, vm, drag) }
         }
 
         openFolder?.let { (id, ref) ->
@@ -1227,6 +1238,9 @@ val LocalLabelColor = compositionLocalOf { Color.White }
 
 /** True inside the dock drawn again over a drawer that goes behind the dock. */
 val LocalDockCopy = staticCompositionLocalOf { false }
+
+/** True while the home layout's dock steps aside for the one drawn over the drawer. */
+val LocalDockHidden = compositionLocalOf { false }
 
 @Composable
 internal fun Cell(

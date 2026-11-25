@@ -52,6 +52,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
@@ -227,8 +228,11 @@ private fun HomeFrame(dock: List<SlotRef>, vm: HomeViewModel, drag: DragControll
 private fun SwapHandle(vertical: Boolean) {
     val look = LocalHomeLook.current
     val ink = LocalLabelColor.current
+    // Steps aside with the dock while the dock shows over a drawer
+    val hidden = LocalDockHidden.current && !LocalDockCopy.current
     Box(
-        (if (vertical) Modifier.fillMaxHeight().width(24.dp) else Modifier.fillMaxWidth().height(24.dp)),
+        (if (vertical) Modifier.fillMaxHeight().width(24.dp) else Modifier.fillMaxWidth().height(24.dp))
+            .then(if (hidden) Modifier.graphicsLayer { alpha = 0f } else Modifier),
         contentAlignment = Alignment.Center,
     ) {
         Box(
@@ -271,7 +275,9 @@ private fun DockBar(
     outer: Modifier,
     inner: Modifier,
 ) {
-    val modifier = outer
+    // Hidden (but still laid out, so it keeps its place) while its copy shows over a drawer that goes behind it
+    val hidden = LocalDockHidden.current && !LocalDockCopy.current
+    val modifier = if (hidden) outer.graphicsLayer { alpha = 0f } else outer
     val look = LocalHomeLook.current
     val full = look.dockLength == DockLength.FULL
     val button = look.button
