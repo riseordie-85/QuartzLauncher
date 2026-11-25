@@ -292,14 +292,9 @@ fun WallpaperPreview(foldable: Boolean, modifier: Modifier = Modifier, height: D
  * plain gradient keeps your pattern too; a cut-quartz one brings its own.
  */
 fun applyPreset(current: WallConfig, preset: WallConfig): WallConfig {
-    val keepPattern = preset.pattern == PatternStyle.NONE
+    // A preset is exactly what it shows: a gradient preset is just the gradient, with no pattern carried over from
+    // before (your dimming and photo stay)
     return preset.copy(
-        pattern = if (keepPattern) current.pattern else preset.pattern,
-        patternColor = if (keepPattern) current.patternColor else preset.patternColor,
-        patternStrength = if (keepPattern) current.patternStrength else preset.patternStrength,
-        patternSize = if (keepPattern) current.patternSize else preset.patternSize,
-        patternSeed = if (keepPattern) current.patternSeed else preset.patternSeed,
-        sparkles = if (keepPattern) current.sparkles else preset.sparkles,
         dim = current.dim,
         image = current.image, focusX = current.focusX, focusY = current.focusY, zoom = current.zoom,
     )
@@ -322,7 +317,7 @@ fun PresetRow(selected: WallConfig?, onPick: (WallConfig) -> Unit) {
         WallPresets.all.forEachIndexed { i, preset ->
             val on = selected != null && selected.kind == preset.config.kind && selected.gradient == preset.config.gradient &&
                 selected.colors == preset.config.colors && selected.angle == preset.config.angle &&
-                (preset.config.pattern == PatternStyle.NONE || selected.pattern == preset.config.pattern)
+                selected.pattern == preset.config.pattern
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 val shape = RoundedCornerShape(12.dp)
                 Box(
@@ -485,22 +480,8 @@ fun ColorEditor(
             Box(Modifier.size(30.dp).clip(CircleShape).background(Color(color)).border(1.dp, Q.Edge, CircleShape))
         }
         if (open) {
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                WallColors.forEach { c ->
-                    val on = keepAlpha(c) == color
-                    Box(
-                        Modifier
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(Color(c))
-                            .border(if (on) 3.dp else 1.dp, if (on) Color.White else Q.Edge, CircleShape)
-                            .clickable { onChange(keepAlpha(c)) },
-                    )
-                }
-            }
+            SwatchStrip(null, WallColors.map { keepAlpha(it) }, color) { onChange(it) }
+            SwatchStrip("From your wallpaper", rememberWallpaperColors().map { keepAlpha(it) }, color) { onChange(it) }
             // Black has no hue or saturation and greys have no hue, so working them out from the color again would
             // throw them away: dragging brightness to 0 and back would leave you with grey. Keep the last ones instead.
             val last = remember { FloatArray(3) }
@@ -516,14 +497,11 @@ fun ColorEditor(
                     it.copyInto(last)
                 }
             }
-            fun set(i: Int, v: Float) {
-                val next = hsv.copyOf()
-                next[i] = v
+            HsvPicker(hsv) { next ->
+                next.copyInto(last)
                 onChange(android.graphics.Color.HSVToColor(a, next))
             }
-            SliderRow("Hue", hsv[0], 0f..360f, "${hsv[0].roundToInt()}°") { set(0, it) }
-            SliderRow("Saturation", hsv[1], 0f..1f, "${(hsv[1] * 100).roundToInt()}%") { set(1, it) }
-            SliderRow("Brightness", hsv[2], 0f..1f, "${(hsv[2] * 100).roundToInt()}%") { set(2, it) }
+            HexField(color, alpha) { onChange(it) }
             if (seeThrough != null) {
                 SliderRow("See-through", seeThrough, 0f..1f, "${(seeThrough * 100).roundToInt()}%") { onSeeThrough(it) }
             } else if (alpha) {
