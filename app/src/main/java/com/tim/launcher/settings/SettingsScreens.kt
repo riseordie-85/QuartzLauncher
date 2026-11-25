@@ -486,6 +486,9 @@ private fun ColumnScope.DockStyleSettings(ctx: SettingsContext) {
     val position = store.dockPositionOn(ctx.editing)
     val vertical = position == DockPosition.LEFT || position == DockPosition.RIGHT
 
+    SectionLabel("Starting points")
+    DockPresetRow(store)
+
     SectionLabel("Shape")
     GlassPanel {
         SettingRow("Background") { Toggle(store[S.dockBackground]) { store.set(S.dockBackground, value = it) } }
@@ -572,6 +575,13 @@ fun DockColorControls(store: SettingsStore) {
         Text("Fill", color = Q.Text, fontSize = 16.sp, modifier = Modifier.padding(bottom = 10.dp))
         Segmented(store[S.dockFill], DockFill.entries, { if (it == DockFill.GLASS) "One color" else it.label }) {
             store.set(S.dockFill, value = it)
+        }
+    }
+    if (gradient) {
+        // Ready-made gradients, matching the wallpaper presets
+        GradientPresetRow(store[S.panelColor], store[S.dockColor2]) { from, to ->
+            store.set(S.panelColor, value = from)
+            store.set(S.dockColor2, value = to)
         }
     }
     RowDivider()

@@ -107,13 +107,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** A few of your own apps (your dock's first), to preview icon styles on. */
-private fun sampleApps(context: Context): List<AppEntry> {
+internal fun sampleApps(context: Context, count: Int = 5): List<AppEntry> {
     val launcherApps = context.getSystemService(LauncherApps::class.java) ?: return emptyList()
     val density = context.resources.displayMetrics.densityDpi
     val all = launcherApps.getActivityList(null, Process.myUserHandle())
         .filter { it.applicationInfo.packageName != context.packageName }
     val dock = Prefs.get(context).getString(Prefs.L_DOCK_COVER, null)?.split("|")?.filter { it.isNotEmpty() } ?: emptyList()
-    val picked = (dock.mapNotNull { k -> all.firstOrNull { it.componentName.flattenToString() == k } } + all).distinct().take(5)
+    val picked = (dock.mapNotNull { k -> all.firstOrNull { it.componentName.flattenToString() == k } } + all).distinct().take(count)
     return picked.mapNotNull { info ->
         runCatching {
             AppEntry(
@@ -295,6 +295,9 @@ fun IconsSection(
         IconSlot.DRAWER -> S.iconPackDrawer
     }
 
+    SectionLabel("Starting points")
+    IconPresetRow(draft)
+
     SectionLabel("Icons")
     GlassPanel {
         SettingRow("Match everywhere", "Home screen, dock and app drawer icons all look the same") {
@@ -360,6 +363,12 @@ fun IconsSection(
         }
         if (background == IconBackground.COLOR || background == IconBackground.GRADIENT) {
             val gradient = background == IconBackground.GRADIENT
+            if (gradient) {
+                GradientPresetRow(draft.place(place?.color, S.iconBgColor), draft.place(place?.color2, S.iconBgColor2)) { from, to ->
+                    set(S.iconBgColor, place?.color, from)
+                    set(S.iconBgColor2, place?.color2, to)
+                }
+            }
             ColorEditor(if (gradient) "Gradient from" else "Background color", draft.place(place?.color, S.iconBgColor), colorOpen == "from", {
                 colorOpen = if (colorOpen == "from") null else "from"
             }, alpha = true) { set(S.iconBgColor, place?.color, it) }

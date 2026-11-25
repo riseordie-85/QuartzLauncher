@@ -112,14 +112,21 @@ fun rememberNow(): Long {
  * glass, gradient, pattern and edge light). [sample] shows made-up weather until real weather arrives (the picker).
  */
 @Composable
-fun WidgetView(kind: WidgetKind, modifier: Modifier = Modifier, sample: Boolean = false) {
+fun WidgetView(
+    kind: WidgetKind,
+    modifier: Modifier = Modifier,
+    sample: Boolean = false,
+    /** Card and accent colors to show instead of the saved ones (a theme's preview). */
+    cardColor: Color? = null,
+    accentColor: Color? = null,
+) {
     val context = LocalContext.current
     val store = remember { SettingsStore.get(context) }
     remember { Weather.loadCache(context); true }
     val now = rememberNow()
     val ink = LocalHomeLook.current.onPanel
-    val cards = Color(store[S.widgetColor])
-    val accent = Color(store[S.widgetAccent])
+    val cards = cardColor ?: Color(store[S.widgetColor])
+    val accent = accentColor ?: Color(store[S.widgetAccent])
     val motion = store[S.widgetMotion]
     val h24 = store[S.clock24h]
     val unit = store[S.weatherUnits]

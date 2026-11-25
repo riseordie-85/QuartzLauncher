@@ -138,24 +138,27 @@ data class DockStyle(
         )
 
     companion object {
-        fun of(store: SettingsStore) = DockStyle(
-            background = store[S.dockBackground],
-            outline = store[S.dockOutline],
-            radius = store[S.dockRadius],
-            floating = store[S.dockFloating],
-            fill = store[S.dockFill],
-            color2 = store[S.dockColor2],
-            pattern = store[S.dockPattern],
-            patternStrength = store[S.dockPatternStrength],
-            patternSize = store[S.dockPatternSize],
-            patternWeight = store[S.dockPatternWeight],
-            patternAnchor = store[S.dockPatternAnchor],
-            gradientDirection = store[S.dockGradientDirection],
-            edge = store[S.dockEdge],
-            padding = store[S.dockPadding],
-            paddingEnds = store[S.dockPaddingEnds],
-            depth = store[S.dockDepth],
-            stroke = StrokeSpec(store[S.dockStroke], store[S.dockStrokeColor], store[S.dockStrokeWidth]),
+        fun of(store: SettingsStore) = of(IconRender.saved(store))
+
+        /** From any set of values: the saved settings, or a preset's (the preset pictures and themes). */
+        fun of(v: IconRender.Values) = DockStyle(
+            background = v.get(S.dockBackground),
+            outline = v.get(S.dockOutline),
+            radius = v.get(S.dockRadius),
+            floating = v.get(S.dockFloating),
+            fill = v.get(S.dockFill),
+            color2 = v.get(S.dockColor2),
+            pattern = v.get(S.dockPattern),
+            patternStrength = v.get(S.dockPatternStrength),
+            patternSize = v.get(S.dockPatternSize),
+            patternWeight = v.get(S.dockPatternWeight),
+            patternAnchor = v.get(S.dockPatternAnchor),
+            gradientDirection = v.get(S.dockGradientDirection),
+            edge = v.get(S.dockEdge),
+            padding = v.get(S.dockPadding),
+            paddingEnds = v.get(S.dockPaddingEnds),
+            depth = v.get(S.dockDepth),
+            stroke = StrokeSpec(v.get(S.dockStroke), v.get(S.dockStrokeColor), v.get(S.dockStrokeWidth)),
         )
     }
 }

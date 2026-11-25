@@ -81,6 +81,8 @@ import com.tim.launcher.settings.IconDraft
 import com.tim.launcher.settings.rememberIconApply
 import com.tim.launcher.settings.TabMode
 import com.tim.launcher.settings.DrawerStyle
+import com.tim.launcher.settings.DockPresetRow
+import com.tim.launcher.settings.HomeThemes
 import com.tim.launcher.settings.applyPreset
 import com.tim.launcher.wallpaper.WallStore
 import com.tim.launcher.wallpaper.WallSlot
@@ -118,12 +120,13 @@ import com.tim.launcher.ui.Toggle
 import com.tim.launcher.ui.previewLook
 import kotlin.math.roundToInt
 
-private enum class Path { RECOMMENDED, WIZARD, IMPORT }
+/** A ready-made home screen (then a few practical questions), every question from scratch, or a backup. */
+private enum class Path { THEME, WIZARD, IMPORT }
 
 private enum class Step(val title: String, val preview: Boolean = true) {
     WELCOME("Welcome to Quartz", preview = false),
     HOME_APP("Make Quartz your home screen", preview = false),
-    PATH("How do you want to set up?", preview = false),
+    PATH("Choose your Home Screen", preview = false),
     DOCK_POSITION("Where do you want your dock?"),
     CARRY_OVER("Should your cover screen carry over when you unfold?"),
     COVER_SIDE("Which half should it land on?"),
@@ -139,7 +142,6 @@ private enum class Step(val title: String, val preview: Boolean = true) {
     DRAWER_VIEW("How should your apps appear?"),
     DRAWER_ICONS("How should the app list scroll?"),
     DRAWER_STYLE("How should your app drawer open up?"),
-    FUNCTION_DONE("You've finished the basics", preview = false),
     DOCK_STYLE("Style your dock"),
     WALLPAPER("Pick a wallpaper", preview = false),
     COLOR("What's your favorite color, and can we see through it?"),
@@ -164,12 +166,12 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
         mutableStateOf(if (saved == Step.HOME_APP && isDefaultHome(context)) Step.PATH else saved)
     }
     var path by remember { mutableStateOf(Path.entries.firstOrNull { resuming && it.name == store[S.wizardPath] } ?: Path.WIZARD) }
-    var customize by remember { mutableStateOf(if (resuming) store[S.wizardCustomize].toBooleanStrictOrNull() else null) }
-    LaunchedEffect(step, path, customize) {
+    // The theme showing in the middle of "Choose your Home Screen"
+    var themeIndex by remember { mutableIntStateOf(0) }
+    LaunchedEffect(step, path) {
         if (!resuming || store[S.wizardDone]) return@LaunchedEffect
         store.set(S.wizardStep, value = step.name)
         store.set(S.wizardPath, value = path.name)
-        store.set(S.wizardCustomize, value = customize?.toString() ?: "")
     }
     var forward by remember { mutableStateOf(true) }
     val foldable = type == DeviceType.FOLDABLE
@@ -181,6 +183,15 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
         add(Step.WELCOME)
         add(Step.HOME_APP)
         add(Step.PATH)
+        if (path == Path.THEME) {
+            // The theme has the look; these are about how this device works
+            if (foldable) {
+                add(Step.CARRY_OVER)
+                if (store[S.carryOver]) add(Step.COVER_SIDE)
+            }
+            add(Step.COVER_GRID)
+            if (foldable && !store[S.carryOver]) add(Step.INNER_GRID)
+        }
         if (path == Path.WIZARD) {
             add(Step.DOCK_POSITION)
             if (foldable) {
@@ -201,13 +212,11 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
             add(Step.DRAWER_VIEW)
             if (store[S.drawerView] == DrawerView.ICONS) add(Step.DRAWER_ICONS)
             add(Step.DRAWER_STYLE)
-            add(Step.FUNCTION_DONE)
-            if (customize == true) {
-                add(Step.DOCK_STYLE)
-                add(Step.WALLPAPER)
-                add(Step.ICONS)
-                add(Step.WIDGETS)
-            }
+            // From scratch walks through the look too
+            add(Step.DOCK_STYLE)
+            add(Step.WALLPAPER)
+            add(Step.ICONS)
+            add(Step.WIDGETS)
         }
         add(Step.DONE)
     }
@@ -229,11 +238,25 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
         store.set(S.wizardStep, value = "")
         store.set(S.wizardPath, value = "")
         store.set(S.wizardCustomize, value = "")
-        // The widget you picked goes on your home page when it next shows
-        if ((path == Path.RECOMMENDED || Step.WIDGETS in steps) && store[S.widgets].isNotBlank()) {
+        // The widget you picked (or your theme's) goes on your home page when it next shows
+        if ((path == Path.THEME || Step.WIDGETS in steps) && store[S.widgets].isNotBlank()) {
             Prefs.get(context).edit().putString(Prefs.PENDING_WIDGETS, store[S.widgets]).apply()
         }
         onFinish()
+    }
+
+    // A theme: the function defaults, then its look. Its icons are drawn ahead with the "Styling your icons" popup,
+    // then on to the practical questions
+    fun useTheme() {
+        val theme = HomeThemes.all[themeIndex.coerceIn(0, HomeThemes.all.lastIndex)]
+        applyRecommended(store, type)
+        HomeThemes.apply(context, store, iconDraft, theme)
+        path = Path.THEME
+        val first = if (foldable) Step.CARRY_OVER else Step.COVER_GRID
+        iconApply.run {
+            forward = true
+            step = first
+        }
     }
 
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -310,27 +333,18 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
                     type = type,
                     iconDraft = iconDraft,
                     iconTab = iconTab,
+                    themeIndex = themeIndex,
+                    onTheme = { themeIndex = it },
                     onPath = { chosen ->
-                        path = chosen
                         when (chosen) {
-                            Path.RECOMMENDED -> {
-                                applyRecommended(store, type)
-                                goTo(Step.DONE)
-                            }
+                            Path.THEME -> useTheme()
+                            // (The path changes once the file has been read)
                             Path.IMPORT -> importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
                             Path.WIZARD -> {
-                                customize = null
-                                goTo(Step.DOCK_POSITION)
+                                path = chosen
+                                forward = true
+                                step = Step.DOCK_POSITION
                             }
-                        }
-                    },
-                    onCustomize = { yes ->
-                        customize = yes
-                        if (yes) {
-                            goTo(Step.DOCK_STYLE)
-                        } else {
-                            applyDefaultForm(store)
-                            goTo(Step.DONE)
                         }
                     },
                 )
@@ -345,7 +359,7 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
             if (index > 0 && step != Step.DONE) GhostButton("Back") { back() }
             Spacer(Modifier.weight(1f))
             when (step) {
-                Step.PATH, Step.FUNCTION_DONE -> Unit // choosing a card moves on
+                Step.PATH -> PrimaryButton("Use ${HomeThemes.all[themeIndex.coerceIn(0, HomeThemes.all.lastIndex)].name}") { useTheme() }
                 Step.DONE -> PrimaryButton("Go home") { finish() }
                 Step.WELCOME -> PrimaryButton("Let's go") { next() }
                 // Icon changes get applied (with the progress popup) on the way to the next step
@@ -380,8 +394,9 @@ private fun ColumnScope.StepContent(
     type: DeviceType,
     iconDraft: IconDraft,
     iconTab: androidx.compose.runtime.MutableState<IconSlot>,
+    themeIndex: Int,
+    onTheme: (Int) -> Unit,
     onPath: (Path) -> Unit,
-    onCustomize: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
     val primary = type.primary
@@ -429,9 +444,14 @@ private fun ColumnScope.StepContent(
         }
 
         Step.PATH -> {
-            ChoiceCard("Recommended", "Rounded dock and drawer, blurred glass and a flip clock. Done in one tap.", false, gap) { onPath(Path.RECOMMENDED) }
-            ChoiceCard("Walk me through it", "A few quick questions about your dock, grid and apps.", false, gap) { onPath(Path.WIZARD) }
-            ChoiceCard("Import from another device", "Use a settings file exported from Quartz on your other phone or tablet.", false, gap) { onPath(Path.IMPORT) }
+            BodyText("Pick a look to start from. You can change every part of it later.")
+            Spacer(Modifier.height(14.dp))
+            ThemeCarousel(themeIndex, onTheme)
+            Spacer(Modifier.height(20.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ChoiceCard("Start from scratch", "Customize every detail", false, Modifier.weight(1f)) { onPath(Path.WIZARD) }
+                ChoiceCard("Import from backup", "Settings saved from Quartz", false, Modifier.weight(1f)) { onPath(Path.IMPORT) }
+            }
         }
 
         Step.DOCK_POSITION -> {
@@ -641,16 +661,11 @@ private fun ColumnScope.StepContent(
             )
         }
 
-        Step.FUNCTION_DONE -> {
-            BodyText("You can start on the look now, or come back later. We know you're busy.")
-            Spacer(Modifier.height(16.dp))
-            ChoiceCard("Start customizing", "Dock style, colors, icons and widgets", false, gap) { onCustomize(true) }
-            ChoiceCard("Skip for now", "Use the rounded default look", false, gap) { onCustomize(false) }
-        }
-
         Step.DOCK_STYLE -> {
             // The same choices as Settings › Dock › Style: shape, edge light, then color and glass
-            BodyText("Color and glass are shared by the dock and the app drawer, so they match.")
+            BodyText("Start from one of these, then change anything you like. Color and glass are shared by the dock and the app drawer, so they match.")
+            Spacer(Modifier.height(8.dp))
+            DockPresetRow(store)
             Spacer(Modifier.height(12.dp))
             val on = store[S.dockBackground]
             ChoiceCard("Glass", "A frosted panel behind your dock icons", on, gap) { store.set(S.dockBackground, value = true) }
@@ -742,6 +757,16 @@ private fun ColumnScope.StepContent(
             BodyText("Everything can be changed later in Settings. To get there, long-press an empty spot on your home screen.")
             Spacer(Modifier.height(16.dp))
             DevicePreview(previewLook(store, type), height = 150.dp)
+            // A theme's wallpaper (or the one you picked) only shows once Quartz draws the wallpaper
+            var active by remember { mutableStateOf(WallCache.isActive(context)) }
+            LifecycleResumeEffect(Unit) {
+                active = WallCache.isActive(context)
+                onPauseOrDispose { }
+            }
+            if (!active) {
+                Spacer(Modifier.height(16.dp))
+                UseQuartzWallpaper()
+            }
         }
     }
 }

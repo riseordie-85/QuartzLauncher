@@ -4,6 +4,9 @@ Phase 9 (in progress): first run and setup polish, on phase 8 widgets and weathe
 
 ## Phase 9: what's new (so far)
 
+- **Choose your Home Screen:** setup opens on a carousel of five ready-made home screens (Crystal, Clean, Midnight, Paper, Tide), each drawn live in this screen's shape with its real wallpaper, widget, icons and dock. **Use** one, then answer a couple of practical questions (fold carry-over and which half, the grid) and you're done. **Start from scratch** (customize every detail) walks through every question, look included; **Import from backup** reads a settings file.
+- **Starting points:** Dock › Style and the icon settings (and their setup steps) open with a row of ready-made styles drawn on your own apps: docks (Glass, Taskbar, Pill, Wave, Ribbon, Crystal, Neon, Paper, No background) and icons (As they come, Circles, Frosted, One color, Dark tiles, Gems, Rings, Paper, Neon). Pick one, then change anything. Icon presets keep your icon pack and go through Apply.
+- **Gradient presets:** a dock gradient and an icon gradient background each get a row of ready-made gradients matching the wallpaper presets; picking one keeps how see-through each end is.
 - **A real first home screen:** five everyday apps in the dock (calls, messages, the web, the camera, email; the next ones along on a tablet), a row of useful apps along the bottom of your home page with **Quartz Settings** first, and a **Quartz tips** card with buttons for wallpaper, setup and settings. Everything else is in the drawer. Fixes the empty home screen after a fresh install.
 - Phones and tablets open on the middle of three pages (existing layouts keep their home page). Tablets start with a 7 × 6 grid.
 - **Setup comes back until it's finished**, at the step you were on, whenever the home screen shows (Back gives it a minute's rest). Returning from making Quartz your home screen moves straight on.

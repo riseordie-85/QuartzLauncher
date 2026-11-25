@@ -112,6 +112,9 @@ object IconRender {
 
     fun specFor(store: SettingsStore, slot: IconSlot): Spec = specFor(Saved(store), slot)
 
+    /** The saved settings, read the way [Values] reads them (a dock preview from settings, say). */
+    fun saved(store: SettingsStore): Values = Saved(store)
+
     fun specFor(v: Values, slot: IconSlot): Spec {
         val match = v.get(S.iconsMatch)
         val pack = when {
