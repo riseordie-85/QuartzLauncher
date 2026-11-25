@@ -540,15 +540,16 @@ fun DockStyleControls(store: SettingsStore, vertical: Boolean = false) {
         SettingRow("Edge", "Soft and bright light catch the glass like a lit rim") {
             Dropdown(store[S.dockEdge], DockEdge.entries, { it.label }) { store.set(S.dockEdge, value = it) }
         }
-        RowDivider()
-        StrokeControls(
-            "the dock (and widget panels and the drawer, which match it)",
-            store[S.dockStroke], store[S.dockStrokeColor], store[S.dockStrokeWidth],
-            onStyle = { store.set(S.dockStroke, value = it) },
-            onColor = { store.set(S.dockStrokeColor, value = it) },
-            onWidth = { store.set(S.dockStrokeWidth, value = it) },
-        )
     }
+    // (Shown with Fade too: widget panels and the drawer still use it)
+    RowDivider()
+    StrokeControls(
+        "the dock (and widget panels and the drawer, which match it)",
+        store[S.dockStroke], store[S.dockStrokeColor], store[S.dockStrokeWidth],
+        onStyle = { store.set(S.dockStroke, value = it) },
+        onColor = { store.set(S.dockStrokeColor, value = it) },
+        onWidth = { store.set(S.dockStrokeWidth, value = it) },
+    )
     RowDivider()
     val across = store[S.dockPadding]
     SliderRow(if (vertical) "Padding left and right" else "Padding above and below", across.toFloat(), 0f..16f, if (across == 0) "None" else "$across") {

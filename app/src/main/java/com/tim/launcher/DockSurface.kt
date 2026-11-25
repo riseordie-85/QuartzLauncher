@@ -250,6 +250,8 @@ class DockOutlineShape(
                 points += at(0f, thick); radii += outer
                 for (k in 0..steps) {
                     val t = k.toFloat() / steps
+                    // Leave room by the ends so their corners can round (as the wave does)
+                    if (k != 0 && k != steps && (length * t < corner * 2f || length * t > length - corner * 2f)) continue
                     points += at(length * t, v(t))
                     radii += if (k == 0 || k == steps) corner else 0f
                 }
@@ -341,7 +343,15 @@ fun Modifier.dockSurface(style: DockStyle, tint: Color, edge: DockPosition, ink:
         .onGloballyPositioned { origin = it.positionInWindow() }
         // The stroke goes over the panel and its icons, outside the clip so none of it is cut off (not on a fade,
         // which has no edge to follow)
-        .strokeOutline(shape, if (fade) StrokeSpec() else style.stroke)
+        .strokeOutline(shape, if (fade) StrokeSpec() else style.stroke) { size ->
+            // Not along the screen's own edges (a dock running to the edge would show half a line there)
+            val w = style.stroke.width.dp.value * view.resources.displayMetrics.density
+            val rootW = view.rootView.width.toFloat()
+            val rootH = view.rootView.height.toFloat()
+            if (rootW <= 0f || rootH <= 0f) null
+            else androidx.compose.ui.geometry.Rect(w - origin.x, w - origin.y, rootW - w - origin.x, rootH - w - origin.y)
+                .intersect(androidx.compose.ui.geometry.Rect(-w * 2, -w * 2, size.width + w * 2, size.height + w * 2))
+        }
         .graphicsLayer { compositingStrategy = if (fade) CompositingStrategy.Offscreen else CompositingStrategy.Auto }
         .clip(shape)
         .drawBehind {

@@ -6,7 +6,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PathMeasure
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asAndroidPath
@@ -38,16 +38,22 @@ object Strokes {
     private const val NIB = 0.52f
 
     /** Draws [spec] along [path], [widthPx] wide, centered on the line. */
-    fun draw(canvas: Canvas, path: Path, spec: StrokeSpec, widthPx: Float) {
-        if (spec.none || widthPx <= 0f) return
+    fun draw(canvas: Canvas, path: Path, spec: StrokeSpec, widthPx: Float) = prepare(path, spec, widthPx)?.let { (p, paint) -> canvas.drawPath(p, paint) }
+
+    /**
+     * What to draw for [spec] along [path]: the path and paint, worked out once so a panel that redraws (the dock)
+     * doesn't redo it every frame. The pen's line is a filled shape built ahead.
+     */
+    fun prepare(path: Path, spec: StrokeSpec, widthPx: Float): Pair<Path, Paint>? {
+        if (spec.none || widthPx <= 0f) return null
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = spec.color }
-        when (spec.style) {
-            StrokeStyle.NONE -> Unit
+        return when (spec.style) {
+            StrokeStyle.NONE -> null
             StrokeStyle.SOLID -> {
                 paint.style = Paint.Style.STROKE
                 paint.strokeWidth = widthPx
                 paint.strokeJoin = Paint.Join.ROUND
-                canvas.drawPath(path, paint)
+                path to paint
             }
             StrokeStyle.DASHED -> {
                 paint.style = Paint.Style.STROKE
@@ -55,7 +61,7 @@ object Strokes {
                 paint.strokeCap = Paint.Cap.ROUND
                 val dash = max(widthPx * 3f, 4f)
                 paint.pathEffect = DashPathEffect(floatArrayOf(dash, dash * 0.8f + widthPx), 0f)
-                canvas.drawPath(path, paint)
+                path to paint
             }
             StrokeStyle.DOTTED -> {
                 // A dash of almost nothing with round ends is a round dot
@@ -63,9 +69,9 @@ object Strokes {
                 paint.strokeWidth = widthPx
                 paint.strokeCap = Paint.Cap.ROUND
                 paint.pathEffect = DashPathEffect(floatArrayOf(0.01f, widthPx * 2.2f), 0f)
-                canvas.drawPath(path, paint)
+                path to paint
             }
-            StrokeStyle.PEN -> canvas.drawPath(penRibbon(path, widthPx), paint.apply { style = Paint.Style.FILL })
+            StrokeStyle.PEN -> penRibbon(path, widthPx) to paint.apply { style = Paint.Style.FILL }
         }
     }
 
@@ -74,7 +80,9 @@ object Strokes {
      * point's direction. A closed outline becomes a ring (its two sides, filled even-odd).
      */
     private fun penRibbon(path: Path, widthPx: Float): Path {
-        val out = Path().apply { fillType = Path.FillType.EVEN_ODD }
+        // Winding fill, with the two sides of a closed line running opposite ways: the ring is filled, the middle
+        // isn't, and where a side loops back on itself at a sharp corner it stays filled (even-odd punched holes there)
+        val out = Path().apply { fillType = Path.FillType.WINDING }
         val measure = PathMeasure(path, false)
         val pos = FloatArray(2)
         val tan = FloatArray(2)
@@ -99,7 +107,7 @@ object Strokes {
                 left.close()
                 out.addPath(left)
                 val inner = Path()
-                right.forEachIndexed { i, (x, y) -> if (i == 0) inner.moveTo(x, y) else inner.lineTo(x, y) }
+                right.asReversed().forEachIndexed { i, (x, y) -> if (i == 0) inner.moveTo(x, y) else inner.lineTo(x, y) }
                 inner.close()
                 out.addPath(inner)
             } else {
@@ -135,11 +143,24 @@ object Strokes {
 
 /**
  * A stroke along [shape]'s outline, drawn over everything inside, centered on the edge. Goes before any clip in
- * the modifier chain, so the outer half isn't cut off.
+ * the modifier chain, so the outer half isn't cut off. Worked out once per size. [keep], if given, is the part of
+ * the panel the stroke may show in (a dock running to the screen edge leaves out the stretch along that edge).
  */
-fun Modifier.strokeOutline(shape: Shape, spec: StrokeSpec): Modifier =
-    if (spec.none) this else drawWithContent {
-        drawContent()
-        val path = Strokes.pathOf(shape.createOutline(size, layoutDirection, this))
-        drawIntoCanvas { Strokes.draw(it.nativeCanvas, path, spec, spec.width.dp.toPx()) }
+fun Modifier.strokeOutline(shape: Shape, spec: StrokeSpec, keep: (androidx.compose.ui.geometry.Size) -> androidx.compose.ui.geometry.Rect? = { null }): Modifier =
+    if (spec.none) this else drawWithCache {
+        val prepared = Strokes.prepare(Strokes.pathOf(shape.createOutline(size, layoutDirection, this)), spec, spec.width.dp.toPx())
+        onDrawWithContent {
+            drawContent()
+            val (path, paint) = prepared ?: return@onDrawWithContent
+            val area = keep(size)
+            drawIntoCanvas { canvas ->
+                val native = canvas.nativeCanvas
+                if (area != null) {
+                    native.save()
+                    native.clipRect(area.left, area.top, area.right, area.bottom)
+                }
+                native.drawPath(path, paint)
+                if (area != null) native.restore()
+            }
+        }
     }

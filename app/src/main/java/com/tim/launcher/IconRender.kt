@@ -294,6 +294,7 @@ object IconRender {
         // The outline the rim follows: your shape, or the system's mask when the icon is left as the app drew it
         val outline = path(if (spec.shape == IconShape.SYSTEM) IconShape.SQUIRCLE else spec.shape, SIZE.toFloat())
         val cacheKey = spec.key + "|" + app.key
+        masked = false
         val drawn = drawIcon(context, app, spec, outline) ?: return null
         val icon = drawn.first
         if (drawn.second) {
@@ -311,11 +312,18 @@ object IconRender {
         } else {
             drawEdge(Canvas(icon), outline, SIZE.toFloat(), spec.edge, light)
         }
-        strokeInside(Canvas(icon), outline, spec.stroke)
+        // Only along an outline the icon really has: its background, your shape, or Android's mask for an app's own
+        // icon. Not around a minimal icon's bare glyph, or an old-style icon that has no shape to follow.
+        val hasOutline = plate != null || (spec.style == IconStyle.DEFAULT && (spec.shape != IconShape.SYSTEM || masked))
+        if (hasOutline) strokeInside(Canvas(icon), outline, spec.stroke)
         if (spec.shadow == IconShadow.NONE) return icon
         // Frosted glass is see-through: no shadow under it, or the glass goes murky
         return withShadow(icon, spec.shadow, cut = if (spec.background == IconBackground.FROSTED) outline else null)
     }
+
+    /** Set while drawing an icon: its outline is Android's own mask for it (icons are drawn on one thread). */
+    @Volatile
+    private var masked = false
 
     /** An icon's size in dp at normal size, to turn a stroke's dp width into the icon picture's pixels. */
     private const val ICON_DP = 56f
@@ -405,7 +413,10 @@ object IconRender {
             icon.setBounds(0, 0, SIZE, SIZE)
             icon.draw(canvas)
             // Android's own mask (a circle on many phones), scaled to the bounds just set
-            (icon as? AdaptiveIconDrawable)?.let { outline.set(it.iconMask) }
+            (icon as? AdaptiveIconDrawable)?.let {
+                outline.set(it.iconMask)
+                masked = true
+            }
             return out to false
         }
 
