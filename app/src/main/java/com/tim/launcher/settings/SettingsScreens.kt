@@ -520,6 +520,12 @@ fun DockStyleControls(store: SettingsStore, vertical: Boolean = false) {
     SettingRow("Shape") {
         Dropdown(store[S.dockOutline], DockOutline.entries, { it.label }) { store.set(S.dockOutline, value = it) }
     }
+    if (store[S.dockOutline].hasDepth) {
+        val d = store[S.dockDepth]
+        SliderRow(if (store[S.dockOutline].toothed) "Tooth size" else "Depth", d, 0f..1f, "${(d * 100).roundToInt()}%") {
+            store.set(S.dockDepth, value = it)
+        }
+    }
     if (store[S.dockOutline] != DockOutline.FADE) {
         val r = store[S.dockRadius]
         SliderRow("Roundness", r.toFloat(), 0f..40f, if (r == 0) "Square" else "$r") { store.set(S.dockRadius, value = it.roundToInt()) }
@@ -534,6 +540,14 @@ fun DockStyleControls(store: SettingsStore, vertical: Boolean = false) {
         SettingRow("Edge", "Soft and bright light catch the glass like a lit rim") {
             Dropdown(store[S.dockEdge], DockEdge.entries, { it.label }) { store.set(S.dockEdge, value = it) }
         }
+        RowDivider()
+        StrokeControls(
+            "the dock (and widget panels and the drawer, which match it)",
+            store[S.dockStroke], store[S.dockStrokeColor], store[S.dockStrokeWidth],
+            onStyle = { store.set(S.dockStroke, value = it) },
+            onColor = { store.set(S.dockStrokeColor, value = it) },
+            onWidth = { store.set(S.dockStrokeWidth, value = it) },
+        )
     }
     RowDivider()
     val across = store[S.dockPadding]

@@ -80,11 +80,13 @@ object IconRender {
         val shadow: IconShadow = IconShadow.NONE,
         val patternSize: Float = 0.5f,
         val gradient: GradientDirection = GradientDirection.DIAGONAL,
+        val stroke: StrokeSpec = StrokeSpec(),
     ) {
         /** Nothing to change: the app's own icon is used as it is. */
         val plain get() = pack.isEmpty() && shape == IconShape.SYSTEM && style == IconStyle.DEFAULT &&
-            background == IconBackground.NONE && edge == DockEdge.NONE && shadow == IconShadow.NONE
-        val key get() = "$pack|$shape|$force|$style|$background|$color|$color2|$pattern|$patternStrength|$edge|$shadow|$patternSize|$gradient"
+            background == IconBackground.NONE && edge == DockEdge.NONE && shadow == IconShadow.NONE && stroke.none
+        val key get() = "$pack|$shape|$force|$style|$background|$color|$color2|$pattern|$patternStrength|$edge|$shadow|$patternSize|$gradient|" +
+            if (stroke.none) "-" else "${stroke.style}|${stroke.color}|${stroke.width}"
 
         /** How much bigger than the icon its picture is drawn, to leave room for the shadow. */
         val overscan get() = if (shadow == IconShadow.NONE) 1f else OVERSCAN
@@ -135,6 +137,11 @@ object IconRender {
             v.place(place?.shadow, S.iconShadow),
             patternSize = v.place(place?.patternSize, S.iconPatternSize),
             gradient = v.place(place?.gradient, S.iconGradient),
+            stroke = StrokeSpec(
+                v.place(place?.stroke, S.iconStroke),
+                v.place(place?.strokeColor, S.iconStrokeColor),
+                v.place(place?.strokeWidth, S.iconStrokeWidth),
+            ),
         )
     }
 
@@ -304,9 +311,27 @@ object IconRender {
         } else {
             drawEdge(Canvas(icon), outline, SIZE.toFloat(), spec.edge, light)
         }
+        strokeInside(Canvas(icon), outline, spec.stroke)
         if (spec.shadow == IconShadow.NONE) return icon
         // Frosted glass is see-through: no shadow under it, or the glass goes murky
         return withShadow(icon, spec.shadow, cut = if (spec.background == IconBackground.FROSTED) outline else null)
+    }
+
+    /** An icon's size in dp at normal size, to turn a stroke's dp width into the icon picture's pixels. */
+    private const val ICON_DP = 56f
+
+    /**
+     * [stroke] along [shape], pulled in by half its width so all of it shows inside the picture (the picture's
+     * edge would cut off the outer half).
+     */
+    private fun strokeInside(canvas: Canvas, shape: Path, stroke: StrokeSpec) {
+        if (stroke.none) return
+        val s = SIZE.toFloat()
+        val w = stroke.width * s / ICON_DP
+        val inset = Path(shape)
+        val k = ((s - w) / s).coerceAtLeast(0.5f)
+        inset.transform(android.graphics.Matrix().apply { setScale(k, k, s / 2f, s / 2f) })
+        Strokes.draw(canvas, inset, stroke, w)
     }
 
     /** A rim of light along [shape], at full strength whatever's under it, kept inside the shape. */
@@ -581,6 +606,7 @@ object IconRender {
         rc.drawBitmap(mask, 0f, 0f, keepPaint)
         canvas.drawBitmap(rim, 0f, 0f, null)
         rim.recycle()
+        strokeInside(canvas, shape, spec.stroke)
 
         val out = if (spec.shadow == IconShadow.NONE) body else {
             val big = (SIZE * OVERSCAN).toInt()

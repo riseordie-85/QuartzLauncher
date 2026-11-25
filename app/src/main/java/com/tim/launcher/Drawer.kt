@@ -229,6 +229,8 @@ fun AppDrawer(vm: HomeViewModel, drag: DragController, look: DrawerLook, startWi
                             }
                         },
                     )
+                    // The dock's stroke too (a full-screen drawer has no edge of its own to follow)
+                    .strokeOutline(PanelShape, if (home.dock.background && !full) home.dock.stroke else StrokeSpec())
                     .glass(if (full) RectangleShape else PanelShape, home.drawerBg)
                     // The same edge light as the dock (none when the dock has no background)
                     .edgeLight(if (full) RectangleShape else PanelShape, if (home.dock.background) home.dock.edge else DockEdge.NONE, ink)

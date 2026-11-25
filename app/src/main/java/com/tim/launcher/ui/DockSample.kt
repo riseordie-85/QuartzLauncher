@@ -53,13 +53,13 @@ fun DockSample(store: SettingsStore, modifier: Modifier = Modifier) {
         contentAlignment = Alignment.BottomCenter,
     ) {
         // Same depth rule as the real dock: icons plus padding, so the slant cuts back by the same amount
-        val depth = 46.dp + 20.dp + style.padding.dp * 2 + style.waveRoom
+        val depth = 46.dp + 20.dp + style.padding.dp * 2 + style.waveRoom + style.outerRoom
         Row(
             Modifier
                 .fillMaxWidth()
                 .dockSurface(style, panel, DockPosition.BOTTOM, ink, style.slant(depth))
                 .padding(horizontal = style.endRoom(depth))
-                .padding(top = style.waveRoom)
+                .padding(top = style.waveRoom, bottom = style.outerRoom)
                 .padding(vertical = 10.dp + style.padding.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,

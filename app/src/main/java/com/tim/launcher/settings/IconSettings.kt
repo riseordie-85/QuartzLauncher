@@ -397,6 +397,16 @@ fun IconsSection(
             Dropdown(draft.place(place?.edge, S.iconEdge), DockEdge.entries, { it.label }) { set(S.iconEdge, place?.edge, it) }
         }
         RowDivider()
+        StrokeControls(
+            "each icon (and folder)",
+            draft.place(place?.stroke, S.iconStroke),
+            draft.place(place?.strokeColor, S.iconStrokeColor),
+            draft.place(place?.strokeWidth, S.iconStrokeWidth),
+            onStyle = { set(S.iconStroke, place?.stroke, it) },
+            onColor = { set(S.iconStrokeColor, place?.strokeColor, it) },
+            onWidth = { set(S.iconStrokeWidth, place?.strokeWidth, it) },
+        )
+        RowDivider()
         Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
             Text("Shadow", color = Q.Text, fontSize = 16.sp, modifier = Modifier.padding(bottom = 10.dp))
             Segmented(draft.place(place?.shadow, S.iconShadow), IconShadow.entries, { it.label }) { set(S.iconShadow, place?.shadow, it) }

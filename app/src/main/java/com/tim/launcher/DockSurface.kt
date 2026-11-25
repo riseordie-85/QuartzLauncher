@@ -70,7 +70,17 @@ data class DockStyle(
     val padding: Int = 0,
     /** Extra room at the dock's two ends, in dp. */
     val paddingEnds: Int = 0,
+    /** Tooth size (Zigzag, Ribbon) or how deep the curve or tilt goes (Arch, Bowl, Tilt), 0 to 1. */
+    val depth: Float = 0.5f,
+    /** A line around the dock (and the panels that match it). */
+    val stroke: StrokeSpec = StrokeSpec(),
 ) {
+    /** How wide each tooth is, for Zigzag and Ribbon (they're as deep as half that). */
+    val tooth: Dp get() = (14f + 42f * depth.coerceIn(0f, 1f)).dp
+
+    /** How far Arch, Bowl and Tilt reach in from the straight line. */
+    val curve: Dp get() = (8f + 32f * depth.coerceIn(0f, 1f)).dp
+
     /**
      * How far a slanted or pointed dock's inner edge is cut back at each end, for a dock whose icons and padding
      * are [contentThick] deep.
@@ -78,15 +88,27 @@ data class DockStyle(
     fun slant(contentThick: Dp): Dp = when {
         !background -> 0.dp
         outline == DockOutline.SLANTED -> contentThick * 0.5f
-        outline == DockOutline.POINTED -> contentThick * 0.42f
+        outline == DockOutline.POINTED || outline == DockOutline.RIBBON -> contentThick * 0.42f
         else -> 0.dp
     }
 
     /** Room at each end: the cut-back (so the end icons never hang over the slant) plus your end padding. */
     fun endRoom(contentThick: Dp): Dp = slant(contentThick) + paddingEnds.dp
 
-    /** A wavy inner edge needs a little room so it doesn't run through the icons. */
-    val waveRoom get() = if (background && outline == DockOutline.WAVE) 8.dp else 0.dp
+    /** A wavy, toothed, curved or tilted inner edge needs room so it doesn't run through the icons. */
+    val waveRoom: Dp get() = if (!background) 0.dp else when (outline) {
+        DockOutline.WAVE -> 8.dp
+        DockOutline.ZIGZAG, DockOutline.RIBBON -> tooth / 2
+        DockOutline.ARCH, DockOutline.BOWL, DockOutline.TILT_LEFT, DockOutline.TILT_RIGHT -> curve
+        else -> 0.dp
+    }
+
+    /** A floating ribbon has teeth on its outer edge too, so room there as well. */
+    val outerRoom: Dp get() = if (background && floating && outline == DockOutline.RIBBON) tooth / 2 else 0.dp
+
+    /** The outline to draw this dock with. */
+    fun shape(edge: DockPosition, slant: Dp = 0.dp) =
+        DockOutlineShape(outline, radius.toFloat(), edge, flush = !floating, slantDp = slant.value, toothDp = tooth.value, curveDp = curve.value)
 
     companion object {
         fun of(store: SettingsStore) = DockStyle(
@@ -103,6 +125,8 @@ data class DockStyle(
             edge = store[S.dockEdge],
             padding = store[S.dockPadding],
             paddingEnds = store[S.dockPaddingEnds],
+            depth = store[S.dockDepth],
+            stroke = StrokeSpec(store[S.dockStroke], store[S.dockStrokeColor], store[S.dockStrokeWidth]),
         )
     }
 }
@@ -118,6 +142,10 @@ class DockOutlineShape(
     private val flush: Boolean,
     /** How far a slanted or pointed dock is cut back at each end. */
     private val slantDp: Float = 0f,
+    /** Tooth width for Zigzag and Ribbon. */
+    private val toothDp: Float = 28f,
+    /** Depth of Arch, Bowl and Tilt. */
+    private val curveDp: Float = 20f,
 ) : Shape {
 
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
@@ -171,6 +199,63 @@ class DockOutlineShape(
                 }
                 Outline.Generic(rounded(points, radii))
             }
+            DockOutline.ZIGZAG -> {
+                // Teeth along the inner edge, a whole number of them so both ends start on a point
+                val tooth = with(density) { toothDp.dp.toPx() }
+                val depth = min(tooth / 2f, thick * 0.45f)
+                val corner = r * 0.6f
+                val points = ArrayList<Offset>()
+                val radii = ArrayList<Float>()
+                points += at(0f, thick); radii += outer
+                zigzag(0f, length, tooth, 0f, depth).forEachIndexed { i, (u, v) ->
+                    points += at(u, v)
+                    radii += if (i == 0 || u >= length) corner else 0f
+                }
+                points += at(length, thick); radii += outer
+                Outline.Generic(rounded(points, radii))
+            }
+            DockOutline.RIBBON -> {
+                // Pointed ends, teeth on the inner edge, and on the outer edge too unless it runs to the screen edge
+                val p = min(with(density) { slantDp.dp.toPx() }, length / 4f)
+                val tooth = with(density) { toothDp.dp.toPx() }
+                val depth = min(tooth / 2f, thick * 0.3f)
+                val h = r * 0.5f
+                val points = ArrayList<Offset>()
+                val radii = ArrayList<Float>()
+                points += at(0f, thick / 2f); radii += h
+                zigzag(p, length - p, tooth, 0f, depth).forEach { (u, v) -> points += at(u, v); radii += 0f }
+                points += at(length, thick / 2f); radii += h
+                if (flush) {
+                    points += at(length, thick); radii += 0f
+                    points += at(0f, thick); radii += 0f
+                } else {
+                    zigzag(p, length - p, tooth, thick, thick - depth).asReversed().forEach { (u, v) -> points += at(u, v); radii += 0f }
+                }
+                Outline.Generic(rounded(points, radii))
+            }
+            DockOutline.ARCH, DockOutline.BOWL, DockOutline.TILT_LEFT, DockOutline.TILT_RIGHT -> {
+                // The inner edge curves up in the middle (arch), dips (bowl), or runs straight from one end to the other
+                // (tilt); the screen-side edge stays straight
+                val depth = min(with(density) { curveDp.dp.toPx() }, thick * 0.6f)
+                fun v(t: Float): Float = when (outline) {
+                    DockOutline.ARCH -> depth * (2f * t - 1f) * (2f * t - 1f)
+                    DockOutline.BOWL -> depth * (1f - (2f * t - 1f) * (2f * t - 1f))
+                    DockOutline.TILT_LEFT -> depth * t
+                    else -> depth * (1f - t)
+                }
+                val steps = if (outline == DockOutline.TILT_LEFT || outline == DockOutline.TILT_RIGHT) 1 else 48
+                val corner = r * 0.6f
+                val points = ArrayList<Offset>()
+                val radii = ArrayList<Float>()
+                points += at(0f, thick); radii += outer
+                for (k in 0..steps) {
+                    val t = k.toFloat() / steps
+                    points += at(length * t, v(t))
+                    radii += if (k == 0 || k == steps) corner else 0f
+                }
+                points += at(length, thick); radii += outer
+                Outline.Generic(rounded(points, radii))
+            }
             DockOutline.WAVE -> {
                 // The inner edge rises and falls a whole number of times, so both ends meet it at the same height
                 val amp = min(thick * 0.1f, with(density) { 7.dp.toPx() })
@@ -192,6 +277,22 @@ class DockOutlineShape(
                 Outline.Generic(rounded(points, radii))
             }
         }
+    }
+
+    /**
+     * Points of a zigzag from [u0] to [u1]: points at [tip] (where it starts and ends) and dips at [dip] between,
+     * as many teeth as fit about [tooth] wide.
+     */
+    private fun zigzag(u0: Float, u1: Float, tooth: Float, tip: Float, dip: Float): List<Pair<Float, Float>> {
+        val n = max(1, ((u1 - u0) / tooth).roundToInt())
+        val step = (u1 - u0) / n
+        val out = ArrayList<Pair<Float, Float>>(n * 2 + 1)
+        for (k in 0 until n) {
+            out += (u0 + k * step) to tip
+            out += (u0 + (k + 0.5f) * step) to dip
+        }
+        out += u1 to tip
+        return out
     }
 
     /** A polygon with each corner rounded by its own radius. */
@@ -216,9 +317,11 @@ class DockOutlineShape(
     }
 
     override fun equals(other: Any?) = other is DockOutlineShape && other.outline == outline &&
-        other.radiusDp == radiusDp && other.edge == edge && other.flush == flush && other.slantDp == slantDp
+        other.radiusDp == radiusDp && other.edge == edge && other.flush == flush && other.slantDp == slantDp &&
+        other.toothDp == toothDp && other.curveDp == curveDp
 
-    override fun hashCode() = (((outline.hashCode() * 31 + radiusDp.hashCode()) * 31 + edge.hashCode()) * 31 + flush.hashCode()) * 31 + slantDp.hashCode()
+    override fun hashCode() = (((((outline.hashCode() * 31 + radiusDp.hashCode()) * 31 + edge.hashCode()) * 31 + flush.hashCode()) * 31 +
+        slantDp.hashCode()) * 31 + toothDp.hashCode()) * 31 + curveDp.hashCode()
 }
 
 /**
@@ -232,12 +335,13 @@ fun Modifier.dockSurface(style: DockStyle, tint: Color, edge: DockPosition, ink:
     val image = remember(glass) { glass?.bitmap?.asImageBitmap() }
     var origin by remember { mutableStateOf(Offset.Zero) }
     val view = LocalView.current
-    val shape = remember(style.outline, style.radius, edge, style.floating, slant) {
-        DockOutlineShape(style.outline, style.radius.toFloat(), edge, flush = !style.floating, slantDp = slant.value)
-    }
+    val shape = remember(style.outline, style.radius, edge, style.floating, slant, style.depth) { style.shape(edge, slant) }
     val fade = style.outline == DockOutline.FADE
     if (!style.background) this else this
         .onGloballyPositioned { origin = it.positionInWindow() }
+        // The stroke goes over the panel and its icons, outside the clip so none of it is cut off (not on a fade,
+        // which has no edge to follow)
+        .strokeOutline(shape, if (fade) StrokeSpec() else style.stroke)
         .graphicsLayer { compositingStrategy = if (fade) CompositingStrategy.Offscreen else CompositingStrategy.Auto }
         .clip(shape)
         .drawBehind {

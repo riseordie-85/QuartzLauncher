@@ -302,7 +302,7 @@ private fun DockBar(
             val iconSize = 56.dp * look.dockIconScale
             val cellW = maxOf(72.dp, iconSize + 16.dp)
             val cellH = iconSize + if (look.labelsDock) 36.dp else 20.dp
-            val depth = cellH + style.padding.dp * 2 + style.waveRoom
+            val depth = cellH + style.padding.dp * 2 + style.waveRoom + style.outerRoom
             val ends = 8.dp + style.endRoom(depth)
             // The padding at the ends counts too, or a slanted dock squeezes its last icons instead of scrolling
             val scrolls = cellW * count + ends * 2 > maxWidth
@@ -314,8 +314,8 @@ private fun DockBar(
                     .padding(horizontal = ends)
                     .padding(vertical = style.padding.dp)
                     .padding(
-                        top = if (edge == DockPosition.BOTTOM) style.waveRoom else 0.dp,
-                        bottom = if (edge == DockPosition.TOP) style.waveRoom else 0.dp,
+                        top = if (edge == DockPosition.BOTTOM) style.waveRoom else style.outerRoom,
+                        bottom = if (edge == DockPosition.TOP) style.waveRoom else style.outerRoom,
                     ),
                 horizontalArrangement = when {
                     !full || scrolls -> Arrangement.Start
@@ -347,7 +347,7 @@ private fun DockBar(
             val iconSize = 52.dp * look.dockIconScale
             val cellH = maxOf(80.dp, iconSize + 28.dp)
             val cellW = maxOf(72.dp, iconSize + 20.dp)
-            val depth = cellW + style.padding.dp * 2 + style.waveRoom
+            val depth = cellW + style.padding.dp * 2 + style.waveRoom + style.outerRoom
             val ends = 8.dp + style.endRoom(depth)
             val scrolls = cellH * count + ends * 2 > maxHeight
             val background = Modifier.dockSurface(style, look.panel, edge, look.onPanel, style.slant(depth)).then(inner)
@@ -355,13 +355,13 @@ private fun DockBar(
                 (if (full || scrolls) Modifier.fillMaxHeight() else Modifier)
                     .then(background)
                     // Padding and wave room widen the dock rather than squeezing the icons
-                    .width(cellW + style.padding.dp * 2 + style.waveRoom)
+                    .width(cellW + style.padding.dp * 2 + style.waveRoom + style.outerRoom)
                     .then(if (scrolls) Modifier.verticalScroll(rememberScrollState()) else Modifier)
                     .padding(vertical = ends)
                     .padding(horizontal = style.padding.dp)
                     .padding(
-                        start = if (edge == DockPosition.RIGHT) style.waveRoom else 0.dp,
-                        end = if (edge == DockPosition.LEFT) style.waveRoom else 0.dp,
+                        start = if (edge == DockPosition.RIGHT) style.waveRoom else style.outerRoom,
+                        end = if (edge == DockPosition.LEFT) style.waveRoom else style.outerRoom,
                     ),
                 verticalArrangement = when {
                     !full || scrolls -> Arrangement.Top

@@ -91,7 +91,18 @@ enum class DockAlign(val label: String) { START("Start"), CENTER("Center"), END(
 enum class DockShape(val label: String) { SQUARE("Square"), ROUNDED("Rounded"), NONE("No background") }
 enum class DockOutline(val label: String) {
     STRAIGHT("Straight"), SLANTED("Slanted"), POINTED("Pointed"), WAVE("Wave"), FADE("Fade"),
+    ZIGZAG("Zigzag"), RIBBON("Ribbon"), ARCH("Arch"), BOWL("Bowl"), TILT_LEFT("Tilt, left high"), TILT_RIGHT("Tilt, right high"),
+    ;
+
+    /** Shapes whose inner edge has teeth (their depth setting is the tooth size). */
+    val toothed get() = this == ZIGZAG || this == RIBBON
+
+    /** Shapes with a depth setting: how big the teeth are, or how far the curve or tilt goes. */
+    val hasDepth get() = toothed || this == ARCH || this == BOWL || this == TILT_LEFT || this == TILT_RIGHT
 }
+
+/** A line drawn around an icon, the dock or a widget panel. Pen thickens and thins like a fountain pen's nib. */
+enum class StrokeStyle(val label: String) { NONE("None"), SOLID("Solid"), DASHED("Dashed"), DOTTED("Dotted"), PEN("Pen") }
 enum class DockFill(val label: String) { GLASS("Glass"), GRADIENT("Gradient") }
 /** Which way a gradient runs (the dock's, icon plates'). Radial glows out from the middle. */
 enum class GradientDirection(val label: String) { HORIZONTAL("Across →"), VERTICAL("Down ↓"), DIAGONAL("Diagonal ↘"), RADIAL("Radial ◎") }
@@ -165,6 +176,9 @@ class IconPlaceSettings(id: String) {
     val gradient = Setting("look.$id.iconGradient", GradientDirection.DIAGONAL, EnumCodec(GradientDirection.entries.toTypedArray()))
     val edge = Setting("look.$id.iconEdge", DockEdge.NONE, EnumCodec(DockEdge.entries.toTypedArray()))
     val shadow = Setting("look.$id.iconShadow", IconShadow.NONE, EnumCodec(IconShadow.entries.toTypedArray()))
+    val stroke = Setting("look.$id.iconStroke", StrokeStyle.NONE, EnumCodec(StrokeStyle.entries.toTypedArray()))
+    val strokeColor = Setting("look.$id.iconStrokeColor", 0xE6FFFFFF.toInt(), IntCodec)
+    val strokeWidth = Setting("look.$id.iconStrokeWidth", 2f, FloatCodec)
 }
 
 /** A dock or drawer icon setting, or the home screen's while that place hasn't been given its own. */
@@ -219,6 +233,12 @@ object S {
     val dockPatternSize = Setting("dock.patternScale", 0.5f, FloatCodec)
     val dockGradientDirection = Setting("dock.gradientDirection", GradientDirection.HORIZONTAL, EnumCodec(GradientDirection.entries.toTypedArray()))
     val dockEdge = Setting("dock.edge", DockEdge.SOFT, EnumCodec(DockEdge.entries.toTypedArray()))
+    /** Tooth size for Zigzag and Ribbon, or how deep Arch, Bowl and Tilt go: 0 small, 1 big. */
+    val dockDepth = Setting("dock.depth", 0.5f, FloatCodec)
+    /** A line around the dock (and widget panels and the drawer, which match it). Width in dp. */
+    val dockStroke = Setting("dock.stroke", StrokeStyle.NONE, EnumCodec(StrokeStyle.entries.toTypedArray()))
+    val dockStrokeColor = Setting("dock.strokeColor", 0xE6FFFFFF.toInt(), IntCodec)
+    val dockStrokeWidth = Setting("dock.strokeWidth", 2f, FloatCodec)
     /** Extra room across the dock (above and below the icons on a bottom dock), in dp. */
     val dockPadding = Setting("dock.padding", 0, IntCodec)
     /** Extra room at the dock's two ends, in dp. */
@@ -275,6 +295,10 @@ object S {
     val iconGradient = Setting("look.iconGradient", GradientDirection.DIAGONAL, EnumCodec(GradientDirection.entries.toTypedArray()))
     /** A lit rim around each icon, like the dock's. */
     val iconEdge = Setting("look.iconEdge", DockEdge.NONE, EnumCodec(DockEdge.entries.toTypedArray()))
+    /** A line around each icon, along its shape. Width in dp at normal icon size. */
+    val iconStroke = Setting("look.iconStroke", StrokeStyle.NONE, EnumCodec(StrokeStyle.entries.toTypedArray()))
+    val iconStrokeColor = Setting("look.iconStrokeColor", 0xE6FFFFFF.toInt(), IntCodec)
+    val iconStrokeWidth = Setting("look.iconStrokeWidth", 2f, FloatCodec)
     /** A shadow under each icon. */
     val iconShadow = Setting("look.iconShadow", IconShadow.NONE, EnumCodec(IconShadow.entries.toTypedArray()))
     /** Cut every icon to the shape, even ones from an icon pack. */
