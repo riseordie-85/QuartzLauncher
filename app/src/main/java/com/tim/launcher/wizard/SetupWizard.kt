@@ -285,7 +285,8 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
             if (step != Step.DONE && step != Step.WELCOME) {
                 GhostButton("Skip setup") {
                     // Before any answers, skipping means "recommended"; after, it keeps what you've picked
-                    if (index <= steps.indexOf(Step.PATH)) applyRecommended(store, type)
+                    // (A theme you already picked stays as it is)
+                    if (index <= steps.indexOf(Step.PATH) && path != Path.THEME) applyRecommended(store, type)
                     goTo(Step.DONE)
                 }
             }

@@ -3,6 +3,7 @@ package com.tim.launcher.settings
 import android.content.Context
 import com.tim.launcher.IconRender
 import com.tim.launcher.WidgetKind
+import com.tim.launcher.wallpaper.FoldMode
 import com.tim.launcher.wallpaper.GradientStyle
 import com.tim.launcher.wallpaper.PatternAnchor
 import com.tim.launcher.wallpaper.PatternStyle
@@ -247,6 +248,10 @@ object HomeThemes {
         IconPresets.pick(draft, theme.icons)
         val current = WallStore.load(context, WallSlot.MAIN)
         WallStore.save(context, WallSlot.MAIN, applyPreset(current, theme.wallConfig))
+        // A fold with its own cover wallpaper gets the theme's there too
+        if (WallStore.mode(context) == FoldMode.SEPARATE) {
+            WallStore.save(context, WallSlot.COVER, applyPreset(WallStore.load(context, WallSlot.COVER), theme.wallConfig))
+        }
         store.set(S.widgets, value = theme.widget.name)
         store.set(S.widgetColor, value = theme.cards)
         store.set(S.widgetAccent, value = theme.accent)

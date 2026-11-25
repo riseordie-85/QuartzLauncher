@@ -172,7 +172,23 @@ private fun ThemeCard(theme: HomeTheme, w: Dp, h: Dp, apps: List<AppEntry>, curr
     val style = DockStyle.of(theme.dock.look)
     val panel = Color(theme.dock.look.get(S.panelColor)).copy(alpha = theme.dock.look.get(S.panelOpacity).coerceIn(0.05f, 1f))
     val look = HomeLook(panel = panel, dock = style, onPanel = Ink.on(Ink.brightness(panel, wall?.brightness ?: 0.3f)))
-    val homeSpec = remember(theme) { IconRender.specFor(theme.icons.look, IconSlot.HOME) }
+    // The theme's icons with your icon pack, which picking a theme keeps
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val store = remember { com.tim.launcher.settings.SettingsStore.get(context) }
+    val pack = store[S.iconPackHome]
+    val force = store[S.iconForceShape]
+    val homeSpec = remember(theme, pack, force) {
+        val values = object : IconRender.Values {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T> get(setting: com.tim.launcher.settings.Setting<T>): T = when (setting) {
+                S.iconPackHome -> pack as T
+                S.iconForceShape -> force as T
+                else -> theme.icons.look.get(setting)
+            }
+            override fun <T> place(own: com.tim.launcher.settings.Setting<T>?, home: com.tim.launcher.settings.Setting<T>): T = get(home)
+        }
+        IconRender.specFor(values, IconSlot.HOME)
+    }
     val shape = RoundedCornerShape(22.dp)
     // Sizes from the narrower of the card's width and a phone-shaped share of its height, so a wide tablet card
     // doesn't get giant icons

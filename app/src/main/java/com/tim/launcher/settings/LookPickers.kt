@@ -81,9 +81,10 @@ private object Scenes {
 @Composable
 internal fun SceneBox(modifier: Modifier, content: @Composable BoxScope.() -> Unit) {
     var at by remember { mutableStateOf<Pair<Offset, IntSize>?>(null) }
-    val size = at?.second
-    val scene by produceState<Pair<Bitmap, Bitmap>?>(null, size) {
-        val sz = size ?: return@produceState
+    // (Not named "size": that would hide the draw scope's own size in drawBehind below)
+    val boxSize = at?.second
+    val scene by produceState<Pair<Bitmap, Bitmap>?>(null, boxSize) {
+        val sz = boxSize ?: return@produceState
         // A third of full size is plenty for a picture that's mostly behind glass
         value = withContext(Dispatchers.Default) { Scenes.get((sz.width / 3).coerceAtLeast(1), (sz.height / 3).coerceAtLeast(1)) }
     }
