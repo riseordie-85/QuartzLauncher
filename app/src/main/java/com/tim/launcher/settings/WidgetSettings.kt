@@ -266,6 +266,11 @@ fun WeatherControls(store: SettingsStore) {
             Segmented(store[S.weatherUnits], TempUnit.entries, { it.label }) { store.set(S.weatherUnits, value = it) }
         }
         RowDivider()
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+            Text("Icons", color = Q.Text, fontSize = 16.sp, modifier = Modifier.padding(bottom = 10.dp))
+            Segmented(store[S.weatherIcons], WeatherIconStyle.entries, { it.label }) { store.set(S.weatherIcons, value = it) }
+        }
+        RowDivider()
         val now = Weather.now
         SettingRow(
             now?.let { "${it.place}: ${it.condition.lowercase()}, ${Weather.format(it.tempC, store[S.weatherUnits])}" } ?: "No weather yet",

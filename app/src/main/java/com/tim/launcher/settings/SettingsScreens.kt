@@ -1110,7 +1110,7 @@ fun AboutSettings(ctx: SettingsContext) {
         }
         SectionLabel("Thanks to")
         GlassPanel {
-            SettingRow("Meteocons", "Animated weather icons by Bas Milius (MIT license)")
+            SettingRow("Meteocons", "Animated weather icons (fill, flat, line and mono) by Bas Milius (MIT license)")
             RowDivider()
             SettingRow("Open-Meteo", "Weather data (CC BY 4.0), free and without tracking")
             RowDivider()

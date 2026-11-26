@@ -149,6 +149,11 @@ enum class RowDirection(val label: String) { HORIZONTAL("Sideways"), VERTICAL("U
 enum class WeatherSource(val label: String) { CITY("A city you choose"), DEVICE("This phone's location") }
 enum class TempUnit(val label: String) { F("°F"), C("°C") }
 
+/** The four Meteocons styles: full color with depth, flat color, colored outlines, or one color (the widget's text). */
+enum class WeatherIconStyle(val label: String, val folder: String) {
+    FILL("Fill", "fill"), FLAT("Flat", "flat"), LINE("Line", "line"), MONOCHROME("Mono", "monochrome"),
+}
+
 enum class GestureAction(val label: String) {
     NONE("Nothing"),
     APP_DRAWER("Open apps"),
@@ -355,6 +360,7 @@ object S {
     val widgetColor = Setting("widget.color", 0xFFBF5AA6.toInt(), IntCodec)
     /** The clock's date and the buttons on the tips card: their own color, apart from the flip cards. */
     val widgetAccent = Setting("widget.accent", 0xFFBF5AA6.toInt(), IntCodec)
+    val weatherIcons = Setting("widget.weatherIcons", WeatherIconStyle.FILL, EnumCodec(WeatherIconStyle.entries.toTypedArray()))
 
     // Fonts (see Fonts for what an id can be)
     val fontHome = Setting("font.home", "system", StringCodec)

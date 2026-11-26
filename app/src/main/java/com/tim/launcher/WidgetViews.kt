@@ -38,6 +38,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -274,14 +275,32 @@ private fun WeatherRow(
  */
 val LocalWidgetsPaused = compositionLocalOf { false }
 
-/** A Meteocons weather icon, playing while the home screen is showing (still when [motion] is off). */
+/**
+ * A Meteocons weather icon in the style picked in Settings › Widgets, playing while the home screen is showing
+ * (still when [motion] is off). The one-color style takes the widget's text color, so it reads on any panel.
+ */
 @Composable
 fun WeatherIcon(name: String, motion: Boolean, modifier: Modifier) {
-    val composition by rememberLottieComposition(LottieCompositionSpec.Asset("weather/$name.json"))
+    val context = LocalContext.current
+    val store = remember { SettingsStore.get(context) }
+    val style = store[S.weatherIcons]
+    val composition by rememberLottieComposition(LottieCompositionSpec.Asset("weather/${style.folder}/$name.json"))
+    val ink = LocalHomeLook.current.onPanel
+    val tint = if (style == com.tim.launcher.settings.WeatherIconStyle.MONOCHROME) {
+        com.airbnb.lottie.compose.rememberLottieDynamicProperties(
+            com.airbnb.lottie.compose.rememberLottieDynamicProperty(
+                com.airbnb.lottie.LottieProperty.COLOR_FILTER,
+                android.graphics.PorterDuffColorFilter(ink.toArgb(), android.graphics.PorterDuff.Mode.SRC_ATOP),
+                "**",
+            ),
+        )
+    } else {
+        null
+    }
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val playing = motion && lifecycle.isAtLeast(Lifecycle.State.RESUMED) && !LocalWidgetsPaused.current
     val progress by animateLottieCompositionAsState(composition, iterations = LottieConstants.IterateForever, isPlaying = playing)
-    LottieAnimation(composition, { if (motion) progress else 0.25f }, modifier)
+    LottieAnimation(composition, { if (motion) progress else 0.25f }, modifier, dynamicProperties = tint)
 }
 
 /**

@@ -28,7 +28,7 @@ object ThemeFile {
     private val placeKeys: List<Setting<*>> = S.iconsDock.look + S.iconsDrawer.look
 
     /** Everything a theme carries, apart from [placeKeys] and the wallpaper. */
-    private val keys: List<Setting<*>> = (DockPresets.keys + IconPresets.keys + listOf(S.iconsMatch, S.widgetColor, S.widgetAccent, S.badgeStyle) + fontKeys).distinct()
+    private val keys: List<Setting<*>> = (DockPresets.keys + IconPresets.keys + listOf(S.iconsMatch, S.widgetColor, S.widgetAccent, S.weatherIcons, S.badgeStyle) + fontKeys).distinct()
 
     private val fontKeys: List<Setting<String>> get() = listOf(S.fontHome, S.fontDock, S.fontDrawer, S.fontWidgets)
 
