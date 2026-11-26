@@ -811,7 +811,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
 
         // Covered by the drawer or the page overview: the widgets underneath hold still
         CompositionLocalProvider(LocalWidgetsPaused provides (drawerOpen || overviewOpen), LocalDockHidden provides liftDock) {
-            HomeLayout(screen, vm, drag, showHint = !hintSeen)
+            HomeLayout(screen, vm, drag, showHint = false)
         }
 
         AnimatedVisibility(

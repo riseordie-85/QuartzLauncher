@@ -310,8 +310,8 @@ fun HomeSettings(ctx: SettingsContext) {
             GlassPanel {
                 SettingRow(
                     "Rotate the home screen",
-                    if (ctx.type == DeviceType.FOLDABLE) "The cover screen stays upright when off. The unfolded screen always rotates (Android requires it) and reflows your apps."
-                    else "Stays upright when off. When on, your grid flips sideways in landscape.",
+                    if (ctx.type == DeviceType.FOLDABLE) "The cover screen stays upright when off. The unfolded screen always rotates (Android requires it); turned upright it shows one page at a time with the same grid."
+                    else "Stays upright when off. When on, your grid keeps its columns and rows sideways, so nothing moves.",
                 ) { Toggle(store[S.rotateHome]) { store.set(S.rotateHome, value = it) } }
             }
         }

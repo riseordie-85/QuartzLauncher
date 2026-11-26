@@ -79,10 +79,10 @@ import kotlinx.coroutines.flow.drop
 /*
  * The layout engine. Every screen is the same frame: your pages, the page dots, and the dock on whichever edge
  * you chose. What changes per screen is how pages are shown:
- *  - phone, cover screen, tablet: one page at a time; if the screen's shape doesn't match the grid's shape
- *    (a tablet held upright, a phone allowed to rotate), the grid flips, iPad style, keeping every slot.
+ *  - phone, cover screen, tablet: one page at a time, the same columns and rows whichever way it's held (the
+ *    cells just change shape), so everything stays where you put it and can be moved as usual.
  *  - unfolded: your pages as one strip, two neighbors at a time, split at the hinge.
- *  - unfolded and rotated: one page, reflowed into a grid sized for the tall screen.
+ *  - unfolded and turned upright: one page at a time, with the same columns and rows as each page of the strip.
  */
 
 private const val HINGE_GAP_DP = 24
@@ -111,7 +111,7 @@ fun HomeLayout(screen: ScreenState, vm: HomeViewModel, drag: DragController, sho
                     val half = if (sideDock) (maxWidth - HINGE_GAP_DP.dp) / 2 else halfWidth(screen, maxWidth)
                     StripPages(screen, vm, drag, half)
                 }
-                unfolded -> ReflowPages(screen, vm, drag)
+                // Turned upright: one page at a time, same grid
                 else -> SinglePages(screen, vm, drag)
             }
         }
@@ -412,7 +412,7 @@ private fun DrawerButton() {
  * nothing moves when you turn it back.
  */
 @Composable
-private fun SinglePages(screen: ScreenState, vm: HomeViewModel, drag: DragController, allowFlip: Boolean = true) {
+private fun SinglePages(screen: ScreenState, vm: HomeViewModel, drag: DragController, allowFlip: Boolean = false) {
     SideEffect { drag.reflow = false }
     val landscapeScreen = screen.widthDp > screen.heightDp
     val landscapeGrid = vm.cols > vm.rows
