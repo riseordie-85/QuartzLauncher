@@ -281,14 +281,14 @@ object WeatherText {
             code = c.optInt("weather_code", 0),
             day = c.optInt("is_day", 1) == 1,
             humidity = c.optInt("relative_humidity_2m", 0),
-            dewC = c.optDouble("dew_point_2m", 0.0),
+            dewC = now(c, h, startIndex, "dew_point_2m"),
             windKmh = c.optDouble("wind_speed_10m", 0.0),
             windDeg = c.optDouble("wind_direction_10m", 0.0),
             gustKmh = c.optDouble("wind_gusts_10m", 0.0),
             pressureHpa = c.optDouble("pressure_msl", 0.0),
             pressureTrend = trend,
-            visibilityM = c.optDouble("visibility", 0.0),
-            uv = c.optDouble("uv_index", 0.0),
+            visibilityM = now(c, h, startIndex, "visibility"),
+            uv = now(c, h, startIndex, "uv_index"),
             hours = hours,
             days = days,
             quarters = quarters,
@@ -297,6 +297,13 @@ object WeatherText {
             alerts = warnings,
             source = source,
         )
+    }
+
+    /** A value now: from "current" when it's there, else from this hour (the plainer request has it there). */
+    private fun now(c: JSONObject, h: JSONObject, index: Int, name: String): Double {
+        if (c.has(name) && !c.isNull(name)) return c.optDouble(name, 0.0)
+        val a = h.optJSONArray(name) ?: return 0.0
+        return if (index < a.length() && !a.isNull(index)) a.optDouble(index, 0.0) else 0.0
     }
 
     private fun parseIso(s: String): Long = runCatching { java.time.OffsetDateTime.parse(s).toInstant().toEpochMilli() }.getOrDefault(0L)

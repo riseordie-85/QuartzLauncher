@@ -125,8 +125,8 @@ object Weather {
         val all = JSONObject()
         // Only places still in use: you, and the places you've saved
         val keep = setOf(ME) + WeatherPlaces.list.map { it.key }
-        raw.keys.retainAll(keep)
-        reports.keys.retainAll(keep)
+        raw.keys.filter { it !in keep }.forEach { raw.remove(it) }
+        reports.keys.filter { it !in keep }.forEach { reports.remove(it) }
         raw.forEach { (k, v) -> all.put(k, v) }
         runCatching { reportsFile(context).writeText(all.toString()) }
     }
@@ -175,17 +175,28 @@ object Weather {
      */
     private fun fetchReport(context: Context, key: String, name: String, lat: Double, lon: Double, source: String, country: String): WeatherReport {
         val at = System.currentTimeMillis()
-        val forecast = JSONObject(
-            get(
-                "https://api.open-meteo.com/v1/forecast?latitude=${fmt(lat)}&longitude=${fmt(lon)}" +
-                    "&current=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,weather_code,is_day," +
-                    "wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl,visibility,uv_index" +
-                    "&hourly=temperature_2m,weather_code,is_day,precipitation_probability,pressure_msl" +
-                    "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max" +
-                    "&minutely_15=precipitation&forecast_minutely_15=8" +
-                    "&past_hours=3&forecast_hours=24&forecast_days=7&timezone=auto&timeformat=unixtime",
-            ),
-        )
+        val base = "https://api.open-meteo.com/v1/forecast?latitude=${fmt(lat)}&longitude=${fmt(lon)}" +
+            "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max" +
+            "&timezone=auto&timeformat=unixtime"
+        // Everything, the quarter hours and a trimmed set of hours included
+        val full = base +
+            "&current=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,weather_code,is_day," +
+            "wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl,visibility,uv_index" +
+            "&hourly=temperature_2m,weather_code,is_day,precipitation_probability,pressure_msl" +
+            "&minutely_15=precipitation&forecast_minutely_15=8" +
+            "&past_hours=3&forecast_hours=24&forecast_days=7"
+        // The plainest way to ask for the same (the extras taken from the hours instead), if the first is turned down
+        val plain = base +
+            "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,is_day," +
+            "wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl" +
+            "&hourly=temperature_2m,weather_code,is_day,precipitation_probability,pressure_msl,dew_point_2m,visibility,uv_index" +
+            "&forecast_days=7"
+        val forecast = try {
+            JSONObject(get(full)).also { WeatherText.parse(key, name, lat, lon, at, source, it, null, null) }
+        } catch (e: Exception) {
+            Diag.log("Weather: the full forecast didn't work (${e.javaClass.simpleName} ${e.message}); asking plainly")
+            JSONObject(get(plain))
+        }
         val air = runCatching {
             JSONObject(get("https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${fmt(lat)}&longitude=${fmt(lon)}&current=us_aqi,pm2_5"))
         }.getOrNull()
@@ -286,7 +297,7 @@ object Weather {
             } catch (e: CancellationException) {
                 throw e // replaced by a newer request: not a failure
             } catch (e: Exception) {
-                problem = "Couldn't reach the weather service. It'll try again soon."
+                problem = "Couldn't get the weather just now (${e.message?.take(80) ?: e.javaClass.simpleName}). It'll try again soon."
                 Diag.log("Weather: ${e.javaClass.simpleName} ${e.message}")
             } finally {
                 // A request dropped for a newer one finishes late; it mustn't say the newer one is done
@@ -414,7 +425,12 @@ object Weather {
             conn.setRequestProperty("User-Agent", "QuartzLauncher")
             headers.forEach { (k, v) -> conn.setRequestProperty(k, v) }
             val code = conn.responseCode
-            if (code !in 200..299) error("HTTP $code")
+            if (code !in 200..299) {
+                // Open-Meteo says why in its answer ("reason")
+                val why = runCatching { conn.errorStream?.bufferedReader()?.use { it.readText() } }.getOrNull()
+                    ?.let { runCatching { JSONObject(it).optString("reason") }.getOrNull() ?: it.take(200) }
+                error("HTTP $code${if (why.isNullOrBlank()) "" else ": $why"}")
+            }
             return conn.inputStream.bufferedReader().use { it.readText() }
         } finally {
             conn.disconnect()
