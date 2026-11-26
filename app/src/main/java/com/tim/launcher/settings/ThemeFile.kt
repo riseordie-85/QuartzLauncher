@@ -9,8 +9,8 @@ import com.tim.launcher.wallpaper.WallStore
 import org.json.JSONObject
 
 /**
- * A theme file: just the look (the dock, the icons everywhere, the wallpaper with its photo, widget colors and badge
- * style), with none of your layout, apps or other settings. For keeping a look, sharing one, or loading one someone
+ * A theme file: just the look (the dock, the icons everywhere, the wallpaper with its photo, fonts (with any you
+ * added), widget colors and badge style), with none of your layout, apps or other settings. For keeping a look, sharing one, or loading one someone
  * made. Plain JSON, so it can be read and written by hand too.
  *
  * ```
@@ -28,7 +28,9 @@ object ThemeFile {
     private val placeKeys: List<Setting<*>> = S.iconsDock.look + S.iconsDrawer.look
 
     /** Everything a theme carries, apart from [placeKeys] and the wallpaper. */
-    private val keys: List<Setting<*>> = (DockPresets.keys + IconPresets.keys + listOf(S.iconsMatch, S.widgetColor, S.widgetAccent, S.badgeStyle)).distinct()
+    private val keys: List<Setting<*>> = (DockPresets.keys + IconPresets.keys + listOf(S.iconsMatch, S.widgetColor, S.widgetAccent, S.badgeStyle) + fontKeys).distinct()
+
+    private val fontKeys: List<Setting<String>> get() = listOf(S.fontHome, S.fontDock, S.fontDrawer, S.fontWidgets)
 
     private val byId by lazy { (keys + placeKeys).associateBy { it.id } }
 
@@ -57,6 +59,14 @@ object ThemeFile {
             wallpaper.put("mode", FoldMode.SEPARATE.id)
         }
 
+        // Fonts you added travel with the theme (a font from this phone or Android is named, not carried)
+        val fonts = JSONObject()
+        fontKeys.map { store[it] }.distinct().forEach { id ->
+            com.tim.launcher.Fonts.importedFiles(context, id).forEach { f ->
+                if (!fonts.has(f.name)) fonts.put(f.name, Base64.encodeToString(f.readBytes(), Base64.NO_WRAP))
+            }
+        }
+
         return JSONObject().apply {
             put("format", FORMAT)
             put("version", VERSION)
@@ -64,6 +74,7 @@ object ThemeFile {
             put("settings", settings)
             put("wallpaper", wallpaper)
             if (images.length() > 0) put("images", images)
+            if (fonts.length() > 0) put("fonts", fonts)
         }.toString(2)
     }
 
@@ -85,6 +96,10 @@ object ThemeFile {
         val json = JSONObject(text)
         val store = SettingsStore.get(context)
         val settings = json.optJSONObject("settings") ?: JSONObject()
+        // Its fonts first, so the settings that name them find them
+        json.optJSONObject("fonts")?.let { fonts ->
+            fonts.keys().forEach { file -> runCatching { com.tim.launcher.Fonts.addFile(context, file, Base64.decode(fonts.getString(file), Base64.DEFAULT)) } }
+        }
 
         (keys + placeKeys).forEach { s ->
             val raw = settings.optString(s.id, "")

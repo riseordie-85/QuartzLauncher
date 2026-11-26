@@ -33,6 +33,7 @@ import androidx.compose.material.icons.rounded.Dock
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Swipe
 import androidx.compose.material3.AlertDialog
@@ -203,6 +204,8 @@ fun MainSettings(ctx: SettingsContext) {
             NavRow("Wallpaper", "Gradients, colors, photos, patterns", Icons.Rounded.Wallpaper) { ctx.go(Route.WALLPAPER) }
             RowDivider()
             NavRow("Appearance", "Icons, badges, widgets", Icons.Rounded.Palette) { ctx.go(Route.APPEARANCE) }
+            RowDivider()
+            NavRow("Fonts", "Home screen, dock, app drawer, widgets", Icons.Rounded.TextFields) { ctx.go(Route.FONTS) }
             RowDivider()
             NavRow("Gestures", "What each swipe and tap does", Icons.Rounded.Swipe) { ctx.go(Route.GESTURES) }
         }
@@ -1011,7 +1014,7 @@ fun PrivacySettings(ctx: SettingsContext) {
 
         SectionLabel("Themes")
         GlassPanel {
-            SettingRow("Export theme", "Just the look: dock, icons, wallpaper (with its photo), widget colors and badges. No apps or layout.", onClick = {
+            SettingRow("Export theme", "Just the look: dock, icons, wallpaper (with its photo), fonts, widget colors and badges. No apps or layout.", onClick = {
                 themeName = ""
                 naming = true
             })
@@ -1044,7 +1047,7 @@ fun PrivacySettings(ctx: SettingsContext) {
         AlertDialog(
             onDismissRequest = { incoming = null },
             title = { Text("Use \"$name\"?") },
-            text = { Text("Your dock, icons, wallpaper, widget colors and badges change to this theme's. To keep your current look, export it as a theme first.") },
+            text = { Text("Your dock, icons, wallpaper, fonts, widget colors and badges change to this theme's. To keep your current look, export it as a theme first.") },
             confirmButton = {
                 TextButton(onClick = {
                     incoming = null

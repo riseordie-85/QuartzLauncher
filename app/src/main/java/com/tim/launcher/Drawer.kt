@@ -975,7 +975,7 @@ private fun DrawerItem(
         ) {
             StyledIcon(app, 40.dp)
             Spacer(Modifier.width(14.dp))
-            Text(app.label, color = LocalLabelColor.current, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(app.label, color = LocalLabelColor.current, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontFamily = labelFont())
         }
     } else {
         Box(gestures.fillMaxWidth().padding(vertical = 10.dp), contentAlignment = Alignment.Center) {

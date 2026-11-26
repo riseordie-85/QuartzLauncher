@@ -355,6 +355,13 @@ object S {
     val widgetColor = Setting("widget.color", 0xFFBF5AA6.toInt(), IntCodec)
     /** The clock's date and the buttons on the tips card: their own color, apart from the flip cards. */
     val widgetAccent = Setting("widget.accent", 0xFFBF5AA6.toInt(), IntCodec)
+
+    // Fonts (see Fonts for what an id can be)
+    val fontHome = Setting("font.home", "system", StringCodec)
+    /** "home" follows the home screen's font. */
+    val fontDock = Setting("font.dock", "home", StringCodec)
+    val fontDrawer = Setting("font.drawer", "home", StringCodec)
+    val fontWidgets = Setting("font.widgets", "outfit", StringCodec)
     /** Flip cards turning over, and animated weather icons. Off: they change in place and the icons stay still. */
     val widgetMotion = Setting("widget.motion", true, BoolCodec)
     val weatherSource = Setting("weather.source", WeatherSource.CITY, EnumCodec(WeatherSource.entries.toTypedArray()))

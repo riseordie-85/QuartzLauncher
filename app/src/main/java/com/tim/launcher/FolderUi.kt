@@ -187,6 +187,7 @@ fun FolderIconView(folder: Folder, vm: HomeViewModel, size: Dp, showLabel: Boole
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
                 style = labelStyle(labelColor),
+                fontFamily = labelFont(),
                 modifier = Modifier.padding(top = 4.dp).width(size * 1.6f),
             )
         }
@@ -753,7 +754,7 @@ private fun FolderItem(
             Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 StyledIcon(app, 40.dp)
                 Spacer(Modifier.width(14.dp))
-                Text(app.label, color = LocalLabelColor.current, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(app.label, color = LocalLabelColor.current, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontFamily = labelFont())
             }
         } else {
             AppIcon(app, 52.dp, showLabel = labels)

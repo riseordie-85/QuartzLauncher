@@ -1387,6 +1387,7 @@ fun AppIcon(app: AppEntry, size: Dp, showLabel: Boolean, modifier: Modifier = Mo
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
                 style = labelStyle(color),
+                fontFamily = labelFont(),
                 modifier = Modifier.padding(top = 4.dp).widthIn(max = size * 1.6f),
             )
         }

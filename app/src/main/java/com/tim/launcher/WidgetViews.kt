@@ -26,6 +26,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -119,10 +120,14 @@ fun WidgetView(
     /** Card and accent colors to show instead of the saved ones (a theme's preview). */
     cardColor: Color? = null,
     accentColor: Color? = null,
+    /** A font to show instead of the saved one (a theme's preview), as a Fonts id. */
+    fontId: String? = null,
 ) {
     val context = LocalContext.current
     val store = remember { SettingsStore.get(context) }
     remember { Weather.loadCache(context); true }
+    val font = fontId ?: store[S.fontWidgets]
+    val family = remember(font, Fonts.version) { Fonts.family(context, font) }
     val now = rememberNow()
     val ink = LocalHomeLook.current.onPanel
     val cards = cardColor ?: Color(store[S.widgetColor])
@@ -139,7 +144,7 @@ fun WidgetView(
 
     // Laid out left to right in every language: `at` places by absolute x, and in a right-to-left layout the Box
     // would put each zero-size `at` child at its right edge, pushing everything out of the widget
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr, LocalWidgetFont provides family) {
     BoxWithConstraints(modifier) {
         val w = maxWidth
         val h = maxHeight
@@ -412,7 +417,7 @@ private fun TipsCard(w: Dp, h: Dp, ink: Color, accent: Color, live: Boolean) {
             color = ink.copy(alpha = ink.alpha * 0.8f),
             fontSize = with(LocalDensity.current) { (base * 0.085f).toSp() },
             lineHeight = with(LocalDensity.current) { (base * 0.11f).toSp() },
-            fontFamily = Outfit,
+            fontFamily = LocalWidgetFont.current,
             fontWeight = FontWeight.Light,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
@@ -459,13 +464,20 @@ private fun WText(
     modifier: Modifier = Modifier,
     align: TextAlign? = null,
 ) {
-    val sp = with(LocalDensity.current) { size.toSp() }
+    val font = LocalWidgetFont.current
+    // A wider font than Outfit (which the sizes were set for) shrinks until it fits
+    var shrink by remember(text, font, size) { mutableFloatStateOf(1f) }
+    val sp = with(LocalDensity.current) { (size * shrink).toSp() }
     Text(
         text,
         modifier,
+        onTextLayout = { r ->
+            val cut = r.hasVisualOverflow || (r.lineCount > 0 && r.isLineEllipsized(0))
+            if (cut && shrink > 0.5f) shrink *= 0.92f
+        },
         color = color,
         fontSize = sp,
-        fontFamily = Outfit,
+        fontFamily = font,
         fontWeight = weight,
         maxLines = 1,
         softWrap = false,
