@@ -505,11 +505,12 @@ internal fun WText(
         lineHeight = sp * line,
         style = TextStyle(
             platformStyle = PlatformTextStyle(includeFontPadding = false),
-            // Close-set lines are trimmed top and bottom, so the letters themselves sit where they're placed
+            // Close-set lines take their height from the line height, cut evenly above and below the letters, so
+            // stacked words sit close. (Not trimmed: on a single line, trimming both ends would undo the line height.)
             lineHeightStyle = if (line < 1f) {
                 androidx.compose.ui.text.style.LineHeightStyle(
                     androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center,
-                    androidx.compose.ui.text.style.LineHeightStyle.Trim.Both,
+                    androidx.compose.ui.text.style.LineHeightStyle.Trim.None,
                 )
             } else {
                 null

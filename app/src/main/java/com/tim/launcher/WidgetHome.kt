@@ -576,7 +576,14 @@ private fun widgetTap(context: Context, widget: HomeWidget) {
     if (kind in WidgetKind.dates) {
         runCatching {
             context.startActivity(Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_CALENDAR).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        }.onFailure { Diag.log("No calendar app to open: ${it.message}") }
+        }.recoverCatching {
+            // No app says it's "the calendar": ask for today in whichever app shows calendars
+            val today = android.provider.CalendarContract.CONTENT_URI.buildUpon().appendPath("time").appendPath(System.currentTimeMillis().toString()).build()
+            context.startActivity(Intent(Intent.ACTION_VIEW, today).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }.onFailure {
+            Diag.log("No calendar app to open: ${it.message}")
+            Toast.makeText(context, "No calendar app found. Long-press the widget to pick an app for it.", Toast.LENGTH_SHORT).show()
+        }
         return
     }
     if (kind.weather && Weather.now == null) {
@@ -759,6 +766,8 @@ internal fun WidgetMenu(
                 .clip(RoundedCornerShape(24.dp))
                 .background(Color(0xF0221F2E))
                 .pointerInput(Unit) { detectTapGestures { } }
+                // With both lists open it can be taller than a short screen; this keeps Remove in reach
+                .verticalScroll(rememberScrollState())
                 .padding(vertical = 8.dp),
         ) {
             Text(

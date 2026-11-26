@@ -40,7 +40,7 @@ import kotlin.math.abs
 internal fun DateWidget(kind: WidgetKind, now: Long, w: Dp, h: Dp, ink: Color, paper: Color, accent: Color) {
     val panel = LocalHomeLook.current.panel.copy(alpha = 1f)
     val onPaper = if (abs(panel.luminance() - paper.luminance()) > 0.35f) panel else inkOn(paper)
-    val d = DateParts(now)
+    val d = androidx.compose.runtime.remember(now) { DateParts(now) }
     // A plan's units in dp, for this widget's size
     fun plan(pw: Float, ph: Float): (Float) -> Dp {
         val s = minOf(w.value / pw, h.value / ph)
@@ -122,7 +122,7 @@ internal fun DateWidget(kind: WidgetKind, now: Long, w: Dp, h: Dp, ink: Color, p
                                         if (date != null) {
                                             val text = "%02d".format(date)
                                             if (date == d.dayOfMonth) {
-                                                Box(Modifier.size(u(46f)).background(paper, CircleShape), contentAlignment = Alignment.Center) {
+                                                Box(Modifier.size(u(44f)).background(paper, CircleShape), contentAlignment = Alignment.Center) {
                                                     WText(text, u(30f), onPaper, bold)
                                                 }
                                             } else {
