@@ -410,6 +410,14 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
     val drag = remember { DragController() }
     SideEffect { drag.screenWidth = screen.widthPx.toFloat() }
     val store = remember { SettingsStore.get(activity).also { it.migrateDockShape() } }
+    // Changes made to a widget on its settings page
+    val widgetChanges = WidgetBus.changes.size
+    LaunchedEffect(widgetChanges) {
+        if (WidgetBus.changes.isEmpty()) return@LaunchedEffect
+        val pending = WidgetBus.changes.toList()
+        WidgetBus.changes.clear()
+        pending.forEach { (id, change) -> vm.updateWidget(id, change) }
+    }
     var drawerOpen by remember { mutableStateOf(false) }
     // Opened by the Search gesture: the drawer starts with the keyboard up
     var drawerSearch by remember { mutableStateOf(false) }
@@ -1018,10 +1026,6 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
                         AppWidgets.reconfigure(activity, widget.appWidgetId)
                     },
                     onGlass = { vm.setWidgetGlass(id, it) },
-                    apps = remember(vm.apps) { vm.apps.values.sortedBy { it.label.lowercase() } },
-                    onOpens = { vm.setWidgetOpens(id, it) },
-                    onPlace = { key, second -> vm.setWidgetPlace(id, key, second) },
-                    onBigIcon = { vm.setWidgetBigIcon(id, it) },
                 )
             }
         }

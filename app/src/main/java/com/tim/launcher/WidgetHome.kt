@@ -68,6 +68,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Palette
@@ -76,6 +77,7 @@ import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.ZoomOutMap
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -589,7 +591,7 @@ private fun widgetTap(context: Context, widget: HomeWidget) {
         return
     }
     // Your own weather isn't set up yet: where to set it up
-    if (kind.weather && widget.place.isEmpty() && Weather.now == null && Weather.reports[Weather.ME] == null) {
+    if (kind.weather && widget.place.isEmpty() && Weather.reports[Weather.ME] == null && Weather.needsSetup(context)) {
         SettingsActivity.open(context, route = Route.WIDGETS)
         return
     }
@@ -748,17 +750,9 @@ internal fun WidgetMenu(
     onDismiss: () -> Unit,
     onReconfigure: () -> Unit = {},
     onGlass: (Boolean) -> Unit = {},
-    /** Apps it can open when tapped, and picking one (see [HomeWidget.opens]). */
-    apps: List<AppEntry> = emptyList(),
-    onOpens: (String) -> Unit = {},
-    /** A weather widget's place (or second place) picked, and its big icon. */
-    onPlace: (key: String, second: Boolean) -> Unit = { _, _ -> },
-    onBigIcon: (Boolean) -> Unit = {},
 ) {
+    // The menu, or (after Style) every style as a picture
     var styles by remember { mutableStateOf(false) }
-    var opensOpen by remember { mutableStateOf(false) }
-    var placeOpen by remember { mutableStateOf<Boolean?>(null) } // which place list is open: first (false) or second (true)
-    val menuContext = LocalContext.current
     val context = LocalContext.current
     val appWidget = widget.kind == WidgetKind.ANDROID
     val info = remember(widget.appWidgetId) { if (appWidget) AppWidgets.info(context, widget.appWidgetId) else null }
@@ -767,139 +761,111 @@ internal fun WidgetMenu(
         Modifier
             .fillMaxSize()
             .background(Color(0x66000000))
-            .pointerInput(Unit) { detectTapGestures { onDismiss() } },
+            .pointerInput(Unit) { detectTapGestures { onDismiss() } }
+            .windowInsetsPadding(WindowInsets.systemBars),
         contentAlignment = Alignment.Center,
     ) {
+        if (styles) {
+            Column(
+                Modifier
+                    .widthIn(max = 560.dp)
+                    .fillMaxWidth(0.92f)
+                    .fillMaxHeight(0.85f)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(Color(0xF0221F2E))
+                    .pointerInput(Unit) { detectTapGestures { } }
+                    .padding(16.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.size(40.dp).clip(CircleShape).clickable { styles = false },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = Q.Text) }
+                    Text("Change style", color = Q.Text, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 6.dp))
+                }
+                Text(
+                    "It takes the new style's size if there's room, or keeps its own.",
+                    color = Q.TextDim,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(start = 6.dp, top = 2.dp, bottom = 12.dp),
+                )
+                WidgetGallery(WidgetKind.quartz.filter { it != WidgetKind.TIPS }, current = widget.kind, onPick = onKind)
+            }
+            return@Box
+        }
         Column(
             Modifier
-                .widthIn(max = 340.dp)
-                .fillMaxWidth(0.82f)
+                .widthIn(max = 360.dp)
+                .fillMaxWidth(0.86f)
                 .clip(RoundedCornerShape(24.dp))
                 .background(Color(0xF0221F2E))
                 .pointerInput(Unit) { detectTapGestures { } }
-                // With both lists open it can be taller than a short screen; this keeps Remove in reach
                 .verticalScroll(rememberScrollState())
-                .padding(vertical = 8.dp),
+                .padding(vertical = 12.dp),
         ) {
             Text(
                 title,
-                color = Q.TextDim,
-                fontSize = 13.sp,
-                modifier = Modifier.padding(start = 20.dp, top = 10.dp, bottom = 4.dp),
+                color = Q.Text,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
             )
             val (across, upDown) = if (appWidget) AppWidgets.resizable(info) else true to true
-            if (canResize && (across || upDown)) MenuRow("Resize", Icons.Rounded.AspectRatio, onClick = onResize)
+            // The main things, as a row of buttons
+            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp)) {
+                if (canResize && (across || upDown)) MenuButton("Resize", Icons.Rounded.AspectRatio, onClick = onResize)
+                if (appWidget) {
+                    if (AppWidgets.reconfigurable(info)) MenuButton("Its settings", Icons.Rounded.Settings, onClick = onReconfigure)
+                } else {
+                    MenuButton("Style", Icons.Rounded.Palette) { styles = true }
+                    if (widget.kind != WidgetKind.TIPS) MenuButton("Settings", Icons.Rounded.Settings, onClick = onSettings)
+                }
+                MenuButton("Remove", Icons.Rounded.DeleteOutline, color = Q.Danger, onClick = onRemove)
+            }
             if (appWidget) {
-                if (AppWidgets.reconfigurable(info)) MenuRow("Its settings", Icons.Rounded.Settings, onClick = onReconfigure)
                 Row(
                     Modifier
                         .fillMaxWidth()
+                        .padding(top = 6.dp)
                         .clickable { onGlass(!widget.glass) }
                         .padding(horizontal = 20.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Rounded.Palette, contentDescription = null, tint = Q.Text)
-                    Spacer(Modifier.width(16.dp))
                     Text("Glass behind it", color = Q.Text, fontSize = 16.sp, modifier = Modifier.weight(1f))
                     Toggle(widget.glass) { onGlass(it) }
                 }
-                MenuRow("Remove", Icons.Rounded.DeleteOutline, color = Q.Danger, onClick = onRemove)
-                return@Column
+            } else if (widget.kind != WidgetKind.TIPS) {
+                Text(
+                    if (widget.kind.weather) "Its place, big icon and what tapping it opens are in Settings." else "What tapping it opens is in Settings.",
+                    color = Q.TextFaint,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp),
+                )
             }
-            MenuRow("Change style", Icons.Rounded.Palette) { styles = !styles }
-            if (styles) {
-                // (Scrolls inside the menu now that there are many styles)
-                Column(Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState())) {
-                WidgetKind.quartz.filter { it != widget.kind && it != WidgetKind.TIPS }.forEach { kind ->
-                    Text(
-                        kind.label,
-                        color = Q.Text,
-                        fontSize = 15.sp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onKind(kind) }
-                            .padding(start = 60.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),
-                    )
-                }
-                }
-            }
-            if (widget.kind.weather) {
-                remember { com.tim.launcher.weather.WeatherPlaces.load(menuContext); true }
-                val saved = com.tim.launcher.weather.WeatherPlaces.list
-                fun title(key: String) = if (key.isEmpty()) "My weather" else saved.firstOrNull { it.key == key }?.title ?: "A place that's gone"
-                val dual = widget.kind in WidgetKind.duals
-                listOf(false to widget.place).let { if (dual) it + (true to widget.place2) else it }.forEach { (second, key) ->
-                    val label = if (dual) (if (second) "Second place" else "First place") else "Place"
-                    MenuRow("$label: ${if (second && key.isEmpty()) "Pick one" else title(key)}", Icons.Rounded.Place) {
-                        placeOpen = if (placeOpen == second) null else second
-                    }
-                    if (placeOpen == second) {
-                        Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
-                            if (!second) OpensChoice("My weather", null, key.isEmpty()) { onPlace("", false); placeOpen = null }
-                            saved.forEach { p -> OpensChoice(p.title, null, key == p.key) { onPlace(p.key, second); placeOpen = null } }
-                            OpensChoice("Add a place…", null, false) {
-                                placeOpen = null
-                                com.tim.launcher.weather.WeatherActivity.open(menuContext, key.ifEmpty { Weather.ME })
-                            }
-                        }
-                    }
-                }
-                if (widget.kind in WidgetKind.bigIcons) {
-                    MenuRow(if (widget.bigIcon) "Big icon: on" else "Big icon: off", Icons.Rounded.ZoomOutMap) { onBigIcon(!widget.bigIcon) }
-                }
-            }
-            if (widget.kind != WidgetKind.TIPS) {
-                val current = when (widget.opens) {
-                    "" -> usualTap(widget.kind)
-                    OPENS_NOTHING -> "Nothing"
-                    else -> apps.firstOrNull { it.key == widget.opens }?.label ?: "An app that's gone"
-                }
-                MenuRow("Tap opens: $current", Icons.Rounded.TouchApp) { opensOpen = !opensOpen }
-                if (opensOpen) {
-                    Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState())) {
-                        OpensChoice(usualTap(widget.kind), null, widget.opens == "") { onOpens("") }
-                        OpensChoice("Nothing", null, widget.opens == OPENS_NOTHING) { onOpens(OPENS_NOTHING) }
-                        apps.forEach { app -> OpensChoice(app.label, app.icon, widget.opens == app.key) { onOpens(app.key) } }
-                    }
-                }
-            }
-            MenuRow("Widget settings", Icons.Rounded.Settings, onClick = onSettings)
-            MenuRow("Remove", Icons.Rounded.DeleteOutline, color = Q.Danger, onClick = onRemove)
         }
     }
 }
 
-/** One app (or the usual, or nothing) a widget's tap can open. */
+/** A button in the widget menu's row: an icon over a word. */
 @Composable
-private fun OpensChoice(label: String, icon: ImageBitmap?, chosen: Boolean, onClick: () -> Unit) {
-    Row(
+private fun androidx.compose.foundation.layout.RowScope.MenuButton(
+    text: String,
+    icon: ImageVector,
+    color: Color = Q.Text,
+    onClick: () -> Unit,
+) {
+    Column(
         Modifier
-            .fillMaxWidth()
+            .weight(1f)
+            .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
-            .padding(start = 60.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (icon != null) {
-            Image(icon, contentDescription = null, modifier = Modifier.size(28.dp))
-            Spacer(Modifier.width(12.dp))
+        Box(Modifier.size(44.dp).clip(CircleShape).background(Q.Glass), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = color)
         }
-        Text(label, color = if (chosen) Q.Text else Q.TextDim, fontSize = 15.sp, maxLines = 1, modifier = Modifier.weight(1f))
-        if (chosen) Box(Modifier.size(10.dp).background(Q.Accent, CircleShape))
-    }
-}
-
-@Composable
-private fun MenuRow(text: String, icon: ImageVector, color: Color = Q.Text, onClick: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 15.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icon, contentDescription = null, tint = color)
-        Spacer(Modifier.width(16.dp))
-        Text(text, color = color, fontSize = 16.sp)
+        Text(text, color = color, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
     }
 }
 
@@ -923,10 +889,10 @@ internal fun WidgetPicker(
             Modifier
                 .widthIn(max = 560.dp)
                 .fillMaxWidth(0.92f)
+                .fillMaxHeight(0.9f)
                 .clip(RoundedCornerShape(28.dp))
                 .background(Color(0xF0221F2E))
                 .pointerInput(Unit) { detectTapGestures { } }
-                .verticalScroll(rememberScrollState())
                 .padding(20.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -940,36 +906,18 @@ internal fun WidgetPicker(
                 fontSize = 13.sp,
                 modifier = Modifier.padding(top = 6.dp),
             )
-            Text("Quartz", color = Q.TextDim, fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 18.dp))
-            WidgetKind.quartz.forEach { kind ->
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(top = 14.dp)
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(Color.White.copy(alpha = 0.06f))
-                        .clickable { onPick(kind) }
-                        .padding(14.dp),
-                ) {
-                    val ratio = when (kind) {
-                        WidgetKind.CLOCK -> 2.6f
-                        WidgetKind.FLIP -> 2.07f
-                        WidgetKind.FLIP_WEATHER -> 1.89f
-                        WidgetKind.ANDROID -> 2f
-                        WidgetKind.TIPS -> 2.4f
-                        WidgetKind.WEATHER -> 826f / 135f
-                        // The date widgets fill their cells (about half again as wide as tall)
-                        else -> kind.w * 1.5f / kind.h
+            WidgetGallery(
+                WidgetKind.quartz,
+                current = null,
+                modifier = Modifier.padding(top = 14.dp),
+                footer = {
+                    Column {
+                        Text("From your apps", color = Q.TextDim, fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 14.dp))
+                        AppWidgetList(onPickApp, sizeOf)
                     }
-                    // Room above for the parts that rise out of the card
-                    Spacer(Modifier.height(if (kind == WidgetKind.WEATHER) 14.dp else 4.dp))
-                    WidgetView(kind, Modifier.fillMaxWidth(if (kind in WidgetKind.dates || (kind.weather && kind.w < 4)) kind.w / 4f else 1f).aspectRatio(ratio), sample = true)
-                    Spacer(Modifier.height(if (kind.weather) 18.dp else 8.dp))
-                    Text(kind.label, color = Q.Text, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                    Text(kind.about, color = Q.TextDim, fontSize = 13.sp)
-                }
-            }
-            AppWidgetList(onPickApp, sizeOf)
+                },
+                onPick = onPick,
+            )
         }
     }
 }

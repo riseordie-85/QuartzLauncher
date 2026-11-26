@@ -8,6 +8,23 @@ import org.json.JSONObject
  * "widget:<id>" in the page's slot list, so icons flow around it and everything that moves pages and grids carries
  * it along. Its kind and size live here.
  */
+/** How the widget list is grouped. */
+enum class WidgetGroup(val label: String) {
+    CLOCKS("Clocks"), DATES("Dates"), WEATHER("Weather"), FORECASTS("Forecasts"), PLACES("Two places"), OTHER("Tips"),
+}
+
+/**
+ * Changes to a widget made away from the home screen (its settings page), for the home screen to apply. Same
+ * process, so a plain list of changes is enough.
+ */
+object WidgetBus {
+    val changes = androidx.compose.runtime.mutableStateListOf<Pair<String, (HomeWidget) -> HomeWidget>>()
+
+    fun change(id: String, change: (HomeWidget) -> HomeWidget) {
+        changes += id to change
+    }
+}
+
 enum class WidgetKind(
     val label: String,
     val about: String,
@@ -62,6 +79,17 @@ enum class WidgetKind(
     /** A widget from another app (Calendar, Gmail, a music player…), hosted by Quartz. Its sizes come from the app. */
     ANDROID("App widget", "A widget from one of your apps", 2, 2, 1, 1, false);
 
+    /** Which group it's listed under. */
+    val group: WidgetGroup
+        get() = when {
+            this == TIPS -> WidgetGroup.OTHER
+            this in duals -> WidgetGroup.PLACES
+            this in forecasts -> WidgetGroup.FORECASTS
+            weather -> WidgetGroup.WEATHER
+            this in dates -> WidgetGroup.DATES
+            else -> WidgetGroup.CLOCKS
+        }
+
     companion object {
         /** Quartz's own widgets, for pickers and "Change style". */
         val quartz: List<WidgetKind> get() = entries.filter { it != ANDROID }
@@ -88,6 +116,8 @@ enum class WidgetKind(
 
         /** Has weather icons that move. */
         val moving: Set<WidgetKind> get() = entries.filter { it.weather && it !in setOf(W_TEMP, W_HILO, W_WIND, W_DETAILS) }.toSet()
+
+        val forecasts: Set<WidgetKind> = setOf(W_HOURLY, W_FORECAST_ROW, W_FLIP_FORECAST, W_FORECAST)
 
         /** Weather widgets showing two places. */
         val duals: Set<WidgetKind> = setOf(W_DUAL, W_DUAL_TALL)

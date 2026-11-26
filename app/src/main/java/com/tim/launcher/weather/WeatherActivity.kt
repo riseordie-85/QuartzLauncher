@@ -184,16 +184,37 @@ private fun WeatherPage(startKey: String, onClose: () -> Unit) {
         ) {
             Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
                 if (report == null) {
-                    Box(Modifier.fillMaxWidth().height(240.dp), contentAlignment = Alignment.Center) {
+                    val unset = key == Weather.ME && Weather.needsSetup(context)
+                    Column(Modifier.fillMaxWidth().padding(vertical = 60.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             when {
+                                unset -> "Where's your weather for? Choose a city, or let Quartz use this phone's location."
                                 busy -> "Getting the weather…"
                                 key == Weather.ME && Weather.problem != null -> Weather.problem!!
-                                else -> "No weather yet. Tap update to try again."
+                                else -> "No weather yet."
                             },
                             color = Q.TextDim,
                             textAlign = TextAlign.Center,
                         )
+                        if (!busy) {
+                            Text(
+                                if (unset) "Set your location" else "Try again",
+                                color = Q.Text,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier
+                                    .padding(top = 16.dp)
+                                    .clip(CircleShape)
+                                    .background(Q.Accent)
+                                    .clickable {
+                                        if (unset) {
+                                            com.tim.launcher.settings.SettingsActivity.open(context, route = com.tim.launcher.settings.Route.WIDGETS)
+                                        } else {
+                                            Weather.refreshPlace(context, key, force = true)
+                                        }
+                                    }
+                                    .padding(horizontal = 22.dp, vertical = 12.dp),
+                            )
+                        }
                     }
                 } else {
                     Current(report, key, unit, h24, accent)

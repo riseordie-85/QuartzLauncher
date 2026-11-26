@@ -1277,6 +1277,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         save()
     }
 
+    /** Any change to a widget's own settings (made from its settings page, through [WidgetBus]). */
+    fun updateWidget(id: String, change: (HomeWidget) -> HomeWidget) {
+        val w = widgets[id] ?: return
+        widgets[id] = change(w)
+        save()
+    }
+
     /** What tapping a widget opens (see [HomeWidget.opens]). */
     fun setWidgetOpens(id: String, opens: String) {
         val w = widgets[id] ?: return
@@ -1430,14 +1437,20 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         // An app's widget is what it is; and a Quartz widget can't become one
         if (widget.kind == WidgetKind.ANDROID || kind == WidgetKind.ANDROID) return false
         val anchor = widgetSpot(id) ?: return false
-        val w = maxOf(widget.w, minOf(kind.minW, cols))
-        val h = maxOf(widget.h, minOf(kind.minH, rows))
-        val spot = clampWidgetSpot(id, anchor)?.let { a ->
-            // Clamp for the new size
-            val page = a / perPage
-            page * perPage + minOf((a % perPage) / cols, rows - h).coerceAtLeast(0) * cols + minOf((a % perPage) % cols, cols - w).coerceAtLeast(0)
-        } ?: return false
-        if ((w != widget.w || h != widget.h || spot != anchor) && !placeWidget(id, spot, w, h)) {
+        // Its own size first (a temperature is a 1 × 1, a forecast 4 × 3); if that doesn't fit, as big as it is now
+        // but no smaller than the new style allows
+        val natural = minOf(kind.w, cols) to minOf(kind.h, rows)
+        val kept = maxOf(widget.w, minOf(kind.minW, cols)) to maxOf(widget.h, minOf(kind.minH, rows))
+        fun tryAt(size: Pair<Int, Int>): Boolean {
+            val (w, h) = size
+            val spot = clampWidgetSpot(id, anchor)?.let { a ->
+                // Clamp for the new size
+                val page = a / perPage
+                page * perPage + minOf((a % perPage) / cols, rows - h).coerceAtLeast(0) * cols + minOf((a % perPage) % cols, cols - w).coerceAtLeast(0)
+            } ?: return false
+            return (w == widget.w && h == widget.h && spot == anchor) || placeWidget(id, spot, w, h)
+        }
+        if (!tryAt(natural) && (kept == natural || !tryAt(kept))) {
             say("Not enough room to make it a ${kind.label.lowercase()}")
             return false
         }

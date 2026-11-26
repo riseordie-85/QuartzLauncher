@@ -4,6 +4,12 @@ import android.Manifest
 import android.text.format.DateUtils
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -74,7 +80,13 @@ fun WidgetSettings(ctx: SettingsContext) {
     remember { Weather.loadCache(context); true }
     var colorOpen by remember { mutableStateOf<String?>(null) }
     // Opened from a widget: that one first in the preview, as it's set up (its place, big icon)
-    val mine = ctx.widget?.takeIf { it.kind != WidgetKind.ANDROID }
+    // The widget these settings were opened from, kept up to date as its own settings change here
+    var mine by remember { mutableStateOf(ctx.widget?.takeIf { it.kind != WidgetKind.ANDROID }) }
+    fun change(f: (com.tim.launcher.HomeWidget) -> com.tim.launcher.HomeWidget) {
+        val w = mine ?: return
+        mine = f(w)
+        com.tim.launcher.WidgetBus.change(w.id, f)
+    }
     var previewKind by remember { mutableStateOf(mine?.kind ?: WidgetKind.FLIP_WEATHER) }
     // Opened from a widget: only the settings that widget uses. From Settings: all of them
     val k = mine?.kind
@@ -91,7 +103,12 @@ fun WidgetSettings(ctx: SettingsContext) {
         WidgetPreview(store, previewKind, mine?.takeIf { it.kind == previewKind })
     }) {
         if (k != null) {
-            ScreenTitle(k.label, "Settings for this widget. They're shared by every widget that uses them.")
+            ScreenTitle(k.label)
+            mine?.let { w -> if (k != WidgetKind.TIPS) ThisWidget(w) { change(it) } }
+            BodyText(
+                "The rest are shared by every widget that uses them.",
+                Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp),
+            )
         } else {
             ScreenTitle("Widgets", "Clocks, dates and weather for your home screen")
             GlassPanel(Modifier.padding(top = 16.dp)) {
@@ -205,6 +222,93 @@ private fun shortName(kind: WidgetKind) = when (kind) {
     WidgetKind.ANDROID -> "App"
     WidgetKind.TIPS -> "Tips"
     else -> kind.label
+}
+
+/** This one widget's own settings: its place(s), big icon, and what tapping it opens. */
+@Composable
+private fun ThisWidget(widget: com.tim.launcher.HomeWidget, onChange: ((com.tim.launcher.HomeWidget) -> com.tim.launcher.HomeWidget) -> Unit) {
+    val context = LocalContext.current
+    val kind = widget.kind
+    var open by remember { mutableStateOf<String?>(null) }
+    remember { com.tim.launcher.weather.WeatherPlaces.load(context); true }
+    val places = com.tim.launcher.weather.WeatherPlaces.list
+    fun placeName(key: String) = if (key.isEmpty()) "My weather" else places.firstOrNull { it.key == key }?.title ?: "A place that's gone"
+    val apps by androidx.compose.runtime.produceState(emptyList<com.tim.launcher.AppEntry>()) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            sampleApps(context, Int.MAX_VALUE).sortedBy { it.label.lowercase() }
+        }
+    }
+
+    SectionLabel("This widget")
+    GlassPanel {
+        if (kind.weather) {
+            val dual = kind in WidgetKind.duals
+            listOf(false to widget.place).let { if (dual) it + (true to widget.place2) else it }.forEach { (second, key) ->
+                val id = if (second) "place2" else "place"
+                SettingRow(
+                    if (dual) (if (second) "Second place" else "First place") else "Place",
+                    if (second && key.isEmpty()) "Pick one" else placeName(key),
+                    onClick = { open = if (open == id) null else id },
+                )
+                if (open == id) {
+                    Column(Modifier.padding(bottom = 6.dp)) {
+                        if (!second) Choice("My weather", null, key.isEmpty()) { onChange { it.copy(place = "") }; open = null }
+                        places.forEach { p ->
+                            Choice(p.title, null, key == p.key) {
+                                onChange { if (second) it.copy(place2 = p.key) else it.copy(place = p.key) }
+                                open = null
+                            }
+                        }
+                        Choice("Add a place…", null, false) { com.tim.launcher.weather.WeatherActivity.open(context, key.ifEmpty { Weather.ME }) }
+                    }
+                }
+                RowDivider()
+            }
+            if (kind in WidgetKind.bigIcons) {
+                SettingRow("Big icon", "The icon spills past the panel's edge") {
+                    Toggle(widget.bigIcon) { big -> onChange { it.copy(bigIcon = big) } }
+                }
+                RowDivider()
+            }
+        }
+        val opens = when (widget.opens) {
+            "" -> com.tim.launcher.usualTap(kind)
+            com.tim.launcher.OPENS_NOTHING -> "Nothing"
+            else -> apps.firstOrNull { it.key == widget.opens }?.label ?: "Another app"
+        }
+        SettingRow("Tapping it opens", opens, onClick = { open = if (open == "opens") null else "opens" })
+        if (open == "opens") {
+            Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()).padding(bottom = 6.dp)) {
+                Choice(com.tim.launcher.usualTap(kind), null, widget.opens == "") { onChange { it.copy(opens = "") }; open = null }
+                Choice("Nothing", null, widget.opens == com.tim.launcher.OPENS_NOTHING) {
+                    onChange { it.copy(opens = com.tim.launcher.OPENS_NOTHING) }
+                    open = null
+                }
+                apps.forEach { app ->
+                    Choice(app.label, app.icon, widget.opens == app.key) {
+                        onChange { it.copy(opens = app.key) }
+                        open = null
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** One choice in a list that opened under a row. */
+@Composable
+private fun Choice(label: String, icon: androidx.compose.ui.graphics.ImageBitmap?, chosen: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 32.dp, end = 20.dp, top = 9.dp, bottom = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icon != null) {
+            androidx.compose.foundation.Image(icon, contentDescription = null, modifier = Modifier.size(28.dp))
+            Spacer(Modifier.width(12.dp))
+        }
+        Text(label, color = if (chosen) Q.Text else Q.TextDim, fontSize = 15.sp, maxLines = 1, modifier = Modifier.weight(1f))
+        if (chosen) Box(Modifier.size(10.dp).background(Q.Accent, androidx.compose.foundation.shape.CircleShape))
+    }
 }
 
 /** A widget as it'll look on your home screen, with your glass, dock style and colors. */

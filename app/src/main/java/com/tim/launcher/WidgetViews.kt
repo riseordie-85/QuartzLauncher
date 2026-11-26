@@ -197,6 +197,8 @@ fun WidgetView(
                 val key = place.ifEmpty { Weather.ME }
                 val key2 = place2
                 val r = if (sample) SampleReport else Weather.reports[key]
+                // Your own weather with nowhere to come from: say so, and a tap goes to where it's set
+                val unset = !sample && key == Weather.ME && r == null && Weather.needsSetup(context)
                 val r2 = if (sample) SampleReport else if (key2.isEmpty()) null else Weather.reports[key2]
                 LaunchedEffect(key, key2, sample) {
                     if (!sample) {
@@ -204,7 +206,13 @@ fun WidgetView(
                         if (key2.isNotEmpty()) Weather.refreshPlace(context, key2)
                     }
                 }
-                WeatherWidget(
+                if (unset) {
+                    WidgetCard(Modifier.fillMaxSize()) {
+                        Box(Modifier.fillMaxSize().padding(8.dp), contentAlignment = Alignment.Center) {
+                            WText(if (kind.w <= 1) "Set up" else "Tap to set your location", minOf(w, h) * 0.22f, ink, FontWeight.Medium, align = TextAlign.Center)
+                        }
+                    }
+                } else WeatherWidget(
                     kind, r, r2,
                     if (sample) "Denver" else weatherName(key, r),
                     if (sample) "Austin" else if (key2.isEmpty()) "Pick a place" else weatherName(key2, r2),

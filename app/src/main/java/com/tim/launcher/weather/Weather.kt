@@ -411,6 +411,19 @@ object Weather {
         locationChanged(context)
     }
 
+    /**
+     * Whether your own weather has nowhere to come from yet: no city chosen, or this phone's location asked for but
+     * not allowed (with no city to fall back on).
+     */
+    fun needsSetup(context: Context): Boolean {
+        val store = SettingsStore.get(context)
+        val city = store[S.weatherLat].isNotBlank() && store[S.weatherLon].isNotBlank()
+        return when (store[S.weatherSource]) {
+            WeatherSource.CITY -> !city
+            WeatherSource.DEVICE -> !hasLocationPermission(context) && !city
+        }
+    }
+
     fun hasLocationPermission(context: Context) =
         context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
