@@ -97,8 +97,8 @@ private fun WidgetTile(kind: WidgetKind, current: Boolean, onClick: () -> Unit) 
     val shape = RoundedCornerShape(16.dp)
     Column(
         Modifier
-            .clip(shape)
-            .background(Color.White.copy(alpha = if (current) 0.14f else 0.05f))
+            // Not clipped: big weather icons rise out of their card, as on the home screen
+            .background(Color.White.copy(alpha = if (current) 0.14f else 0.05f), shape)
             .border(if (current) 2.dp else 0.dp, if (current) Q.Accent else Color.Transparent, shape)
             .clickable(onClick = onClick)
             .padding(6.dp),

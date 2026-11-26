@@ -836,7 +836,11 @@ internal fun WidgetMenu(
                 }
             } else if (widget.kind != WidgetKind.TIPS) {
                 Text(
-                    if (widget.kind.weather) "Its place, big icon and what tapping it opens are in Settings." else "What tapping it opens is in Settings.",
+                    when {
+                        widget.kind in WidgetKind.bigIcons -> "Its place, big icon and what tapping it opens are in Settings."
+                        widget.kind.weather -> "Its place and what tapping it opens are in Settings."
+                        else -> "What tapping it opens is in Settings."
+                    },
                     color = Q.TextFaint,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp),
@@ -911,10 +915,8 @@ internal fun WidgetPicker(
                 current = null,
                 modifier = Modifier.padding(top = 14.dp),
                 footer = {
-                    Column {
-                        Text("From your apps", color = Q.TextDim, fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 14.dp))
-                        AppWidgetList(onPickApp, sizeOf)
-                    }
+                    // (The list has its own "From your apps" heading)
+                    Column { AppWidgetList(onPickApp, sizeOf) }
                 },
                 onPick = onPick,
             )

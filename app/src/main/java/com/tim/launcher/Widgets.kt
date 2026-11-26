@@ -3,11 +3,6 @@ package com.tim.launcher
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * Quartz's own home screen widgets. Each one covers a block of cells on a page: every cell it covers holds
- * "widget:<id>" in the page's slot list, so icons flow around it and everything that moves pages and grids carries
- * it along. Its kind and size live here.
- */
 /** How the widget list is grouped. */
 enum class WidgetGroup(val label: String) {
     CLOCKS("Clocks"), DATES("Dates"), WEATHER("Weather"), FORECASTS("Forecasts"), PLACES("Two places"), OTHER("Tips"),
@@ -25,6 +20,11 @@ object WidgetBus {
     }
 }
 
+/**
+ * Quartz's own home screen widgets. Each one covers a block of cells on a page: every cell it covers holds
+ * "widget:<id>" in the page's slot list, so icons flow around it and everything that moves pages and grids carries
+ * it along. Its kind and size live here.
+ */
 enum class WidgetKind(
     val label: String,
     val about: String,

@@ -1436,6 +1436,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val widget = widgets[id] ?: return false
         // An app's widget is what it is; and a Quartz widget can't become one
         if (widget.kind == WidgetKind.ANDROID || kind == WidgetKind.ANDROID) return false
+        // Its own style picked again: nothing to do (it mustn't snap back to that style's size)
+        if (kind == widget.kind) return true
         val anchor = widgetSpot(id) ?: return false
         // Its own size first (a temperature is a 1 × 1, a forecast 4 × 3); if that doesn't fit, as big as it is now
         // but no smaller than the new style allows

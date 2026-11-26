@@ -61,6 +61,9 @@ class SettingsActivity : ComponentActivity() {
             QuartzTheme {
                 var stack by remember { mutableStateOf(listOf(start)) }
                 var editing by remember { mutableStateOf(type.primary) }
+                // The widget these were opened from, as changed here (kept above the screens, so going to another
+                // screen and back doesn't show it as it was)
+                var widgetNow by remember { mutableStateOf(shownWidget) }
                 fun go(route: Route) {
                     stack = stack + route
                 }
@@ -85,7 +88,7 @@ class SettingsActivity : ComponentActivity() {
                         },
                         label = "settings",
                     ) { s ->
-                        val ctx = SettingsContext(store, type, editing, onEditing = { editing = it }, go = { go(it) }, back = { back() }, widget = shownWidget)
+                        val ctx = SettingsContext(store, type, editing, onEditing = { editing = it }, go = { go(it) }, back = { back() }, widget = widgetNow, onWidget = { widgetNow = it })
                         when (s.last()) {
                             Route.MAIN -> MainSettings(ctx)
                             Route.HOME -> HomeSettings(ctx)
@@ -138,4 +141,6 @@ class SettingsContext(
     val back: () -> Unit,
     /** The widget whose settings were asked for from its menu, to show in the preview. */
     val widget: com.tim.launcher.HomeWidget? = null,
+    /** That widget changed on its settings page. */
+    val onWidget: (com.tim.launcher.HomeWidget) -> Unit = {},
 )

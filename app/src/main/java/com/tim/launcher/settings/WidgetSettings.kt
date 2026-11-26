@@ -79,12 +79,12 @@ fun WidgetSettings(ctx: SettingsContext) {
     val context = LocalContext.current
     remember { Weather.loadCache(context); true }
     var colorOpen by remember { mutableStateOf<String?>(null) }
-    // Opened from a widget: that one first in the preview, as it's set up (its place, big icon)
-    // The widget these settings were opened from, kept up to date as its own settings change here
-    var mine by remember { mutableStateOf(ctx.widget?.takeIf { it.kind != WidgetKind.ANDROID }) }
+    // Opened from a widget: that one first in the preview, as it's set up (its place, big icon). Settings keeps it up
+    // to date as its own settings change here
+    val mine = ctx.widget?.takeIf { it.kind != WidgetKind.ANDROID }
     fun change(f: (com.tim.launcher.HomeWidget) -> com.tim.launcher.HomeWidget) {
         val w = mine ?: return
-        mine = f(w)
+        ctx.onWidget(f(w))
         com.tim.launcher.WidgetBus.change(w.id, f)
     }
     var previewKind by remember { mutableStateOf(mine?.kind ?: WidgetKind.FLIP_WEATHER) }
@@ -274,6 +274,7 @@ private fun ThisWidget(widget: com.tim.launcher.HomeWidget, onChange: ((com.tim.
         val opens = when (widget.opens) {
             "" -> com.tim.launcher.usualTap(kind)
             com.tim.launcher.OPENS_NOTHING -> "Nothing"
+            com.tim.launcher.StarterApps.QUARTZ_SETTINGS -> "Quartz settings"
             else -> apps.firstOrNull { it.key == widget.opens }?.label ?: "Another app"
         }
         SettingRow("Tapping it opens", opens, onClick = { open = if (open == "opens") null else "opens" })
@@ -282,6 +283,10 @@ private fun ThisWidget(widget: com.tim.launcher.HomeWidget, onChange: ((com.tim.
                 Choice(com.tim.launcher.usualTap(kind), null, widget.opens == "") { onChange { it.copy(opens = "") }; open = null }
                 Choice("Nothing", null, widget.opens == com.tim.launcher.OPENS_NOTHING) {
                     onChange { it.copy(opens = com.tim.launcher.OPENS_NOTHING) }
+                    open = null
+                }
+                Choice("Quartz settings", null, widget.opens == com.tim.launcher.StarterApps.QUARTZ_SETTINGS) {
+                    onChange { it.copy(opens = com.tim.launcher.StarterApps.QUARTZ_SETTINGS) }
                     open = null
                 }
                 apps.forEach { app ->
