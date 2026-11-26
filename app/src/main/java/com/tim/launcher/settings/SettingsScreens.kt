@@ -37,6 +37,7 @@ import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Swipe
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -926,6 +927,24 @@ fun PrivacySettings(ctx: SettingsContext) {
         }.onSuccess { toast(context, "Imported $it settings") }.onFailure { toast(context, "Import failed: ${it.message}") }
     }
 
+    // Themes: a name before exporting, and a look at what's coming in before it replaces yours
+    var naming by remember { mutableStateOf(false) }
+    var themeName by remember { mutableStateOf("") }
+    var incoming by remember { mutableStateOf<Pair<String, String>?>(null) } // name, file text
+    val themeExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.openOutputStream(uri)?.use { it.write(ThemeFile.export(context, themeName).toByteArray()) }
+        }.onSuccess { toast(context, "Theme exported") }.onFailure { toast(context, "Export failed: ${it.message}") }
+    }
+    val themeImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            val text = context.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } ?: error("Empty file")
+            ThemeFile.nameOf(text) to text
+        }.onSuccess { incoming = it }.onFailure { toast(context, it.message ?: "That file couldn't be read") }
+    }
+
     ScreenScaffold(ctx) {
         ScreenTitle("Privacy & backup")
         GlassPanel(Modifier.padding(top = 16.dp)) {
@@ -989,6 +1008,53 @@ fun PrivacySettings(ctx: SettingsContext) {
             SettingRow("Reset all settings", "Back to the defaults. Your home screen layout isn't touched.", onClick = { confirmReset = true })
         }
         BodyText("Importing a profile replaces this device's layout. Apps it doesn't have leave their spots empty.", Modifier.padding(horizontal = 20.dp, vertical = 14.dp))
+
+        SectionLabel("Themes")
+        GlassPanel {
+            SettingRow("Export theme", "Just the look: dock, icons, wallpaper (with its photo), widget colors and badges. No apps or layout.", onClick = {
+                themeName = ""
+                naming = true
+            })
+            RowDivider()
+            SettingRow("Import theme", "Use a look you saved or someone shared", onClick = {
+                themeImporter.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
+            })
+        }
+    }
+
+    if (naming) {
+        AlertDialog(
+            onDismissRequest = { naming = false },
+            title = { Text("Name this theme") },
+            text = {
+                OutlinedTextField(value = themeName, onValueChange = { themeName = it.take(32) }, singleLine = true, placeholder = { Text("My theme") })
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    naming = false
+                    val slug = themeName.trim().lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').ifEmpty { "my-theme" }
+                    themeExporter.launch("quartz-theme-$slug.json")
+                }) { Text("Export") }
+            },
+            dismissButton = { TextButton(onClick = { naming = false }) { Text("Cancel") } },
+        )
+    }
+
+    incoming?.let { (name, text) ->
+        AlertDialog(
+            onDismissRequest = { incoming = null },
+            title = { Text("Use \"$name\"?") },
+            text = { Text("Your dock, icons, wallpaper, widget colors and badges change to this theme's. To keep your current look, export it as a theme first.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    incoming = null
+                    runCatching { ThemeFile.import(context, text) }
+                        .onSuccess { toast(context, "Theme \"$it\" applied") }
+                        .onFailure { toast(context, "Import failed: ${it.message}") }
+                }) { Text("Use theme") }
+            },
+            dismissButton = { TextButton(onClick = { incoming = null }) { Text("Cancel") } },
+        )
     }
 
     if (confirmReset) {

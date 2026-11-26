@@ -263,11 +263,26 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
         if (uri == null) return@rememberLauncherForActivityResult
         runCatching {
             val text = context.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } ?: error("Empty file")
-            Profile.import(context, text)
-        }.onSuccess {
-            path = Path.IMPORT
-            toast(context, "Imported $it settings")
-            goTo(Step.DONE)
+            val isTheme = runCatching { org.json.JSONObject(text).optString("format") == com.tim.launcher.settings.ThemeFile.FORMAT }.getOrDefault(false)
+            if (isTheme) {
+                // A theme file is a look, like the ones in the carousel: the function defaults, the theme, then the
+                // practical questions
+                applyRecommended(store, type)
+                -1 to com.tim.launcher.settings.ThemeFile.import(context, text)
+            } else {
+                Profile.import(context, text) to ""
+            }
+        }.onSuccess { (count, themeName) ->
+            if (count < 0) {
+                path = Path.THEME
+                toast(context, "Theme \"$themeName\" applied")
+                forward = true
+                step = if (foldable) Step.CARRY_OVER else Step.COVER_GRID
+            } else {
+                path = Path.IMPORT
+                toast(context, "Imported $count settings")
+                goTo(Step.DONE)
+            }
         }.onFailure { toast(context, "Couldn't import: ${it.message}") }
     }
 
@@ -451,7 +466,7 @@ private fun ColumnScope.StepContent(
             Spacer(Modifier.height(20.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ChoiceCard("Start from scratch", "Customize every detail", false, Modifier.weight(1f)) { onPath(Path.WIZARD) }
-                ChoiceCard("Import from backup", "Settings saved from Quartz", false, Modifier.weight(1f)) { onPath(Path.IMPORT) }
+                ChoiceCard("Import from backup", "A Quartz backup or theme file", false, Modifier.weight(1f)) { onPath(Path.IMPORT) }
             }
         }
 

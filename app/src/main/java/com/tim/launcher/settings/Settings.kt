@@ -190,6 +190,12 @@ class IconPlaceSettings(id: String) {
     val stroke = Setting("look.$id.iconStroke", StrokeStyle.NONE, EnumCodec(StrokeStyle.entries.toTypedArray()))
     val strokeColor = Setting("look.$id.iconStrokeColor", 0xE6FFFFFF.toInt(), IntCodec)
     val strokeWidth = Setting("look.$id.iconStrokeWidth", 2f, FloatCodec)
+
+    /** Everything about how this place's icons look ([force] is about icon packs, so it isn't here). */
+    val look: List<Setting<*>> = listOf(
+        shape, style, background, color, color2, pattern, patternStrength, patternSize, patternWeight, patternAnchor, patternDark,
+        gradient, edge, shadow, stroke, strokeColor, strokeWidth,
+    )
 }
 
 /** A dock or drawer icon setting, or the home screen's while that place hasn't been given its own. */
@@ -455,6 +461,15 @@ class SettingsStore private constructor(context: Context) {
         val k = key(scope, setting)
         values.remove(k)
         prefs.edit().remove(k).apply()
+    }
+
+    /** Forgets [setting]'s saved value everywhere, so it's back to its default (or, for a dock or drawer icon value, the home screen's). */
+    fun clear(setting: Setting<*>) {
+        val keys = values.keys.filter { it.endsWith("/" + setting.id) && it.substringBefore('/') in Scope.entries.map { s -> s.name } }
+        if (keys.isEmpty()) return
+        val edit = prefs.edit()
+        keys.forEach { values.remove(it); edit.remove(it) }
+        edit.apply()
     }
 
     /** Clears any per-screen values for [setting] on these screens so they all follow one shared value. */
