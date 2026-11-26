@@ -69,6 +69,26 @@ enum class WidgetKind(
         /** The ones to choose from for your home page in setup (tips come with every new home screen anyway). */
         val forSetup: List<WidgetKind> get() = listOf(CLOCK, FLIP, FLIP_WEATHER, WEATHER)
 
+        // ---- Which settings each widget uses (Widget settings shows only those for the widget it was opened from) ----
+
+        /** Flip cards that turn over. */
+        val flips: Set<WidgetKind> = setOf(FLIP, FLIP_WEATHER, W_FLIP_SMALL, W_FLIP_FORECAST)
+
+        /** Shows a time of day: the clocks, and hours or sunrise and sunset. */
+        val times: Set<WidgetKind> = setOf(CLOCK, FLIP, FLIP_WEATHER, W_FLIP_SMALL, W_FLIP_FORECAST, W_HOURLY, W_SUN)
+
+        /** Uses the card color: flip cards, or the "paper" parts of the date and weather cards. */
+        val cards: Set<WidgetKind> = flips + setOf(DAY_DATE, CALENDAR_PAGE, MONTH, WEEK, W_CARD)
+
+        /** Uses the accent color somewhere. */
+        val accents: Set<WidgetKind> = setOf(
+            CLOCK, TIPS, DATE, DATE_YEAR, DATE_LINE, DATE_NUMBERS,
+            WEATHER, W_TEMP, W_TALL, W_SMALL, W_CARD, W_BIG, W_WIND, W_DETAILS, W_FORECAST, W_DUAL, W_DUAL_TALL,
+        )
+
+        /** Has weather icons that move. */
+        val moving: Set<WidgetKind> get() = entries.filter { it.weather && it !in setOf(W_TEMP, W_HILO, W_WIND, W_DETAILS) }.toSet()
+
         /** Weather widgets showing two places. */
         val duals: Set<WidgetKind> = setOf(W_DUAL, W_DUAL_TALL)
 

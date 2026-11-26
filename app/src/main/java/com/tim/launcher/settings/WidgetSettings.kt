@@ -75,36 +75,60 @@ fun WidgetSettings(ctx: SettingsContext) {
     var colorOpen by remember { mutableStateOf<String?>(null) }
     // Opened from a widget: that one first in the preview, as it's set up (its place, big icon)
     val mine = ctx.widget?.takeIf { it.kind != WidgetKind.ANDROID }
-    val kinds = remember(mine) { (listOfNotNull(mine?.kind) + WidgetKind.forSetup).distinct() }
     var previewKind by remember { mutableStateOf(mine?.kind ?: WidgetKind.FLIP_WEATHER) }
+    // Opened from a widget: only the settings that widget uses. From Settings: all of them
+    val k = mine?.kind
+    val showTime = k == null || k in WidgetKind.times
+    val flips = k == null || k in WidgetKind.flips
+    val moves = k == null || k in WidgetKind.flips || k in WidgetKind.moving
+    val showCards = k == null || k in WidgetKind.cards
+    val showAccent = k == null || k in WidgetKind.accents
+    val showWeather = k == null || k.weather
 
     ScreenScaffold(ctx, pinned = {
-        Tabs(previewKind, kinds, { if (it == mine?.kind && it !in WidgetKind.forSetup) "This one" else shortName(it) }, Modifier.padding(top = 4.dp)) { previewKind = it }
+        // From a widget, just that widget; otherwise a few to look at
+        if (mine == null) Tabs(previewKind, WidgetKind.forSetup, { shortName(it) }, Modifier.padding(top = 4.dp)) { previewKind = it }
         WidgetPreview(store, previewKind, mine?.takeIf { it.kind == previewKind })
     }) {
-        ScreenTitle("Widgets", "Clocks and weather for your home screen")
-        GlassPanel(Modifier.padding(top = 16.dp)) {
-            Column(Modifier.padding(20.dp)) {
-                BodyText(
-                    "To add one, long-press an empty spot on your home screen and tap Widgets. Hold a widget to move it, " +
-                        "or hold and let go to resize it, change its style or remove it.",
-                )
+        if (k != null) {
+            ScreenTitle(k.label, "Settings for this widget. They're shared by every widget that uses them.")
+        } else {
+            ScreenTitle("Widgets", "Clocks, dates and weather for your home screen")
+            GlassPanel(Modifier.padding(top = 16.dp)) {
+                Column(Modifier.padding(20.dp)) {
+                    BodyText(
+                        "To add one, long-press an empty spot on your home screen and tap Widgets. Hold a widget to move it, " +
+                            "or hold and let go to resize it, change its style, its place or what tapping it opens, or remove it.",
+                    )
+                }
             }
         }
 
-        SectionLabel("Clock")
-        GlassPanel {
-            SettingRow("24-hour time") { Toggle(store[S.clock24h]) { store.set(S.clock24h, value = it) } }
-            RowDivider()
-            SettingRow("Motion", "Flip cards turn over and weather icons move. Off, they just change.") {
-                Toggle(store[S.widgetMotion]) { store.set(S.widgetMotion, value = it) }
+        if (showTime || moves) {
+            SectionLabel(if (showTime) "Time" else "Motion")
+            GlassPanel {
+                if (showTime) SettingRow("24-hour time") { Toggle(store[S.clock24h]) { store.set(S.clock24h, value = it) } }
+                if (showTime && moves) RowDivider()
+                if (moves) {
+                    val about = when {
+                        k == null -> "Flip cards turn over and weather icons move. Off, they just change."
+                        k in WidgetKind.flips && k.weather -> "The cards turn over and the weather icon moves. Off, they just change."
+                        k in WidgetKind.flips -> "The cards turn over. Off, they just change."
+                        else -> "The weather icons move. Off, they hold still."
+                    }
+                    SettingRow("Motion", about) { Toggle(store[S.widgetMotion]) { store.set(S.widgetMotion, value = it) } }
+                }
             }
         }
 
-        SectionLabel("Flip cards")
-        GlassPanel {
+        if (showCards) SectionLabel(if (flips && k != null) "Flip cards" else "Cards")
+        if (showCards) GlassPanel {
             Text(
-                "The flip clock's cards. The numbers turn dark on a light color.",
+                when {
+                    k == null -> "The flip clock's cards, and the paper parts of the calendar, month, week and weather card widgets. Text on them turns dark on a light color."
+                    k in WidgetKind.flips -> "The flip clock's cards. The numbers turn dark on a light color."
+                    else -> "The paper parts of this widget. Text on it turns dark on a light color."
+                },
                 color = Q.TextDim,
                 fontSize = 13.sp,
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp),
@@ -116,10 +140,16 @@ fun WidgetSettings(ctx: SettingsContext) {
             }
         }
 
-        SectionLabel("Accent")
-        GlassPanel {
+        if (showAccent) SectionLabel("Accent")
+        if (showAccent) GlassPanel {
             Text(
-                "The clock's date and the buttons on the tips card",
+                when {
+                    k == null -> "The clock's date, the picked-out parts of the date widgets, temperatures on the weather widgets, and the tips card's buttons"
+                    k == WidgetKind.CLOCK -> "The date under the time"
+                    k == WidgetKind.TIPS -> "The buttons"
+                    k.weather -> "The temperature, and other bits picked out"
+                    else -> "The picked-out parts of the date"
+                },
                 color = Q.TextDim,
                 fontSize = 13.sp,
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp),
@@ -137,11 +167,22 @@ fun WidgetSettings(ctx: SettingsContext) {
             )
         }
 
-        SectionLabel("Weather")
-        WeatherControls(store)
+        // Every widget's numbers and words
+        if (k != WidgetKind.TIPS) {
+            SectionLabel("Font")
+            GlassPanel {
+                SettingRow("Widget font", com.tim.launcher.Fonts.nameOf(store[S.fontWidgets]), onClick = { ctx.go(Route.FONTS) })
+            }
+            if (!showCards && !showAccent) {
+                BodyText("Its panel matches your dock (Dock › Style).", Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
+            }
+        }
 
-        SectionLabel("About the weather")
-        GlassPanel {
+        if (showWeather) SectionLabel("Weather")
+        if (showWeather) WeatherControls(store)
+
+        if (showWeather) SectionLabel("About the weather")
+        if (showWeather) GlassPanel {
             Column(Modifier.padding(20.dp)) {
                 BodyText(
                     "Weather data by Open-Meteo.com: free, no account, no ads or tracking. Quartz only asks while a weather " +

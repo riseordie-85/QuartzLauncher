@@ -208,7 +208,7 @@ fun WidgetView(
                     kind, r, r2,
                     if (sample) "Denver" else weatherName(key, r),
                     if (sample) "Austin" else if (key2.isEmpty()) "Pick a place" else weatherName(key2, r2),
-                    now, w, h, ink, cards, accent, motion, unit, bigIcon, hours, minutes,
+                    now, w, h, ink, cards, accent, motion, unit, bigIcon, hours, minutes, h24,
                 )
             } else {
                 DateWidget(kind, now, w, h, ink, cards, accent)
