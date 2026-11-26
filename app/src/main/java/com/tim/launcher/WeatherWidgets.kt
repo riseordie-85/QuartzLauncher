@@ -271,7 +271,7 @@ internal fun WeatherWidget(
             val u = plan(826f, 135f)
             WidgetCard(Modifier.fillMaxSize()) {
                 Row(Modifier.fillMaxSize().padding(horizontal = u(16f), vertical = u(8f)), verticalAlignment = Alignment.CenterVertically) {
-                    (r?.hours ?: emptyList<Hour>()).take(6).forEachIndexed { i, hr ->
+                    (r?.upcoming ?: emptyList<Hour>()).take(6).forEachIndexed { i, hr ->
                         Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                             WText(if (i == 0) "Now" else WeatherText.hour(hr.time, r!!.timezone, false), u(26f), ink, light)
                             WeatherIcon(hr.icon, motion, Modifier.size(u(52f)))

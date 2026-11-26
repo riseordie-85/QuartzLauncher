@@ -73,6 +73,18 @@ class WeatherReport(
     /** Where it came from (the "me" place records which location setting), to tell when it's out of date. */
     val source: String,
 ) {
+    /** The hours from now on (a report kept from earlier has some behind it). */
+    val upcoming: List<Hour> get() {
+        val now = System.currentTimeMillis()
+        return hours.filter { it.time > now - 3_600_000L }.ifEmpty { hours.takeLast(1) }
+    }
+
+    /** The quarter hours from now on. */
+    val upcomingQuarters: List<Pair<Long, Double>> get() {
+        val now = System.currentTimeMillis()
+        return quarters.filter { it.first > now - 15 * 60_000L }
+    }
+
     val highC: Double get() = days.firstOrNull()?.highC ?: tempC
     val lowC: Double get() = days.firstOrNull()?.lowC ?: tempC
 
@@ -165,15 +177,15 @@ object WeatherText {
             else -> "Rain"
         }
         val parts = ArrayList<String>()
-        val soon = r.quarters.indexOfFirst { it.second >= 0.1 }
+        val soon = r.upcomingQuarters.indexOfFirst { it.second >= 0.1 }
         val nowWet = wet(r.code)
         if (!nowWet && soon in 1..7) {
-            parts += "${kind(r.hours.firstOrNull { wet(it.code) }?.code ?: 61)} likely in about ${soon * 15} minutes."
+            parts += "${kind(r.upcoming.firstOrNull { wet(it.code) }?.code ?: 61)} likely in about ${soon * 15} minutes."
         } else if (nowWet) {
-            val stop = r.hours.drop(1).take(12).firstOrNull { !wet(it.code) && it.pop < 40 }
+            val stop = r.upcoming.drop(1).take(12).firstOrNull { !wet(it.code) && it.pop < 40 }
             parts += if (stop != null) "${kind(r.code)} tapering off around ${hour(stop.time, r.timezone, h24)}." else "${kind(r.code)} carrying on for a while."
         } else {
-            val start = r.hours.drop(1).take(12).firstOrNull { wet(it.code) && it.pop >= 50 }
+            val start = r.upcoming.drop(1).take(12).firstOrNull { wet(it.code) && it.pop >= 50 }
             parts += if (start != null) {
                 "${kind(start.code)} likely from around ${hour(start.time, r.timezone, h24)}."
             } else {
@@ -244,12 +256,14 @@ object WeatherText {
         val warnings = alerts?.let { list ->
             (0 until list.length()).mapNotNull { i ->
                 val p = list.getJSONObject(i).optJSONObject("properties") ?: return@mapNotNull null
+                // The weather service sends null for what it doesn't know (often "ends"), and optString turns that into "null"
+                fun text(k: String) = if (p.isNull(k)) "" else p.optString(k)
                 Alert(
-                    p.optString("event"),
-                    p.optString("headline"),
-                    p.optString("severity"),
-                    p.optString("description").replace(Regex("\\s*\\n\\s*"), " ").trim(),
-                    parseIso(p.optString("ends").ifBlank { p.optString("expires") }),
+                    text("event"),
+                    text("headline"),
+                    text("severity"),
+                    text("description").replace(Regex("\\s*\\n\\s*"), " ").trim(),
+                    parseIso(text("ends").ifBlank { text("expires") }),
                 )
             }
         } ?: emptyList()

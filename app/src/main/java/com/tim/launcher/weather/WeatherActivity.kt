@@ -274,7 +274,10 @@ private fun PlaceChips(key: String, onPick: (String) -> Unit) {
 private fun Current(r: WeatherReport, key: String, unit: TempUnit, h24: Boolean, accent: Color) {
     val context = LocalContext.current
     val place = WeatherPlaces.byKey(key)
-    val airport = remember(r.lat, r.lon) { Airports.nearest(context, r.lat, r.lon) }
+    // The airport list is read on first use: not on the main thread
+    val airport by produceState<String?>(null, r.lat, r.lon) {
+        value = withContext(Dispatchers.Default) { Airports.nearest(context, r.lat, r.lon) }
+    }
     Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 6.dp)) {
         val nickname = place?.nickname?.ifBlank { null } ?: if (key == Weather.ME) "My weather" else null
         nickname?.let { Text(it, color = Q.TextDim, fontSize = 14.sp) }
@@ -338,14 +341,15 @@ private fun AlertCard(a: Alert, h24: Boolean, tz: String) {
 /** Rain or snow in each quarter hour of the next two hours, as bars. */
 @Composable
 private fun RainSoon(r: WeatherReport, accent: Color, h24: Boolean) {
-    if (r.quarters.isEmpty()) return
-    val max = r.quarters.maxOf { it.second }
+    val quarters = r.upcomingQuarters
+    if (quarters.isEmpty()) return
+    val max = quarters.maxOf { it.second }
     Section("Next 2 hours") {
         if (max < 0.1) {
             Text("No rain or snow expected", color = Q.Text, fontSize = 15.sp)
             return@Section
         }
-        val first = r.quarters.indexOfFirst { it.second >= 0.1 }
+        val first = quarters.indexOfFirst { it.second >= 0.1 }
         Text(
             if (first <= 0) "Coming down now" else "Starting in about ${first * 15} minutes",
             color = Q.Text,
@@ -353,11 +357,11 @@ private fun RainSoon(r: WeatherReport, accent: Color, h24: Boolean) {
             modifier = Modifier.padding(bottom = 10.dp),
         )
         Canvas(Modifier.fillMaxWidth().height(70.dp)) {
-            val n = r.quarters.size
+            val n = quarters.size
             val gap = 6.dp.toPx()
             val bw = (size.width - gap * (n - 1)) / n
             // Heavy rain (4 mm in a quarter hour) fills the bar
-            r.quarters.forEachIndexed { i, (_, mm) ->
+            quarters.forEachIndexed { i, (_, mm) ->
                 val f = (mm / 4.0).coerceIn(0.0, 1.0).toFloat()
                 val bh = if (mm >= 0.1) (size.height * f).coerceAtLeast(4.dp.toPx()) else 2.dp.toPx()
                 drawRoundRect(
@@ -397,7 +401,7 @@ private fun RadarCard(r: WeatherReport, accent: Color) {
             val wPx = constraints.maxWidth.toFloat()
             val hPx = constraints.maxHeight.toFloat()
             val density = androidx.compose.ui.platform.LocalDensity.current.density
-            // The map is drawn 1.5x the tiles' own size in dp, so a view is about 300 km across on a phone
+            // The tiles are drawn at their own size in dp, so a view is a few hundred km across on a phone
             val scale = density * 1.0f
             val cx = Radar.worldX(r.lon)
             val cy = Radar.worldY(r.lat)
@@ -407,21 +411,25 @@ private fun RadarCard(r: WeatherReport, accent: Color) {
             // The tiles this view needs, for the frame showing
             val tileXs = (kotlin.math.floor(left / Radar.TILE).toInt())..(kotlin.math.floor((left + wPx / scale) / Radar.TILE).toInt())
             val tileYs = (kotlin.math.floor(top / Radar.TILE).toInt())..(kotlin.math.floor((top + hPx / scale) / Radar.TILE).toInt())
-            val pictures by produceState<Map<Pair<Int, Int>, android.graphics.Bitmap>>(emptyMap(), frame) {
+            // Keyed on the tiles too: another place (or size) needs other tiles for the same frame
+            val pictures by produceState<Map<Pair<Int, Int>, android.graphics.Bitmap>>(emptyMap(), frame, tileXs, tileYs) {
                 val f = frame ?: return@produceState
                 value = withContext(Dispatchers.IO) {
                     buildMap { for (x in tileXs) for (y in tileYs) Radar.tile(f, x, y)?.let { put(x to y, it) } }
                 }
             }
             // Load every frame's tiles once in the background, so playing doesn't wait
-            LaunchedEffect(frames) {
+            LaunchedEffect(frames, tileXs, tileYs) {
                 val list = frames ?: return@LaunchedEffect
                 withContext(Dispatchers.IO) { list.forEach { f -> for (x in tileXs) for (y in tileYs) Radar.tile(f, x, y) } }
             }
-            val paths = remember(r.lat, r.lon, wPx, hPx) {
-                (0..2).associateWith { Radar.path(context, it, left, top, wPx, hPx, scale) }
+            // Reading the map lines and building the paths takes a moment: not on the main thread
+            val paths by produceState<Map<Int, android.graphics.Path>>(emptyMap(), r.lat, r.lon, wPx, hPx) {
+                value = withContext(Dispatchers.Default) { (0..2).associateWith { Radar.path(context, it, left, top, wPx, hPx, scale) } }
             }
-            val cities = remember(r.lat, r.lon) { Radar.cities(context) }
+            val cities by produceState<List<Radar.City>>(emptyList()) {
+                value = withContext(Dispatchers.IO) { Radar.cities(context) }
+            }
             Canvas(Modifier.fillMaxSize()) {
                 pictures.forEach { (xy, bmp) ->
                     val dx = ((xy.first * Radar.TILE - left) * scale).toFloat()
@@ -493,7 +501,7 @@ private fun RadarCard(r: WeatherReport, accent: Color) {
 private fun Hourly(r: WeatherReport, unit: TempUnit, h24: Boolean) {
     Section("Hourly") {
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-            r.hours.forEachIndexed { i, h ->
+            r.upcoming.forEachIndexed { i, h ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(if (i == 0) "Now" else WeatherText.hour(h.time, r.timezone, h24), color = Q.TextDim, fontSize = 13.sp)
                     WeatherIcon(h.icon, false, Modifier.size(40.dp))

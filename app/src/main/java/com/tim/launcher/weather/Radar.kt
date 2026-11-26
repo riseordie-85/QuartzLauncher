@@ -35,18 +35,40 @@ object Radar {
             Frame(f.getLong("time") * 1000, host + f.getString("path"))
         }
         // Every other one, always ending on the newest
-        return all.reversed().filterIndexed { i, _ -> i % 2 == 0 }.reversed()
+        val frames = all.reversed().filterIndexed { i, _ -> i % 2 == 0 }.reversed()
+        // Tiles of frames that have aged out aren't needed again
+        val times = frames.map { it.time.toString() }.toSet()
+        tiles.keys.removeAll { it.substringBefore('/') !in times }
+        return frames
     }
 
     private val tiles = ConcurrentHashMap<String, Bitmap>()
 
-    /** One radar tile (256 px, the "universal blue" colors, smoothed, with snow shown), kept for this session. */
+    /** When tiles were last asked for. RainViewer allows about 100 a minute from one address; Quartz stays under 80. */
+    private val asked = ArrayDeque<Long>()
+
+    private fun mayAsk(): Boolean = synchronized(asked) {
+        val now = System.currentTimeMillis()
+        while (asked.isNotEmpty() && now - asked.first() > 60_000L) asked.removeFirst()
+        if (asked.size >= 80) {
+            false
+        } else {
+            asked.addLast(now)
+            true
+        }
+    }
+
+    /**
+     * One radar tile (256 px, the "universal blue" colors, smoothed, with snow shown), kept for this session. Null
+     * when it couldn't be had, or when too many have been asked for this minute (it's asked again when next shown).
+     */
     fun tile(frame: Frame, x: Int, y: Int): Bitmap? {
         val n = 1 shl ZOOM
         val wx = ((x % n) + n) % n
         val key = "${frame.time}/$wx/$y"
         tiles[key]?.let { return it }
         if (y !in 0 until n) return null
+        if (!mayAsk()) return null
         return runCatching {
             val url = java.net.URL("${frame.base}/$TILE/$ZOOM/$wx/$y/2/1_1.png")
             val conn = url.openConnection() as java.net.HttpURLConnection
@@ -125,12 +147,29 @@ object Radar {
         fun latAt(y: Double): Double = Math.toDegrees(kotlin.math.atan(kotlin.math.sinh(PI * (1 - 2 * y / world))))
         val latA = latAt(top + h / scale * 1.2)
         val latB = latAt(top - h / scale * 0.2)
+        // Only the stretches near the view: a coastline can be a whole continent of points, nearly all far off screen
+        val x0 = -w * 0.2f
+        val x1 = w * 1.2f
+        val y0 = -h * 0.2f
+        val y1 = h * 1.2f
         lines(context).forEach { line ->
             if (line.kind != kind || line.maxLon < lonA || line.minLon > lonB || line.maxLat < latA || line.minLat > latB) return@forEach
+            var down = false
+            var px = 0f
+            var py = 0f
             for (i in line.lat.indices) {
                 val x = ((worldX(line.lon[i].toDouble()) - left) * scale).toFloat()
                 val y = ((worldY(line.lat[i].toDouble()) - top) * scale).toFloat()
-                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                // A step is drawn when its box touches the view's, so long straight borders still cross it
+                if (i > 0 && maxOf(px, x) >= x0 && minOf(px, x) <= x1 && maxOf(py, y) >= y0 && minOf(py, y) <= y1) {
+                    if (!down) path.moveTo(px, py)
+                    path.lineTo(x, y)
+                    down = true
+                } else {
+                    down = false
+                }
+                px = x
+                py = y
             }
         }
         return path

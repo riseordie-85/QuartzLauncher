@@ -150,6 +150,7 @@ object Weather {
         if (jobs[key]?.isActive == true) return
         val kept = reports[key]
         if (!force && kept != null && System.currentTimeMillis() - kept.at < STALE_MS) return
+        if (!force && !mayTry(key)) return
         jobs[key] = scope.launch {
             fetching[key] = true
             try {
@@ -210,6 +211,20 @@ object Weather {
     }
 
     private const val STALE_MS = 25 * 60_000L
+
+    /**
+     * When each place was last asked about (main thread only). Every weather widget asks as it comes into view, so
+     * while the weather can't be had (offline, no location) it's asked again at most every two minutes, not each time.
+     */
+    private val tried = HashMap<String, Long>()
+
+    private fun mayTry(key: String): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - (tried[key] ?: 0L) < 2 * 60_000L) return false
+        tried[key] = now
+        return true
+    }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var job: Job? = null
     private var cacheRead = false
@@ -254,6 +269,7 @@ object Weather {
         val fresh = shown != null && shown.source == sourceKey(store) && System.currentTimeMillis() - shown.at < STALE_MS &&
             full != null && full.source == shown.source
         if (!force && fresh) return
+        if (!force && !mayTry(ME)) return
         job = scope.launch {
             loading = true
             fetching[ME] = true
@@ -299,6 +315,8 @@ object Weather {
         val source = sourceKey(store)
         var issue: String? = null
         var spot: Triple<Double, Double, String>? = null
+        // The chosen city's country, unless this phone's own location is used (then it's told by where that is)
+        var country = store[S.weatherCountry]
         if (store[S.weatherSource] == WeatherSource.DEVICE) {
             if (!hasLocationPermission(context)) {
                 issue = "Location is off for Quartz. Allow it in Settings › Widgets, or choose a city."
@@ -310,6 +328,7 @@ object Weather {
                     val lat = round2(loc.latitude)
                     val lon = round2(loc.longitude)
                     spot = Triple(lat, lon, placeName(context, lat, lon) ?: "My location")
+                    country = ""
                 }
             }
             // Fall back on a city you've chosen before
@@ -319,10 +338,13 @@ object Weather {
             if (spot == null) issue = "Choose a city in Settings › Widgets."
         }
         val (lat, lon, name) = spot ?: return null to issue
-        val report = fetchReport(context, ME, name, lat, lon, source, store[S.weatherCountry])
+        val report = fetchReport(context, ME, name, lat, lon, source, country)
         withContext(Dispatchers.Main) {
-            reports[ME] = report
-            saveReports(context)
+            // Not if the settings have moved on to another place while this was on its way
+            if (report.source == sourceKey(store)) {
+                reports[ME] = report
+                saveReports(context)
+            }
         }
         val weather = report.toNow()
         Diag.log("Weather for $name: ${weather.condition}, ${weather.tempC.roundToInt()}°C")
