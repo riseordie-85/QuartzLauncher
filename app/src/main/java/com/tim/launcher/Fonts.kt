@@ -16,6 +16,7 @@ import com.tim.launcher.settings.S
 import com.tim.launcher.settings.SettingsStore
 import java.io.File
 import java.io.RandomAccessFile
+import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.ZipInputStream
 
@@ -77,43 +78,51 @@ object Fonts {
     }
 
     private fun read(file: File): Info? = RandomAccessFile(file, "r").use { f ->
-        val version = f.readInt()
+        // Each piece is read whole: RandomAccessFile on its own reads a byte at a time, which adds up over the
+        // hundreds of font files a phone has (and the first look can happen on the main thread)
+        fun chunk(at: Long, size: Int): ByteBuffer = ByteBuffer.wrap(ByteArray(size).also { f.seek(at); f.readFully(it) })
+        val head = chunk(0, 12)
+        val sfnt = head.getInt(0)
         // TrueType (0x00010000 or 'true') or OpenType with CFF outlines ('OTTO'); collections aren't supported
-        if (version != 0x00010000 && version != 0x4F54544F && version != 0x74727565) return null
-        val count = f.readUnsignedShort()
-        f.skipBytes(6)
-        val tables = HashMap<String, Long>()
-        repeat(count) {
-            val tag = ByteArray(4).also { f.readFully(it) }
-            f.readInt() // checksum
-            val offset = f.readInt().toLong() and 0xFFFFFFFFL
-            f.readInt() // length
-            tables[String(tag, Charsets.US_ASCII)] = offset
+        if (sfnt != 0x00010000 && sfnt != 0x4F54544F && sfnt != 0x74727565) return null
+        val count = head.u16(4)
+        val dir = chunk(12, count * 16)
+        val tables = HashMap<String, Pair<Long, Int>>() // offset and length
+        for (i in 0 until count) {
+            val at = i * 16
+            val tag = String(ByteArray(4) { dir.get(at + it) }, Charsets.US_ASCII)
+            val offset = dir.getInt(at + 8).toLong() and 0xFFFFFFFFL
+            val length = dir.getInt(at + 12)
+            tables[tag] = offset to length
         }
         // The family: the "typographic" name (16) if there is one, else the plain one (1); English if offered
         var best: String? = null
         var bestRank = Int.MAX_VALUE
-        tables["name"]?.let { base ->
-            f.seek(base)
-            f.readUnsignedShort()
-            val records = f.readUnsignedShort()
-            val strings = base + f.readUnsignedShort()
+        tables["name"]?.let { (base, size) ->
+            val t = chunk(base, size.coerceIn(0, 1 shl 20))
+            val records = t.u16(2)
+            val strings = t.u16(4)
             for (i in 0 until records) {
-                f.seek(base + 6 + i * 12L)
-                val platform = f.readUnsignedShort()
-                f.readUnsignedShort() // encoding
-                val language = f.readUnsignedShort()
-                val id = f.readUnsignedShort()
-                val length = f.readUnsignedShort()
-                val offset = f.readUnsignedShort()
+                val at = 6 + i * 12
+                val platform = t.u16(at)
+                val language = t.u16(at + 4)
+                val id = t.u16(at + 6)
+                val length = t.u16(at + 8)
+                val offset = t.u16(at + 10)
                 if (id != 16 && id != 1) continue
+                val bytes = ByteArray(length) { t.get(strings + offset + it) }
                 val text = when (platform) {
-                    0, 3 -> ByteArray(length).also { f.seek(strings + offset); f.readFully(it) }.toString(Charsets.UTF_16BE)
-                    1 -> ByteArray(length).also { f.seek(strings + offset); f.readFully(it) }.toString(Charsets.ISO_8859_1)
+                    0, 3 -> bytes.toString(Charsets.UTF_16BE)
+                    1 -> bytes.toString(Charsets.ISO_8859_1)
                     else -> continue
                 }.trim()
                 if (text.isEmpty()) continue
-                val english = platform == 1 || language == 0x409 || platform == 0
+                // Unicode names have no language; Mac English is 0, Windows US English 0x409
+                val english = when (platform) {
+                    0 -> true
+                    1 -> language == 0
+                    else -> language == 0x409
+                }
                 val rank = (if (id == 16) 0 else 2) + (if (english) 0 else 1)
                 if (rank < bestRank) {
                     best = text
@@ -123,14 +132,17 @@ object Fonts {
         }
         var weight = 400
         var italic = false
-        tables["OS/2"]?.let { base ->
-            f.seek(base + 4)
-            weight = f.readUnsignedShort()
-            f.seek(base + 62)
-            italic = (f.readUnsignedShort() and 1) != 0
+        tables["OS/2"]?.let { (base, size) ->
+            if (size >= 64) {
+                val t = chunk(base, 64)
+                weight = t.u16(4)
+                italic = (t.u16(62) and 1) != 0
+            }
         }
         Info(file, best ?: file.nameWithoutExtension, "fvar" in tables, weight.coerceIn(100, 900), italic)
     }
+
+    private fun ByteBuffer.u16(at: Int): Int = getShort(at).toInt() and 0xFFFF
 
     // ---- The phone's own fonts ----
 
@@ -150,7 +162,7 @@ object Fonts {
                 }
                 .groupBy { it.family }
                 .toSortedMap(String.CASE_INSENSITIVE_ORDER)
-        }.getOrDefault(emptyMap()).also { phone = it }
+        }.getOrDefault(emptyMap<String, List<Info>>()).also { phone = it }
     }
 
     fun phoneChoices(): List<Choice> = phoneFamilies().keys.map { Choice("phone:$it", it) }
@@ -178,7 +190,12 @@ object Fonts {
     fun import(context: Context, uri: Uri): List<String> {
         val temp = File(context.cacheDir, "font_import").apply { deleteRecursively(); mkdirs() }
         try {
-            val name = uri.lastPathSegment?.substringAfterLast('/') ?: "font"
+            // The file's real name where the picker gives it (a content address can be just a number)
+            val name = runCatching {
+                context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                    if (c.moveToFirst()) c.getString(0) else null
+                }
+            }.getOrNull() ?: uri.lastPathSegment?.substringAfterLast('/') ?: "font"
             val incoming = ArrayList<File>()
             context.contentResolver.openInputStream(uri)?.use { input ->
                 val bytes = input.readBytes()
@@ -214,7 +231,10 @@ object Fonts {
 
     /** Puts font files that came with a theme in place. */
     fun addFile(context: Context, name: String, bytes: ByteArray) {
-        File(folder(context), safe(name)).writeBytes(bytes)
+        val file = File(folder(context), safe(name))
+        file.writeBytes(bytes)
+        // Anything that isn't a font would only sit there, out of sight (Your fonts lists fonts only)
+        if (inspect(file) == null) file.delete()
         changed()
     }
 
@@ -230,7 +250,18 @@ object Fonts {
     private val families = ConcurrentHashMap<String, FontFamily>()
 
     /** The font for [id], ready to draw with. Anything not on this phone is your phone's font. */
-    fun family(context: Context, id: String): FontFamily = families.getOrPut(id) { build(context, id) ?: FontFamily.Default }
+    fun family(context: Context, id: String): FontFamily {
+        families[id]?.let { return it }
+        // The phone's fonts haven't been looked through yet: never on the main thread. Your phone's font until
+        // they have, then everything showing it looks again
+        if (id.startsWith("phone:") && phone == null) {
+            if (warming.compareAndSet(false, true)) Thread { phoneFamilies(); changes.intValue++ }.start()
+            return FontFamily.Default
+        }
+        return (build(context, id) ?: FontFamily.Default).also { families[id] = it }
+    }
+
+    private val warming = java.util.concurrent.atomic.AtomicBoolean(false)
 
     private fun build(context: Context, id: String): FontFamily? = when {
         id == SYSTEM || id == HOME -> FontFamily.Default
@@ -248,7 +279,7 @@ object Fonts {
             val style = if (info.italic) FontStyle.Italic else FontStyle.Normal
             if (info.variable) (100..900 step 100).map { w -> Font(info.file, FontWeight(w), style) }
             else listOf(Font(info.file, FontWeight(info.weight), style))
-        }
+        }.distinctBy { it.weight to it.style } // two files of one weight and style (a family's widths): the first
         return FontFamily(fonts)
     }
 

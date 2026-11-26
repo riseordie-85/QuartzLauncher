@@ -37,6 +37,7 @@ import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Swipe
 import androidx.compose.material3.AlertDialog
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -934,11 +935,17 @@ fun PrivacySettings(ctx: SettingsContext) {
     var naming by remember { mutableStateOf(false) }
     var themeName by remember { mutableStateOf("") }
     var incoming by remember { mutableStateOf<Pair<String, String>?>(null) } // name, file text
+    val themeScope = androidx.compose.runtime.rememberCoroutineScope()
     val themeExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        runCatching {
-            context.contentResolver.openOutputStream(uri)?.use { it.write(ThemeFile.export(context, themeName).toByteArray()) }
-        }.onSuccess { toast(context, "Theme exported") }.onFailure { toast(context, "Export failed: ${it.message}") }
+        // A photo and fonts can make the file a few megabytes: written off the main thread
+        val name = themeName
+        themeScope.launch {
+            val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(ThemeFile.export(context, name).toByteArray()) } }
+            }
+            result.onSuccess { toast(context, "Theme exported") }.onFailure { toast(context, "Export failed: ${it.message}") }
+        }
     }
     val themeImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult

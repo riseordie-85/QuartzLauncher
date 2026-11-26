@@ -465,8 +465,9 @@ private fun WText(
     align: TextAlign? = null,
 ) {
     val font = LocalWidgetFont.current
-    // A wider font than Outfit (which the sizes were set for) shrinks until it fits
-    var shrink by remember(text, font, size) { mutableFloatStateOf(1f) }
+    // A wider font than Outfit (which the sizes were set for) shrinks until it fits. Kept while only the characters
+    // change (the clock's minutes), so the text doesn't jump back to full size and shrink again every minute.
+    var shrink by remember(text.length, font, size) { mutableFloatStateOf(1f) }
     val sp = with(LocalDensity.current) { (size * shrink).toSp() }
     Text(
         text,
