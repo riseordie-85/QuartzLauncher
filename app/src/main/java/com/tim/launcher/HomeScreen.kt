@@ -501,6 +501,9 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
             weatherScope.launch {
                 while (true) {
                     Weather.refresh(activity)
+                    // And every other place a weather widget shows
+                    vm.widgets.values.filter { it.kind.weather }.flatMap { listOf(it.place, it.place2) }
+                        .filter { it.isNotEmpty() }.distinct().forEach { Weather.refreshPlace(activity, it) }
                     delay(30 * 60_000L)
                 }
             }
@@ -1017,6 +1020,8 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
                     onGlass = { vm.setWidgetGlass(id, it) },
                     apps = remember(vm.apps) { vm.apps.values.sortedBy { it.label.lowercase() } },
                     onOpens = { vm.setWidgetOpens(id, it) },
+                    onPlace = { key, second -> vm.setWidgetPlace(id, key, second) },
+                    onBigIcon = { vm.setWidgetBigIcon(id, it) },
                 )
             }
         }

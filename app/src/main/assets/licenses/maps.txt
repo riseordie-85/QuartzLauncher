@@ -1,0 +1,4 @@
+Map lines and town names: Natural Earth (naturalearthdata.com), public domain.
+Airport codes and locations: OurAirports (ourairports.com), public domain.
+Rain radar: RainViewer (rainviewer.com), free for personal and educational use.
+US weather warnings: National Weather Service (weather.gov), public domain.

@@ -375,6 +375,12 @@ object S {
     val weatherCity = Setting("weather.city", "", StringCodec)
     val weatherLat = Setting("weather.lat", "", StringCodec)
     val weatherLon = Setting("weather.lon", "", StringCodec)
+    /** The chosen city's country code (US gets weather warnings). */
+    val weatherCountry = Setting("weather.country", "", StringCodec)
+    /** US weather warnings from the National Weather Service. */
+    val weatherAlerts = Setting("weather.alerts", true, BoolCodec)
+    /** The rain radar on the weather page (from RainViewer). */
+    val weatherRadar = Setting("weather.radar", true, BoolCodec)
     val weatherUnits = Setting("weather.units", TempUnit.F, EnumCodec(TempUnit.entries.toTypedArray()))
 
     // Setup

@@ -1264,6 +1264,19 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
+    /** A weather widget's place ([second]: a two-place widget's other one). Empty is your own weather. */
+    fun setWidgetPlace(id: String, key: String, second: Boolean = false) {
+        val w = widgets[id] ?: return
+        widgets[id] = if (second) w.copy(place2 = key) else w.copy(place = key)
+        save()
+    }
+
+    fun setWidgetBigIcon(id: String, big: Boolean) {
+        val w = widgets[id] ?: return
+        widgets[id] = w.copy(bigIcon = big)
+        save()
+    }
+
     /** What tapping a widget opens (see [HomeWidget.opens]). */
     fun setWidgetOpens(id: String, opens: String) {
         val w = widgets[id] ?: return

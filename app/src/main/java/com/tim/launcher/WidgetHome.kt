@@ -73,6 +73,8 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.TouchApp
+import androidx.compose.material.icons.rounded.Place
+import androidx.compose.material.icons.rounded.ZoomOutMap
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material3.Icon
@@ -252,7 +254,7 @@ private fun WidgetOnGrid(widget: HomeWidget, anchor: Int, block: Block, cellW: D
                 onCancel = { drag.cancel() },
             )
         } else {
-            WidgetView(widget.kind, Modifier.fillMaxSize().padding(WIDGET_PAD))
+            WidgetView(widget.kind, Modifier.fillMaxSize().padding(WIDGET_PAD), place = widget.place, place2 = widget.place2, bigIcon = widget.bigIcon)
         }
         if (resizing) {
             val density = LocalDensity.current
@@ -401,7 +403,7 @@ internal fun WidgetOnFlow(widget: HomeWidget, width: Dp, height: Dp, drag: DragC
                 )
             },
     ) {
-        WidgetView(widget.kind, Modifier.fillMaxSize().padding(WIDGET_PAD))
+        WidgetView(widget.kind, Modifier.fillMaxSize().padding(WIDGET_PAD), place = widget.place, place2 = widget.place2, bigIcon = widget.bigIcon)
     }
 }
 
@@ -586,13 +588,14 @@ private fun widgetTap(context: Context, widget: HomeWidget) {
         }
         return
     }
-    if (kind.weather && Weather.now == null) {
+    // Your own weather isn't set up yet: where to set it up
+    if (kind.weather && widget.place.isEmpty() && Weather.now == null && Weather.reports[Weather.ME] == null) {
         SettingsActivity.open(context, route = Route.WIDGETS)
         return
     }
-    if (kind == WidgetKind.WEATHER) {
-        Weather.refresh(context, force = true)
-        Toast.makeText(context, "Updating the weather", Toast.LENGTH_SHORT).show()
+    // Every weather widget opens the weather page, at its place
+    if (kind.weather) {
+        com.tim.launcher.weather.WeatherActivity.open(context, widget.place.ifEmpty { Weather.ME })
         return
     }
     runCatching {
@@ -619,7 +622,7 @@ internal fun openAppByKey(context: Context, key: String) {
 /** What a widget does when tapped with nothing picked for it, in a few words. */
 internal fun usualTap(kind: WidgetKind): String = when {
     kind in WidgetKind.dates -> "Your calendar"
-    kind == WidgetKind.WEATHER -> "Updates the weather"
+    kind.weather -> "The weather page"
     else -> "Your alarms and clock"
 }
 
@@ -686,7 +689,10 @@ internal fun CarriedWidget(widget: HomeWidget, vm: HomeViewModel, drag: DragCont
     }
     WidgetView(
         widget.kind,
-        Modifier
+        place = widget.place,
+        place2 = widget.place2,
+        bigIcon = widget.bigIcon,
+        modifier = Modifier
             .offset {
                 IntOffset(
                     (drag.pointer.x - drag.widgetGrab.x).roundToInt(),
@@ -745,9 +751,14 @@ internal fun WidgetMenu(
     /** Apps it can open when tapped, and picking one (see [HomeWidget.opens]). */
     apps: List<AppEntry> = emptyList(),
     onOpens: (String) -> Unit = {},
+    /** A weather widget's place (or second place) picked, and its big icon. */
+    onPlace: (key: String, second: Boolean) -> Unit = { _, _ -> },
+    onBigIcon: (Boolean) -> Unit = {},
 ) {
     var styles by remember { mutableStateOf(false) }
     var opensOpen by remember { mutableStateOf(false) }
+    var placeOpen by remember { mutableStateOf<Boolean?>(null) } // which place list is open: first (false) or second (true)
+    val menuContext = LocalContext.current
     val context = LocalContext.current
     val appWidget = widget.kind == WidgetKind.ANDROID
     val info = remember(widget.appWidgetId) { if (appWidget) AppWidgets.info(context, widget.appWidgetId) else null }
@@ -810,6 +821,31 @@ internal fun WidgetMenu(
                             .padding(start = 60.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),
                     )
                 }
+                }
+            }
+            if (widget.kind.weather) {
+                remember { com.tim.launcher.weather.WeatherPlaces.load(menuContext); true }
+                val saved = com.tim.launcher.weather.WeatherPlaces.list
+                fun title(key: String) = if (key.isEmpty()) "My weather" else saved.firstOrNull { it.key == key }?.title ?: "A place that's gone"
+                val dual = widget.kind in WidgetKind.duals
+                listOf(false to widget.place).let { if (dual) it + (true to widget.place2) else it }.forEach { (second, key) ->
+                    val label = if (dual) (if (second) "Second place" else "First place") else "Place"
+                    MenuRow("$label: ${if (second && key.isEmpty()) "Pick one" else title(key)}", Icons.Rounded.Place) {
+                        placeOpen = if (placeOpen == second) null else second
+                    }
+                    if (placeOpen == second) {
+                        Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
+                            if (!second) OpensChoice("My weather", null, key.isEmpty()) { onPlace("", false); placeOpen = null }
+                            saved.forEach { p -> OpensChoice(p.title, null, key == p.key) { onPlace(p.key, second); placeOpen = null } }
+                            OpensChoice("Add a place…", null, false) {
+                                placeOpen = null
+                                com.tim.launcher.weather.WeatherActivity.open(menuContext, key.ifEmpty { Weather.ME })
+                            }
+                        }
+                    }
+                }
+                if (widget.kind in WidgetKind.bigIcons) {
+                    MenuRow(if (widget.bigIcon) "Big icon: on" else "Big icon: off", Icons.Rounded.ZoomOutMap) { onBigIcon(!widget.bigIcon) }
                 }
             }
             if (widget.kind != WidgetKind.TIPS) {
@@ -919,15 +955,15 @@ internal fun WidgetPicker(
                         WidgetKind.CLOCK -> 2.6f
                         WidgetKind.FLIP -> 2.07f
                         WidgetKind.FLIP_WEATHER -> 1.89f
-                        WidgetKind.WEATHER -> 4.16f
                         WidgetKind.ANDROID -> 2f
                         WidgetKind.TIPS -> 2.4f
+                        WidgetKind.WEATHER -> 826f / 135f
                         // The date widgets fill their cells (about half again as wide as tall)
                         else -> kind.w * 1.5f / kind.h
                     }
                     // Room above for the parts that rise out of the card
                     Spacer(Modifier.height(if (kind == WidgetKind.WEATHER) 14.dp else 4.dp))
-                    WidgetView(kind, Modifier.fillMaxWidth(if (kind in WidgetKind.dates) kind.w / 4f else 1f).aspectRatio(ratio), sample = true)
+                    WidgetView(kind, Modifier.fillMaxWidth(if (kind in WidgetKind.dates || (kind.weather && kind.w < 4)) kind.w / 4f else 1f).aspectRatio(ratio), sample = true)
                     Spacer(Modifier.height(if (kind.weather) 18.dp else 8.dp))
                     Text(kind.label, color = Q.Text, fontSize = 16.sp, fontWeight = FontWeight.Medium)
                     Text(kind.about, color = Q.TextDim, fontSize = 13.sp)

@@ -21,8 +21,31 @@ enum class WidgetKind(
     CLOCK("Clock", "The time, big, with the date under it", 4, 2, 2, 1, false),
     FLIP("Flip clock", "Cards that flip over as the minutes change", 4, 2, 2, 2, false),
     FLIP_WEATHER("Flip clock and weather", "The flip clock with today's weather under it", 4, 3, 3, 2, true),
-    WEATHER("Weather", "Today's weather in a slim bar", 4, 1, 2, 1, true),
+    WEATHER("Weather", "Your town, the sky, low and high, and the temperature", 4, 1, 2, 1, true),
     TIPS("Quartz tips", "Where to find wallpaper, setup and customizing", 4, 2, 2, 2, false),
+
+    // Weather for one day (tapping one opens the weather page)
+    W_TEMP("Temperature", "Just the temperature", 1, 1, 1, 1, true),
+    W_ICON("Weather icon", "Just the sky, as an icon", 1, 1, 1, 1, true),
+    W_HILO("Low and high", "Today's low over its high", 1, 1, 1, 1, true),
+    W_TALL("Weather, tall", "Icon, temperature, low and high", 1, 2, 1, 2, true),
+    W_SMALL("Weather, small", "Icon, temperature, low and high", 2, 1, 2, 1, true),
+    W_CARD("Weather card", "Low, high and temperature over a big icon on paper", 2, 2, 2, 2, true),
+    W_BIG("Big weather", "A big icon with low, high and current", 2, 2, 2, 2, true),
+    W_FLIP_SMALL("Flip clock and weather, small", "The time over today's weather", 2, 2, 2, 2, true),
+    W_WIND("Wind", "Speed, direction and gusts", 2, 1, 2, 1, true),
+    W_SUN("Sunrise and sunset", "Today's sunrise and sunset", 2, 1, 2, 1, true),
+    W_DETAILS("Weather details", "Feels like, wind, humidity, and air quality or UV", 2, 2, 2, 2, true),
+
+    // Forecasts
+    W_HOURLY("Next hours", "The next six hours", 4, 1, 3, 1, true),
+    W_FORECAST_ROW("5-day forecast", "The next five days in a row", 4, 1, 3, 1, true),
+    W_FLIP_FORECAST("Flip clock and forecast", "The time, today and the next five days", 4, 2, 4, 2, true),
+    W_FORECAST("Today and 5 days", "Today's weather over the next five days, one per row", 4, 3, 4, 3, true),
+
+    // Two places
+    W_DUAL("Two places", "Your weather next to another place's", 4, 1, 3, 1, true),
+    W_DUAL_TALL("Two places with forecast", "Two places side by side, each with three days", 4, 2, 4, 2, true),
 
     // Dates (tapping one opens your calendar unless you pick another app)
     DAY_DATE("Day and date", "The weekday's letter beside the date on a card", 2, 1, 1, 1, false),
@@ -46,6 +69,12 @@ enum class WidgetKind(
         /** The ones to choose from for your home page in setup (tips come with every new home screen anyway). */
         val forSetup: List<WidgetKind> get() = listOf(CLOCK, FLIP, FLIP_WEATHER, WEATHER)
 
+        /** Weather widgets showing two places. */
+        val duals: Set<WidgetKind> = setOf(W_DUAL, W_DUAL_TALL)
+
+        /** Weather widgets whose icon can be made big enough to spill past the panel. */
+        val bigIcons: Set<WidgetKind> = setOf(WEATHER, W_ICON, W_TALL, W_SMALL, W_BIG, W_FLIP_SMALL, W_FLIP_FORECAST)
+
         val dates: Set<WidgetKind> = setOf(DAY_DATE, DATE, CALENDAR_PAGE, DATE_YEAR, MONTH, WEEK, DATE_LINE, DAY_SMALL, DAY_ORDINAL, DATE_NUMBERS)
     }
 }
@@ -65,6 +94,12 @@ data class HomeWidget(
      * for dates, a weather refresh for weather).
      */
     val opens: String = "",
+    /** A weather widget's place: empty for your own weather, else a saved place's key. */
+    val place: String = "",
+    /** A two-place weather widget's other place. */
+    val place2: String = "",
+    /** A weather widget's icon drawn big, spilling past the panel. */
+    val bigIcon: Boolean = false,
 )
 
 const val OPENS_NOTHING = "none"
@@ -80,6 +115,9 @@ internal object WidgetJson {
             val o = JSONObject().put("id", w.id).put("kind", w.kind.name).put("w", w.w).put("h", w.h)
             if (w.kind == WidgetKind.ANDROID) o.put("appWidgetId", w.appWidgetId).put("provider", w.provider).put("glass", w.glass)
             if (w.opens.isNotEmpty()) o.put("opens", w.opens)
+            if (w.place.isNotEmpty()) o.put("place", w.place)
+            if (w.place2.isNotEmpty()) o.put("place2", w.place2)
+            if (w.bigIcon) o.put("bigIcon", true)
             array.put(o)
         }
         return array.toString()
@@ -96,6 +134,9 @@ internal object WidgetJson {
                     o.getString("id"), kind, o.optInt("w", kind.w).coerceAtLeast(1), o.optInt("h", kind.h).coerceAtLeast(1),
                     appWidgetId = o.optInt("appWidgetId", 0), provider = o.optString("provider", ""), glass = o.optBoolean("glass", false),
                     opens = o.optString("opens", ""),
+                    place = o.optString("place", ""),
+                    place2 = o.optString("place2", ""),
+                    bigIcon = o.optBoolean("bigIcon", false),
                 )
             }
         }.getOrElse {

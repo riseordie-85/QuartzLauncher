@@ -271,6 +271,14 @@ fun WeatherControls(store: SettingsStore) {
             Segmented(store[S.weatherIcons], WeatherIconStyle.entries, { it.label }) { store.set(S.weatherIcons, value = it) }
         }
         RowDivider()
+        SettingRow("Weather warnings", "US only, from the National Weather Service, on the weather page") {
+            com.tim.launcher.ui.Toggle(store[S.weatherAlerts]) { store.set(S.weatherAlerts, value = it) }
+        }
+        RowDivider()
+        SettingRow("Rain radar", "The past 2 hours on the weather page, from RainViewer, which sees the rough area shown") {
+            com.tim.launcher.ui.Toggle(store[S.weatherRadar]) { store.set(S.weatherRadar, value = it) }
+        }
+        RowDivider()
         val now = Weather.now
         SettingRow(
             now?.let { "${it.place}: ${it.condition.lowercase()}, ${Weather.format(it.tempC, store[S.weatherUnits])}" } ?: "No weather yet",

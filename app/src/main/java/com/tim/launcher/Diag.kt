@@ -80,6 +80,7 @@ object Prefs {
     const val L_WIDGETS = "layout_widgets"  // Quartz widgets on your pages (kind and size), as JSON
     const val PENDING_WIDGETS = "pending_widgets" // widgets picked in setup, added to your home page next time it shows
     const val WEATHER = "weather_now"       // the last weather fetched, so widgets show it straight away
+    const val WEATHER_PLACES = "weather_places" // places saved for weather, with your names for them, as JSON
 
     fun get(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)

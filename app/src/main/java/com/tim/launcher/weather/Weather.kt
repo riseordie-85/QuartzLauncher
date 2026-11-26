@@ -10,6 +10,7 @@ import android.location.Location
 import android.location.LocationManager
 import android.os.CancellationSignal
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.tim.launcher.Diag
@@ -53,8 +54,17 @@ data class WeatherNow(
     val icon: String get() = WeatherCodes.icon(code, day)
 }
 
-/** A place found by name. */
-data class Place(val name: String, val region: String, val country: String, val lat: Double, val lon: Double) {
+/** A place found by name, ZIP or airport code. */
+data class Place(
+    val name: String,
+    val region: String,
+    val country: String,
+    val lat: Double,
+    val lon: Double,
+    val countryCode: String = "",
+    /** What else to show in a search list (an airport's full name, a postal code). */
+    val note: String = "",
+) {
     val label: String get() = listOf(name, region, country).filter { it.isNotBlank() }.distinct().joinToString(", ")
 }
 
@@ -74,6 +84,131 @@ object Weather {
     var loading by mutableStateOf(false)
         private set
 
+    /** Your own weather's key: wherever the settings point (this phone's location or your city). */
+    const val ME = "me"
+
+    /** The full weather for every place asked about, by key ([ME] or a saved place's key). */
+    val reports = mutableStateMapOf<String, WeatherReport>()
+
+    /** Places being fetched right now. */
+    val fetching = mutableStateMapOf<String, Boolean>()
+
+    private val jobs = HashMap<String, Job>()
+    private var reportsRead = false
+
+    private fun reportsFile(context: Context) = java.io.File(context.filesDir, "weather_reports.json")
+
+    /** Raw answers per place, kept so the page and widgets show the last weather at once. */
+    private val raw = java.util.concurrent.ConcurrentHashMap<String, JSONObject>()
+
+    private fun loadReports(context: Context) {
+        if (reportsRead) return
+        reportsRead = true
+        runCatching {
+            val all = JSONObject(reportsFile(context).readText())
+            all.keys().forEach { k ->
+                val o = all.getJSONObject(k)
+                raw[k] = o
+                rebuild(k, o)?.let { reports[k] = it }
+            }
+        }
+    }
+
+    private fun rebuild(key: String, o: JSONObject): WeatherReport? = runCatching {
+        WeatherText.parse(
+            key, o.getString("name"), o.getDouble("lat"), o.getDouble("lon"), o.getLong("at"), o.optString("source"),
+            o.getJSONObject("forecast"), o.optJSONObject("air"), o.optJSONArray("alerts"),
+        )
+    }.onFailure { Diag.log("Weather: couldn't read saved $key: ${it.message}") }.getOrNull()
+
+    private fun saveReports(context: Context) {
+        val all = JSONObject()
+        // Only places still in use: you, and the places you've saved
+        val keep = setOf(ME) + WeatherPlaces.list.map { it.key }
+        raw.keys.retainAll(keep)
+        reports.keys.retainAll(keep)
+        raw.forEach { (k, v) -> all.put(k, v) }
+        runCatching { reportsFile(context).writeText(all.toString()) }
+    }
+
+    /** The weather at [key], or null before it's been fetched. Call [refresh] to keep it current. */
+    fun report(context: Context, key: String): WeatherReport? {
+        loadReports(context.applicationContext)
+        return reports[key]
+    }
+
+    /** Fetches the weather at a saved place if what's kept is old ([force]: anyway). [ME] goes through [refresh]. */
+    fun refreshPlace(context: Context, key: String, force: Boolean = false) {
+        val app = context.applicationContext
+        if (key == ME) {
+            refresh(app, force)
+            return
+        }
+        loadReports(app)
+        WeatherPlaces.load(app)
+        val place = WeatherPlaces.byKey(key) ?: return
+        if (jobs[key]?.isActive == true) return
+        val kept = reports[key]
+        if (!force && kept != null && System.currentTimeMillis() - kept.at < STALE_MS) return
+        jobs[key] = scope.launch {
+            fetching[key] = true
+            try {
+                val report = withContext(Dispatchers.IO) {
+                    fetchReport(app, key, place.title, place.lat, place.lon, "place", place.country)
+                }
+                reports[key] = report
+                saveReports(app)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Diag.log("Weather for $key: ${e.javaClass.simpleName} ${e.message}")
+            } finally {
+                fetching.remove(key)
+            }
+        }
+    }
+
+    /**
+     * Everything for one place: Open-Meteo's forecast and air quality, and in the US the National Weather Service's
+     * warnings. Only the rounded location is sent; nothing identifies you.
+     */
+    private fun fetchReport(context: Context, key: String, name: String, lat: Double, lon: Double, source: String, country: String): WeatherReport {
+        val at = System.currentTimeMillis()
+        val forecast = JSONObject(
+            get(
+                "https://api.open-meteo.com/v1/forecast?latitude=${fmt(lat)}&longitude=${fmt(lon)}" +
+                    "&current=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,weather_code,is_day," +
+                    "wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl,visibility,uv_index" +
+                    "&hourly=temperature_2m,weather_code,is_day,precipitation_probability,pressure_msl" +
+                    "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max" +
+                    "&minutely_15=precipitation&forecast_minutely_15=8" +
+                    "&past_hours=3&forecast_hours=24&forecast_days=7&timezone=auto&timeformat=unixtime",
+            ),
+        )
+        val air = runCatching {
+            JSONObject(get("https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${fmt(lat)}&longitude=${fmt(lon)}&current=us_aqi,pm2_5"))
+        }.getOrNull()
+        // Warnings: the National Weather Service covers the US (its states and territories) only
+        val inUs = country.equals("US", true) || (country.isBlank() && lat in 17.0..72.0 && lon in -180.0..-64.0)
+        val alerts = if (inUs && SettingsStore.get(context)[S.weatherAlerts]) {
+            runCatching {
+                JSONObject(
+                    get(
+                        "https://api.weather.gov/alerts/active?point=${fmt(lat)},${fmt(lon)}",
+                        mapOf("Accept" to "application/geo+json", "User-Agent" to "QuartzLauncher (github.com/riseordie-85/QuartzLauncher)"),
+                    ),
+                ).optJSONArray("features")
+            }.getOrNull()
+        } else {
+            null
+        }
+        val o = JSONObject().put("name", name).put("lat", lat).put("lon", lon).put("at", at).put("source", source).put("forecast", forecast)
+        if (air != null) o.put("air", air)
+        if (alerts != null) o.put("alerts", alerts)
+        raw[key] = o
+        return WeatherText.parse(key, name, lat, lon, at, source, forecast, air, alerts)
+    }
+
     private const val STALE_MS = 25 * 60_000L
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var job: Job? = null
@@ -83,6 +218,8 @@ object Weather {
     fun loadCache(context: Context) {
         if (cacheRead) return
         cacheRead = true
+        loadReports(context.applicationContext)
+        WeatherPlaces.load(context.applicationContext)
         val text = Prefs.get(context).getString(Prefs.WEATHER, null) ?: return
         now = runCatching {
             val o = JSONObject(text)
@@ -113,9 +250,13 @@ object Weather {
         if (job?.isActive == true) return
         val store = SettingsStore.get(app)
         val shown = now
-        if (!force && shown != null && shown.source == sourceKey(store) && System.currentTimeMillis() - shown.at < STALE_MS) return
+        val full = reports[ME]
+        val fresh = shown != null && shown.source == sourceKey(store) && System.currentTimeMillis() - shown.at < STALE_MS &&
+            full != null && full.source == shown.source
+        if (!force && fresh) return
         job = scope.launch {
             loading = true
+            fetching[ME] = true
             try {
                 val (weather, issue) = withContext(Dispatchers.IO) { fetch(app, store) }
                 // Settings may have moved on to another place while this was on its way
@@ -133,7 +274,10 @@ object Weather {
                 Diag.log("Weather: ${e.javaClass.simpleName} ${e.message}")
             } finally {
                 // A request dropped for a newer one finishes late; it mustn't say the newer one is done
-                if (job == null || job === coroutineContext[Job]) loading = false
+                if (job == null || job === coroutineContext[Job]) {
+                    loading = false
+                    fetching.remove(ME)
+                }
             }
         }
     }
@@ -144,6 +288,8 @@ object Weather {
         job?.cancel()
         job = null
         now = null
+        reports.remove(ME)
+        raw.remove(ME)
         problem = null
         Prefs.get(context).edit().remove(Prefs.WEATHER).apply()
         refresh(context, force = true)
@@ -173,22 +319,12 @@ object Weather {
             if (spot == null) issue = "Choose a city in Settings › Widgets."
         }
         val (lat, lon, name) = spot ?: return null to issue
-        val url = "https://api.open-meteo.com/v1/forecast?latitude=${fmt(lat)}&longitude=${fmt(lon)}" +
-            "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min" +
-            "&timezone=auto&forecast_days=1"
-        val json = JSONObject(get(url))
-        val current = json.getJSONObject("current")
-        val daily = json.getJSONObject("daily")
-        val weather = WeatherNow(
-            place = name,
-            tempC = current.getDouble("temperature_2m"),
-            highC = daily.getJSONArray("temperature_2m_max").getDouble(0),
-            lowC = daily.getJSONArray("temperature_2m_min").getDouble(0),
-            code = current.getInt("weather_code"),
-            day = current.optInt("is_day", 1) == 1,
-            at = System.currentTimeMillis(),
-            source = source,
-        )
+        val report = fetchReport(context, ME, name, lat, lon, source, store[S.weatherCountry])
+        withContext(Dispatchers.Main) {
+            reports[ME] = report
+            saveReports(context)
+        }
+        val weather = report.toNow()
         Diag.log("Weather for $name: ${weather.condition}, ${weather.tempC.roundToInt()}°C")
         return weather to issue
     }
@@ -199,19 +335,37 @@ object Weather {
         return Triple(lat, lon, store[S.weatherCity].substringBefore(",").ifBlank { "Weather" })
     }
 
-    /** Places matching [query], for choosing a city. Asks Open-Meteo's place search with only what you typed. */
-    suspend fun search(query: String): List<Place> = withContext(Dispatchers.IO) {
-        val q = URLEncoder.encode(query.trim(), "UTF-8")
+    /**
+     * Places matching [query]: a city, a ZIP or postal code, or an airport code. Airports are looked up on the phone;
+     * the rest asks Open-Meteo's place search with only what you typed.
+     */
+    suspend fun search(query: String, context: Context? = null): List<Place> = withContext(Dispatchers.IO) {
+        val text = query.trim()
+        val airport = if (context != null && text.length == 3 && text.all { it.isLetter() }) Airports.byCode(context, text) else null
+        val fromAirport = airport?.let {
+            listOf(Place(it.city.ifBlank { it.name }, it.code, it.country, round2(it.lat), round2(it.lon), it.country, it.name))
+        } ?: emptyList()
+        val q = URLEncoder.encode(text, "UTF-8")
         val lang = Locale.getDefault().language.ifBlank { "en" }
-        val json = JSONObject(get("https://geocoding-api.open-meteo.com/v1/search?name=$q&count=8&language=$lang&format=json"))
-        val results = json.optJSONArray("results") ?: return@withContext emptyList()
-        (0 until results.length()).map { i ->
-            val o = results.getJSONObject(i)
-            Place(
-                o.optString("name"), o.optString("admin1"), o.optString("country"),
-                round2(o.getDouble("latitude")), round2(o.getDouble("longitude")),
-            )
-        }
+        val found = runCatching {
+            val json = JSONObject(get("https://geocoding-api.open-meteo.com/v1/search?name=$q&count=8&language=$lang&format=json"))
+            val results = json.optJSONArray("results")
+            if (results == null) {
+                emptyList()
+            } else {
+                (0 until results.length()).map { i ->
+                    val o = results.getJSONObject(i)
+                    val postcodes = o.optJSONArray("postcodes")
+                    val zip = if (postcodes != null && (0 until postcodes.length()).any { postcodes.optString(it) == text }) text else ""
+                    Place(
+                        o.optString("name"), o.optString("admin1"), o.optString("country"),
+                        round2(o.getDouble("latitude")), round2(o.getDouble("longitude")),
+                        o.optString("country_code"), zip,
+                    )
+                }
+            }
+        }.getOrElse { if (fromAirport.isEmpty()) throw it else emptyList() }
+        fromAirport + found
     }
 
     /** Remembers a chosen city and fetches its weather. */
@@ -220,6 +374,7 @@ object Weather {
         store.set(S.weatherCity, value = place.label)
         store.set(S.weatherLat, value = fmt(place.lat))
         store.set(S.weatherLon, value = fmt(place.lon))
+        store.set(S.weatherCountry, value = place.countryCode)
         locationChanged(context)
     }
 
@@ -229,12 +384,13 @@ object Weather {
     fun format(c: Double, unit: TempUnit): String =
         (if (unit == TempUnit.F) c * 9.0 / 5.0 + 32.0 else c).roundToInt().toString() + "°"
 
-    private fun get(url: String): String {
+    internal fun get(url: String, headers: Map<String, String> = emptyMap()): String {
         val conn = URL(url).openConnection() as HttpURLConnection
         try {
             conn.connectTimeout = 10_000
             conn.readTimeout = 10_000
             conn.setRequestProperty("User-Agent", "QuartzLauncher")
+            headers.forEach { (k, v) -> conn.setRequestProperty(k, v) }
             val code = conn.responseCode
             if (code !in 200..299) error("HTTP $code")
             return conn.inputStream.bufferedReader().use { it.readText() }

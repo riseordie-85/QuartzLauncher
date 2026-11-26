@@ -93,6 +93,15 @@
             android:theme="@style/Theme.QuartzLauncher.Settings"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density" />
 
+        <!-- The weather page, opened from a weather widget -->
+        <activity
+            android:name=".weather.WeatherActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.QuartzLauncher.Settings"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density" />
+
         <!-- Quartz Lock: only used to lock the screen from a gesture -->
         <service
             android:name=".LockService"

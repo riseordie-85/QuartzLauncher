@@ -124,6 +124,10 @@ fun WidgetView(
     accentColor: Color? = null,
     /** A font to show instead of the saved one (a theme's preview), as a Fonts id. */
     fontId: String? = null,
+    /** A weather widget's place, other place and big icon (see [HomeWidget]). */
+    place: String = "",
+    place2: String = "",
+    bigIcon: Boolean = false,
 ) {
     val context = LocalContext.current
     val store = remember { SettingsStore.get(context) }
@@ -137,7 +141,11 @@ fun WidgetView(
     val motion = store[S.widgetMotion]
     val h24 = store[S.clock24h]
     val unit = store[S.weatherUnits]
-    val weather = Weather.now ?: if (sample) SampleWeather else null
+    // Your weather, or the place this widget is set to
+    val weather = if (place.isEmpty()) Weather.now ?: if (sample) SampleWeather else null else Weather.reports[place]?.toNow()
+    if (kind == WidgetKind.FLIP_WEATHER && place.isNotEmpty() && !sample) {
+        LaunchedEffect(place) { Weather.refreshPlace(context, place) }
+    }
 
     val cal = Calendar.getInstance().apply { timeInMillis = now }
     val hour = cal.get(Calendar.HOUR_OF_DAY)
@@ -180,24 +188,38 @@ fun WidgetView(
                 WeatherRow(weather, unit, ink, motion, u, w, rowTop = u.top + u(262f), rowHeight = u(120f), iconSize = u(380f), iconTop = u.top + u(132f))
             }
 
-            WidgetKind.WEATHER -> {
-                val u = Plan(w, h, 832f, 200f)
-                WidgetCard(Modifier.at(0.dp, u.top + u(40f), w, u(160f)))
-                WeatherRow(weather, unit, ink, motion, u, w, rowTop = u.top + u(40f), rowHeight = u(160f), iconSize = u(340f), iconTop = u.top - u(85f))
-            }
-
             WidgetKind.ANDROID -> Unit // drawn by its app (see AppWidgetBox)
 
             WidgetKind.TIPS -> TipsCard(w, h, ink, accent, live = !sample)
 
-            else -> DateWidget(kind, now, w, h, ink, cards, accent)
+            else -> if (kind.weather) {
+                // Each place's full weather; made-up weather for pictures of a widget
+                val key = place.ifEmpty { Weather.ME }
+                val key2 = place2
+                val r = if (sample) SampleReport else Weather.reports[key]
+                val r2 = if (sample) SampleReport else if (key2.isEmpty()) null else Weather.reports[key2]
+                LaunchedEffect(key, key2, sample) {
+                    if (!sample) {
+                        Weather.refreshPlace(context, key)
+                        if (key2.isNotEmpty()) Weather.refreshPlace(context, key2)
+                    }
+                }
+                WeatherWidget(
+                    kind, r, r2,
+                    if (sample) "Denver" else weatherName(key, r),
+                    if (sample) "Austin" else if (key2.isEmpty()) "Pick a place" else weatherName(key2, r2),
+                    now, w, h, ink, cards, accent, motion, unit, bigIcon, hours, minutes,
+                )
+            } else {
+                DateWidget(kind, now, w, h, ink, cards, accent)
+            }
         }
     }
     }
 }
 
 /** A plan [pw] × [ph] scaled to fit [w] × [h] and centered top to bottom: u(x) turns plan units into dp. */
-private class Plan(w: Dp, h: Dp, pw: Float, ph: Float) {
+internal class Plan(w: Dp, h: Dp, pw: Float, ph: Float) {
     private val s = minOf(w.value / pw, h.value / ph)
     val top: Dp = (h - (ph * s).dp) / 2
     operator fun invoke(v: Float): Dp = (v * s).dp
@@ -308,7 +330,7 @@ fun WeatherIcon(name: String, motion: Boolean, modifier: Modifier) {
  * it turns, and lands as the new bottom half. With [motion] off it just changes.
  */
 @Composable
-private fun FlipCard(text: String, color: Color, motion: Boolean, modifier: Modifier) {
+internal fun FlipCard(text: String, color: Color, motion: Boolean, modifier: Modifier) {
     // What's fully showing, and what it's turning to
     var shown by remember { mutableStateOf(text) }
     var next by remember { mutableStateOf(text) }
@@ -540,7 +562,7 @@ internal fun WText(
 
 /** A box at ([x], [y]) inside the widget, [w] × [h], holding [content] at [alignment]. */
 @Composable
-private fun Slot(x: Dp, y: Dp, w: Dp, h: Dp, alignment: Alignment, content: @Composable () -> Unit) {
+internal fun Slot(x: Dp, y: Dp, w: Dp, h: Dp, alignment: Alignment, content: @Composable () -> Unit) {
     Box(Modifier.at(x, y, w, h), contentAlignment = alignment) { content() }
 }
 
@@ -548,7 +570,7 @@ private fun Slot(x: Dp, y: Dp, w: Dp, h: Dp, alignment: Alignment, content: @Com
  * Places this at ([x], [y]) inside its parent, exactly [w] × [h], whatever room the parent has: the widget's icon and
  * flip cards spill past the panel on purpose.
  */
-private fun Modifier.at(x: Dp, y: Dp, w: Dp, h: Dp) = layout { m, _ ->
+internal fun Modifier.at(x: Dp, y: Dp, w: Dp, h: Dp) = layout { m, _ ->
     val placeable = m.measure(Constraints.fixed(w.roundToPx().coerceAtLeast(0), h.roundToPx().coerceAtLeast(0)))
     layout(0, 0) { placeable.place(x.roundToPx(), y.roundToPx()) }
 }
