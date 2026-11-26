@@ -178,7 +178,8 @@ internal fun WidgetPreview(store: SettingsStore, kind: WidgetKind, widget: com.t
             val ratio = kind.w * 1.5f / kind.h
             WidgetView(
                 kind,
-                Modifier.fillMaxHeight().aspectRatio(ratio, matchHeightConstraintsFirst = true),
+                // (Not fillMaxHeight first: that pins the height, so a wide widget couldn't shrink to the screen's width)
+                Modifier.aspectRatio(ratio, matchHeightConstraintsFirst = true),
                 sample = widget == null,
                 place = widget?.place ?: "",
                 place2 = widget?.place2 ?: "",
