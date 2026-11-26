@@ -5,6 +5,8 @@ import android.text.format.DateUtils
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -71,11 +73,14 @@ fun WidgetSettings(ctx: SettingsContext) {
     val context = LocalContext.current
     remember { Weather.loadCache(context); true }
     var colorOpen by remember { mutableStateOf<String?>(null) }
-    var previewKind by remember { mutableStateOf(WidgetKind.FLIP_WEATHER) }
+    // Opened from a widget: that one first in the preview, as it's set up (its place, big icon)
+    val mine = ctx.widget?.takeIf { it.kind != WidgetKind.ANDROID }
+    val kinds = remember(mine) { (listOfNotNull(mine?.kind) + WidgetKind.forSetup).distinct() }
+    var previewKind by remember { mutableStateOf(mine?.kind ?: WidgetKind.FLIP_WEATHER) }
 
     ScreenScaffold(ctx, pinned = {
-        Tabs(previewKind, WidgetKind.forSetup, { shortName(it) }, Modifier.padding(top = 4.dp)) { previewKind = it }
-        WidgetPreview(store, previewKind)
+        Tabs(previewKind, kinds, { if (it == mine?.kind && it !in WidgetKind.forSetup) "This one" else shortName(it) }, Modifier.padding(top = 4.dp)) { previewKind = it }
+        WidgetPreview(store, previewKind, mine?.takeIf { it.kind == previewKind })
     }) {
         ScreenTitle("Widgets", "Clocks and weather for your home screen")
         GlassPanel(Modifier.padding(top = 16.dp)) {
@@ -163,13 +168,22 @@ private fun shortName(kind: WidgetKind) = when (kind) {
 
 /** A widget as it'll look on your home screen, with your glass, dock style and colors. */
 @Composable
-internal fun WidgetPreview(store: SettingsStore, kind: WidgetKind) {
+internal fun WidgetPreview(store: SettingsStore, kind: WidgetKind, widget: com.tim.launcher.HomeWidget? = null) {
     val panelColor = Color(store[S.panelColor])
     val panel = panelColor.copy(alpha = store[S.panelOpacity].coerceIn(0.05f, 1f))
     val look = HomeLook(panel = panel, dock = DockStyle.of(store), onPanel = Ink.on(Ink.brightness(panel, 0.3f)))
     CompositionLocalProvider(LocalHomeLook provides look) {
         Box(Modifier.fillMaxWidth().height(170.dp).padding(top = 18.dp, bottom = 10.dp), contentAlignment = Alignment.Center) {
-            WidgetView(kind, Modifier.fillMaxSize(), sample = true)
+            // In about its own shape on the home screen (a 1 × 1 isn't stretched across the screen)
+            val ratio = kind.w * 1.5f / kind.h
+            WidgetView(
+                kind,
+                Modifier.fillMaxHeight().aspectRatio(ratio, matchHeightConstraintsFirst = true),
+                sample = widget == null,
+                place = widget?.place ?: "",
+                place2 = widget?.place2 ?: "",
+                bigIcon = widget?.bigIcon ?: false,
+            )
         }
     }
 }

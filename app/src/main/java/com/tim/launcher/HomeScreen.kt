@@ -1006,7 +1006,7 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
                     },
                     onSettings = {
                         drag.widgetMenu = null
-                        SettingsActivity.open(activity, route = Route.WIDGETS)
+                        SettingsActivity.open(activity, route = Route.WIDGETS, widget = vm.widgets[id])
                     },
                     onRemove = {
                         drag.widgetMenu = null

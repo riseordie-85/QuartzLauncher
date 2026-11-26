@@ -49,6 +49,10 @@ class SettingsActivity : ComponentActivity() {
             else -> Route.entries.firstOrNull { it.name == intent.getStringExtra(EXTRA_ROUTE) } ?: Route.MAIN
         }
         val store = SettingsStore.get(this).also { it.migrateDockShape() }
+        // Opened from a widget's menu: that widget, for the preview
+        val shownWidget = intent.getStringExtra(EXTRA_WIDGET)?.let { text ->
+            runCatching { com.tim.launcher.WidgetJson.read(text).firstOrNull() }.getOrNull()
+        }
         val type = detectDeviceType(this)
         store.ensureGridDefaults(type)
         if (start == Route.WIZARD) SetupNag.current = java.lang.ref.WeakReference(this)
@@ -81,7 +85,7 @@ class SettingsActivity : ComponentActivity() {
                         },
                         label = "settings",
                     ) { s ->
-                        val ctx = SettingsContext(store, type, editing, onEditing = { editing = it }, go = { go(it) }, back = { back() })
+                        val ctx = SettingsContext(store, type, editing, onEditing = { editing = it }, go = { go(it) }, back = { back() }, widget = shownWidget)
                         when (s.last()) {
                             Route.MAIN -> MainSettings(ctx)
                             Route.HOME -> HomeSettings(ctx)
@@ -108,12 +112,14 @@ class SettingsActivity : ComponentActivity() {
     companion object {
         const val EXTRA_WIZARD = "wizard"
         const val EXTRA_ROUTE = "route"
+        const val EXTRA_WIDGET = "widget"
 
-        fun open(context: Context, wizard: Boolean = false, route: Route? = null) {
+        fun open(context: Context, wizard: Boolean = false, route: Route? = null, widget: com.tim.launcher.HomeWidget? = null) {
             context.startActivity(
                 Intent(context, SettingsActivity::class.java)
                     .putExtra(EXTRA_WIZARD, wizard)
                     .putExtra(EXTRA_ROUTE, route?.name)
+                    .apply { if (widget != null) putExtra(EXTRA_WIDGET, com.tim.launcher.WidgetJson.write(listOf(widget))) }
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     // Asking for a particular screen: start fresh rather than bringing back an older settings window
                     .apply { if (route != null) addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK) },
@@ -130,4 +136,6 @@ class SettingsContext(
     val onEditing: (Scope) -> Unit,
     val go: (Route) -> Unit,
     val back: () -> Unit,
+    /** The widget whose settings were asked for from its menu, to show in the preview. */
+    val widget: com.tim.launcher.HomeWidget? = null,
 )
