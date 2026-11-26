@@ -145,7 +145,7 @@ The fold test build underneath: its only job was to prove fold behavior on real 
 - Long-press an icon and drag it to any slot, including across halves and into the dock. Drag to **Remove from home** at the top to take it off (it stays installed).
 - Several home pages (default 3). Swipe left/right; while dragging, hold an icon at the screen edge to flip pages.
 - Unfolded page modes (test panel): **Paired** (each cover page has its own inner half) or **Side by side** (unfolding shows two cover pages at once, like an open book).
-- Rotated unfolded: the apps reflow into one grid sized for the tall screen, iPad style. Rotate back and everything is where it was.
+- Rotated unfolded: one page at a time, with the same columns and rows as each page of the side-by-side view. Phones and tablets also keep their columns and rows when turned (the cells change shape), so icons stay put and can be moved as usual.
 - Swipe up for a simple app drawer. Long-press an app there and drag it to a spot on the home screen.
 - (Removed from the home menu in phase 9.) Long-press empty space for the **test panel**: what the device reports, cover side, grid size, test wallpaper, default home, copy report, event log.
 - A **test live wallpaper** that labels which screen, size, and display it is drawing on.
