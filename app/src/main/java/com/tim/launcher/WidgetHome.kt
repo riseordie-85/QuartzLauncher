@@ -72,6 +72,8 @@ import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.TouchApp
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -182,9 +184,9 @@ private fun WidgetOnGrid(widget: HomeWidget, anchor: Int, block: Block, cellW: D
     // Keyed on the kind too: changing its style must change what a tap does. (An app's widget handles its own
     // touches; holding it is passed over from the view below.)
     val gestures = if (resizing || appWidget) Modifier else Modifier
-        .pointerInput(widget.id, widget.kind, anchor) {
+        .pointerInput(widget.id, widget.kind, widget.opens, anchor) {
             detectTapGestures(
-                onTap = { widgetTap(context, widget.kind) },
+                onTap = { widgetTap(context, widget) },
                 onLongPress = { }, // long press belongs to moving it
             )
         }
@@ -389,9 +391,9 @@ internal fun WidgetOnFlow(widget: HomeWidget, width: Dp, height: Dp, drag: DragC
             .width(width)
             .height(height)
             .onRightClick { drag.widgetMenu = widget.id }
-            .pointerInput(widget.id, widget.kind) {
+            .pointerInput(widget.id, widget.kind, widget.opens) {
                 detectTapGestures(
-                    onTap = { widgetTap(context, widget.kind) },
+                    onTap = { widgetTap(context, widget) },
                     onLongPress = {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         drag.widgetMenu = widget.id
@@ -562,8 +564,21 @@ private fun QuartzWidgetHostView.snapshot(cropToContent: Boolean): Bitmap {
 }
 
 /** Tapping a widget: the clock opens your alarms; weather that isn't set up yet opens its settings. */
-private fun widgetTap(context: Context, kind: WidgetKind) {
+private fun widgetTap(context: Context, widget: HomeWidget) {
+    val kind = widget.kind
     if (kind == WidgetKind.TIPS) return // its buttons do the work
+    // An app you picked for it, or nothing at all
+    if (widget.opens == OPENS_NOTHING) return
+    if (widget.opens.isNotEmpty()) {
+        openAppByKey(context, widget.opens)
+        return
+    }
+    if (kind in WidgetKind.dates) {
+        runCatching {
+            context.startActivity(Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_CALENDAR).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }.onFailure { Diag.log("No calendar app to open: ${it.message}") }
+        return
+    }
     if (kind.weather && Weather.now == null) {
         SettingsActivity.open(context, route = Route.WIDGETS)
         return
@@ -576,6 +591,29 @@ private fun widgetTap(context: Context, kind: WidgetKind) {
     runCatching {
         context.startActivity(Intent(AlarmClock.ACTION_SHOW_ALARMS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }.onFailure { Diag.log("No clock app to open: ${it.message}") }
+}
+
+/** Opens the app with [key] (as apps are kept in layouts: its component), or Quartz's settings. */
+internal fun openAppByKey(context: Context, key: String) {
+    if (key == StarterApps.QUARTZ_SETTINGS) {
+        SettingsActivity.open(context)
+        return
+    }
+    val component = android.content.ComponentName.unflattenFromString(key) ?: return
+    runCatching {
+        context.getSystemService(android.content.pm.LauncherApps::class.java)
+            .startMainActivity(component, android.os.Process.myUserHandle(), null, null)
+    }.onFailure {
+        Diag.log("Couldn't open $key: ${it.message}")
+        Toast.makeText(context, "That app isn't installed any more", Toast.LENGTH_SHORT).show()
+    }
+}
+
+/** What a widget does when tapped with nothing picked for it, in a few words. */
+internal fun usualTap(kind: WidgetKind): String = when {
+    kind in WidgetKind.dates -> "Your calendar"
+    kind == WidgetKind.WEATHER -> "Updates the weather"
+    else -> "Your alarms and clock"
 }
 
 /**
@@ -697,8 +735,12 @@ internal fun WidgetMenu(
     onDismiss: () -> Unit,
     onReconfigure: () -> Unit = {},
     onGlass: (Boolean) -> Unit = {},
+    /** Apps it can open when tapped, and picking one (see [HomeWidget.opens]). */
+    apps: List<AppEntry> = emptyList(),
+    onOpens: (String) -> Unit = {},
 ) {
     var styles by remember { mutableStateOf(false) }
+    var opensOpen by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val appWidget = widget.kind == WidgetKind.ANDROID
     val info = remember(widget.appWidgetId) { if (appWidget) AppWidgets.info(context, widget.appWidgetId) else null }
@@ -746,6 +788,8 @@ internal fun WidgetMenu(
             }
             MenuRow("Change style", Icons.Rounded.Palette) { styles = !styles }
             if (styles) {
+                // (Scrolls inside the menu now that there are many styles)
+                Column(Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState())) {
                 WidgetKind.quartz.filter { it != widget.kind && it != WidgetKind.TIPS }.forEach { kind ->
                     Text(
                         kind.label,
@@ -757,10 +801,45 @@ internal fun WidgetMenu(
                             .padding(start = 60.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),
                     )
                 }
+                }
+            }
+            if (widget.kind != WidgetKind.TIPS) {
+                val current = when (widget.opens) {
+                    "" -> usualTap(widget.kind)
+                    OPENS_NOTHING -> "Nothing"
+                    else -> apps.firstOrNull { it.key == widget.opens }?.label ?: "An app that's gone"
+                }
+                MenuRow("Tap opens: $current", Icons.Rounded.TouchApp) { opensOpen = !opensOpen }
+                if (opensOpen) {
+                    Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState())) {
+                        OpensChoice(usualTap(widget.kind), null, widget.opens == "") { onOpens("") }
+                        OpensChoice("Nothing", null, widget.opens == OPENS_NOTHING) { onOpens(OPENS_NOTHING) }
+                        apps.forEach { app -> OpensChoice(app.label, app.icon, widget.opens == app.key) { onOpens(app.key) } }
+                    }
+                }
             }
             MenuRow("Widget settings", Icons.Rounded.Settings, onClick = onSettings)
             MenuRow("Remove", Icons.Rounded.DeleteOutline, color = Q.Danger, onClick = onRemove)
         }
+    }
+}
+
+/** One app (or the usual, or nothing) a widget's tap can open. */
+@Composable
+private fun OpensChoice(label: String, icon: ImageBitmap?, chosen: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(start = 60.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icon != null) {
+            Image(icon, contentDescription = null, modifier = Modifier.size(28.dp))
+            Spacer(Modifier.width(12.dp))
+        }
+        Text(label, color = if (chosen) Q.Text else Q.TextDim, fontSize = 15.sp, maxLines = 1, modifier = Modifier.weight(1f))
+        if (chosen) Box(Modifier.size(10.dp).background(Q.Accent, CircleShape))
     }
 }
 
@@ -834,10 +913,12 @@ internal fun WidgetPicker(
                         WidgetKind.WEATHER -> 4.16f
                         WidgetKind.ANDROID -> 2f
                         WidgetKind.TIPS -> 2.4f
+                        // The date widgets fill their cells (about half again as wide as tall)
+                        else -> kind.w * 1.5f / kind.h
                     }
                     // Room above for the parts that rise out of the card
                     Spacer(Modifier.height(if (kind == WidgetKind.WEATHER) 14.dp else 4.dp))
-                    WidgetView(kind, Modifier.fillMaxWidth().aspectRatio(ratio), sample = true)
+                    WidgetView(kind, Modifier.fillMaxWidth(if (kind in WidgetKind.dates) kind.w / 4f else 1f).aspectRatio(ratio), sample = true)
                     Spacer(Modifier.height(if (kind.weather) 18.dp else 8.dp))
                     Text(kind.label, color = Q.Text, fontSize = 16.sp, fontWeight = FontWeight.Medium)
                     Text(kind.about, color = Q.TextDim, fontSize = 13.sp)

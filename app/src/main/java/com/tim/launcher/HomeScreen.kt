@@ -1015,6 +1015,8 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
                         AppWidgets.reconfigure(activity, widget.appWidgetId)
                     },
                     onGlass = { vm.setWidgetGlass(id, it) },
+                    apps = remember(vm.apps) { vm.apps.values.sortedBy { it.label.lowercase() } },
+                    onOpens = { vm.setWidgetOpens(id, it) },
                 )
             }
         }

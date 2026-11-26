@@ -84,6 +84,7 @@ import java.util.Locale
 val Outfit = FontFamily(
     Font(R.font.outfit_light, FontWeight.Light),
     Font(R.font.outfit_medium, FontWeight.Medium),
+    Font(R.font.outfit_bold, FontWeight.Bold),
     Font(R.font.outfit_extrabold, FontWeight.ExtraBold),
 )
 
@@ -187,6 +188,8 @@ fun WidgetView(
             WidgetKind.ANDROID -> Unit // drawn by its app (see AppWidgetBox)
 
             WidgetKind.TIPS -> TipsCard(w, h, ink, accent, live = !sample)
+
+            else -> DateWidget(kind, now, w, h, ink, cards, accent)
         }
     }
     }
@@ -201,10 +204,11 @@ private class Plan(w: Dp, h: Dp, pw: Float, ph: Float) {
 
 /** The glass card behind a widget: your dock's glass, color, pattern and edge light, as a rounded panel. */
 @Composable
-internal fun WidgetCard(modifier: Modifier) {
+internal fun WidgetCard(modifier: Modifier, content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {}) {
     val look = LocalHomeLook.current
     val style = look.dock.copy(background = true, outline = DockOutline.STRAIGHT, floating = true, radius = look.dock.radius.coerceIn(14, 36))
-    Box(modifier.dockSurface(style, look.panel, DockPosition.BOTTOM, look.onPanel))
+    // Anything inside is cut to the card's shape, under its line
+    Box(modifier.dockSurface(style, look.panel, DockPosition.BOTTOM, look.onPanel), content = content)
 }
 
 /** The hours and minutes cards, side by side above the middle of the panel. */
@@ -456,13 +460,27 @@ private fun Modifier.quickTap(onTap: () -> Unit): Modifier = pointerInput(onTap)
 
 /** Text sized in dp (not scaled up by the font size setting, so it always fits its widget). */
 @Composable
-private fun WText(
+internal fun WText(
     text: String,
     size: Dp,
     color: Color,
     weight: FontWeight,
     modifier: Modifier = Modifier,
     align: TextAlign? = null,
+    /** Line height as a share of the size: under 1 sets lines close, as big dates are. */
+    line: Float = 1.15f,
+) = WText(androidx.compose.ui.text.AnnotatedString(text), size, color, weight, modifier, align, line)
+
+/** [WText] with parts in other colors or weights. */
+@Composable
+internal fun WText(
+    text: androidx.compose.ui.text.AnnotatedString,
+    size: Dp,
+    color: Color,
+    weight: FontWeight,
+    modifier: Modifier = Modifier,
+    align: TextAlign? = null,
+    line: Float = 1.15f,
 ) {
     val font = LocalWidgetFont.current
     // A wider font than Outfit (which the sizes were set for) shrinks until it fits. Kept while only the characters
@@ -484,8 +502,19 @@ private fun WText(
         softWrap = false,
         overflow = TextOverflow.Ellipsis,
         textAlign = align,
-        lineHeight = sp * 1.15f,
-        style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false)),
+        lineHeight = sp * line,
+        style = TextStyle(
+            platformStyle = PlatformTextStyle(includeFontPadding = false),
+            // Close-set lines are trimmed top and bottom, so the letters themselves sit where they're placed
+            lineHeightStyle = if (line < 1f) {
+                androidx.compose.ui.text.style.LineHeightStyle(
+                    androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center,
+                    androidx.compose.ui.text.style.LineHeightStyle.Trim.Both,
+                )
+            } else {
+                null
+            },
+        ),
     )
 }
 

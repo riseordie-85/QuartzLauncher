@@ -1264,6 +1264,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
+    /** What tapping a widget opens (see [HomeWidget.opens]). */
+    fun setWidgetOpens(id: String, opens: String) {
+        val w = widgets[id] ?: return
+        widgets[id] = w.copy(opens = opens)
+        save()
+    }
+
     /** A glass panel behind an app's widget, or not. */
     fun setWidgetGlass(id: String, on: Boolean) {
         val w = widgets[id] ?: return

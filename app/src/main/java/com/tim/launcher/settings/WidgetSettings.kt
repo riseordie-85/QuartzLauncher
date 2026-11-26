@@ -158,6 +158,7 @@ private fun shortName(kind: WidgetKind) = when (kind) {
     WidgetKind.WEATHER -> "Weather"
     WidgetKind.ANDROID -> "App"
     WidgetKind.TIPS -> "Tips"
+    else -> kind.label
 }
 
 /** A widget as it'll look on your home screen, with your glass, dock style and colors. */
