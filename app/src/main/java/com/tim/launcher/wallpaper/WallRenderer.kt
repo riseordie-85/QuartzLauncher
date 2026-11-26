@@ -166,8 +166,10 @@ object WallRenderer {
         anchor: PatternAnchor = PatternAnchor.CENTER,
         /** What [anchor] is a point of (an icon passes itself); the screen when null. */
         area: RectF? = null,
+        /** Dark lines and dots instead of light ones (the crystal patterns shade both ways already). */
+        dark: Boolean = false,
     ) {
-        val c = WallConfig(pattern = style, patternStrength = strength, patternSize = 0.3f, patternColor = Color.WHITE, patternWeight = weight, patternAnchor = anchor)
+        val c = WallConfig(pattern = style, patternStrength = strength, patternSize = 0.3f, patternColor = if (dark) Color.BLACK else Color.WHITE, patternWeight = weight, patternAnchor = anchor)
         val f = Math.pow(2.0, ((scale.coerceIn(0f, 1f) - 0.5f) * 3f).toDouble()).toFloat()
         // The shapes themselves get bigger or smaller; the area they cover stays the same
         if (style.faceted) Facets.draw(canvas, w, h, clip, c, cellScale = f) else drawPattern(canvas, w, h, c, cellScale = f, area = area)

@@ -83,11 +83,12 @@ object IconRender {
         val stroke: StrokeSpec = StrokeSpec(),
         val patternWeight: Float = 0.5f,
         val patternAnchor: com.tim.launcher.wallpaper.PatternAnchor = com.tim.launcher.wallpaper.PatternAnchor.CENTER,
+        val patternDark: Boolean = false,
     ) {
         /** Nothing to change: the app's own icon is used as it is. */
         val plain get() = pack.isEmpty() && shape == IconShape.SYSTEM && style == IconStyle.DEFAULT &&
             background == IconBackground.NONE && edge == DockEdge.NONE && shadow == IconShadow.NONE && stroke.none
-        val key get() = "$pack|$shape|$force|$style|$background|$color|$color2|$pattern|$patternStrength|$edge|$shadow|$patternSize|$patternWeight|$patternAnchor|$gradient|" +
+        val key get() = "$pack|$shape|$force|$style|$background|$color|$color2|$pattern|$patternStrength|$edge|$shadow|$patternSize|$patternWeight|$patternAnchor|$patternDark|$gradient|" +
             if (stroke.none) "-" else "${stroke.style}|${stroke.color}|${stroke.width}"
 
         /** How much bigger than the icon its picture is drawn, to leave room for the shadow. */
@@ -144,6 +145,7 @@ object IconRender {
             gradient = v.place(place?.gradient, S.iconGradient),
             patternWeight = v.place(place?.patternWeight, S.iconPatternWeight),
             patternAnchor = v.place(place?.patternAnchor, S.iconPatternAnchor),
+            patternDark = v.place(place?.patternDark, S.iconPatternDark),
             stroke = StrokeSpec(
                 v.place(place?.stroke, S.iconStroke),
                 v.place(place?.strokeColor, S.iconStrokeColor),
@@ -499,7 +501,7 @@ object IconRender {
             // (Rings spread from the icon's own middle or corner)
             WallRenderer.drawPatternOnly(
                 canvas, s, s * 3.5f, Rect(0, 0, s.toInt(), s.toInt()), spec.pattern, spec.patternStrength, spec.patternSize, spec.patternWeight,
-                spec.patternAnchor, android.graphics.RectF(0f, 0f, s, s),
+                spec.patternAnchor, android.graphics.RectF(0f, 0f, s, s), spec.patternDark,
             )
         }
     }

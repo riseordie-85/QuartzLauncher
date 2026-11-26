@@ -170,6 +170,15 @@ fun PatternAnchorRow(style: PatternStyle, anchor: PatternAnchor, on: String, onC
     }
 }
 
+/** Light or dark lines and dots, as the wallpaper's pattern has. The crystal patterns shade both ways, so they don't ask. */
+@Composable
+fun PatternShadeRow(style: PatternStyle, dark: Boolean, onChange: (Boolean) -> Unit) {
+    if (style == PatternStyle.NONE || style.faceted) return
+    Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+        com.tim.launcher.ui.Segmented(dark, listOf(false, true), { if (it) "Dark" else "Light" }) { onChange(it) }
+    }
+}
+
 /** How heavy a pattern's lines and dots are, for the patterns that have lines and dots. */
 @Composable
 fun PatternWeightSlider(style: PatternStyle, weight: Float, onChange: (Float) -> Unit) {

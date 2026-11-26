@@ -389,6 +389,9 @@ fun IconsSection(
             val pattern = draft.place(place?.pattern, S.iconPattern)
             PatternPicker("Pattern", "Over the background", pattern) { set(S.iconPattern, place?.pattern, it) }
             if (pattern != PatternStyle.NONE) {
+                PatternShadeRow(pattern, draft.place(place?.patternDark, S.iconPatternDark)) {
+                    set(S.iconPatternDark, place?.patternDark, it)
+                }
                 val strength = draft.place(place?.patternStrength, S.iconPatternStrength)
                 SliderRow("Pattern strength", strength, 0.05f..0.6f, "${(strength * 100).roundToInt()}%") {
                     set(S.iconPatternStrength, place?.patternStrength, it)

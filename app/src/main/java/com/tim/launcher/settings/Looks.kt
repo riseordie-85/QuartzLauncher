@@ -36,7 +36,7 @@ object DockPresets {
     /** Everything a dock preset sets: the dock's shape and fill, and the glass it shares with the drawer and folders. */
     val keys: List<Setting<*>> = listOf(
         S.dockBackground, S.dockOutline, S.dockRadius, S.dockFloating, S.dockFill, S.dockColor2, S.dockPattern,
-        S.dockPatternStrength, S.dockPatternSize, S.dockPatternWeight, S.dockPatternAnchor, S.dockGradientDirection, S.dockEdge,
+        S.dockPatternStrength, S.dockPatternSize, S.dockPatternWeight, S.dockPatternAnchor, S.dockPatternDark, S.dockGradientDirection, S.dockEdge,
         S.dockDepth, S.dockStroke, S.dockStrokeColor, S.dockStrokeWidth, S.dockPadding, S.dockPaddingEnds,
         S.panelColor, S.panelOpacity, S.panelBlur,
     )
@@ -99,7 +99,7 @@ object IconPresets {
     /** Everything an icon preset sets. Icon packs (and "use the shape on every icon", which is about packs) stay yours. */
     val keys: List<Setting<*>> = listOf(
         S.iconShape, S.iconStyle, S.iconBackground, S.iconBgColor, S.iconBgColor2, S.iconPattern, S.iconPatternStrength,
-        S.iconPatternSize, S.iconPatternWeight, S.iconPatternAnchor, S.iconGradient, S.iconEdge, S.iconStroke, S.iconStrokeColor,
+        S.iconPatternSize, S.iconPatternWeight, S.iconPatternAnchor, S.iconPatternDark, S.iconGradient, S.iconEdge, S.iconStroke, S.iconStrokeColor,
         S.iconStrokeWidth, S.iconShadow,
     )
 

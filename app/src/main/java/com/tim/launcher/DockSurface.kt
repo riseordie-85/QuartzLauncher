@@ -73,6 +73,7 @@ data class DockStyle(
     val patternSize: Float = 0.5f,
     val patternWeight: Float = 0.5f,
     val patternAnchor: com.tim.launcher.wallpaper.PatternAnchor = com.tim.launcher.wallpaper.PatternAnchor.CENTER,
+    val patternDark: Boolean = false,
     val gradientDirection: GradientDirection = GradientDirection.HORIZONTAL,
     val edge: DockEdge = DockEdge.SOFT,
     /** Extra room across the dock (above and below a bottom dock's icons), in dp. */
@@ -153,6 +154,7 @@ data class DockStyle(
             patternSize = v.get(S.dockPatternSize),
             patternWeight = v.get(S.dockPatternWeight),
             patternAnchor = v.get(S.dockPatternAnchor),
+            patternDark = v.get(S.dockPatternDark),
             gradientDirection = v.get(S.dockGradientDirection),
             edge = v.get(S.dockEdge),
             padding = v.get(S.dockPadding),
@@ -517,9 +519,9 @@ fun Modifier.dockSurface(style: DockStyle, tint: Color, edge: DockPosition, ink:
                 val oy = origin.y.roundToInt()
                 val bw = size.width.roundToInt().coerceAtLeast(1)
                 val bh = size.height.roundToInt().coerceAtLeast(1)
-                val look = "${style.pattern}|${style.patternStrength}|${style.patternSize}|${style.patternWeight}|${style.patternAnchor}|$screenW|$screenH"
+                val look = "${style.pattern}|${style.patternStrength}|${style.patternSize}|${style.patternWeight}|${style.patternAnchor}|${style.patternDark}|$screenW|$screenH"
                 val tile = patternCache.get(look, ox, oy, bw, bh) { native, clip ->
-                    WallRenderer.drawPatternOnly(native, screenW, screenH, clip, style.pattern, style.patternStrength, style.patternSize, style.patternWeight, style.patternAnchor)
+                    WallRenderer.drawPatternOnly(native, screenW, screenH, clip, style.pattern, style.patternStrength, style.patternSize, style.patternWeight, style.patternAnchor, dark = style.patternDark)
                 }
                 // On whole pixels, so fine lines stay sharp
                 drawImage(tile, topLeft = Offset((ox - origin.x).roundToInt().toFloat(), (oy - origin.y).roundToInt().toFloat()))

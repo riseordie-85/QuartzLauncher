@@ -607,6 +607,7 @@ fun DockColorControls(store: SettingsStore) {
     RowDivider()
     PatternPicker("Pattern", "Cut into the dock's glass", store[S.dockPattern]) { store.set(S.dockPattern, value = it) }
     if (store[S.dockPattern] != PatternStyle.NONE) {
+        PatternShadeRow(store[S.dockPattern], store[S.dockPatternDark]) { store.set(S.dockPatternDark, value = it) }
         val p = store[S.dockPatternStrength]
         SliderRow("Pattern strength", p, 0.05f..0.6f, "${(p * 100).roundToInt()}%") { store.set(S.dockPatternStrength, value = it) }
         val size = store[S.dockPatternSize]

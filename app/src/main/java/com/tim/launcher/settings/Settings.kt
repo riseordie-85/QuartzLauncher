@@ -183,6 +183,7 @@ class IconPlaceSettings(id: String) {
     val patternSize = Setting("look.$id.iconPatternScale", 0.5f, FloatCodec)
     val patternWeight = Setting("look.$id.iconPatternWeight", 0.5f, FloatCodec)
     val patternAnchor = Setting("look.$id.iconPatternAnchor", PatternAnchor.CENTER, EnumCodec(PatternAnchor.entries.toTypedArray()))
+    val patternDark = Setting("look.$id.iconPatternDark", false, BoolCodec)
     val gradient = Setting("look.$id.iconGradient", GradientDirection.DIAGONAL, EnumCodec(GradientDirection.entries.toTypedArray()))
     val edge = Setting("look.$id.iconEdge", DockEdge.NONE, EnumCodec(DockEdge.entries.toTypedArray()))
     val shadow = Setting("look.$id.iconShadow", IconShadow.NONE, EnumCodec(IconShadow.entries.toTypedArray()))
@@ -245,6 +246,8 @@ object S {
     val dockPatternWeight = Setting("dock.patternWeight", 0.5f, FloatCodec)
     /** Where the dock's rings spread from, on the screen (so they match the wallpaper's). */
     val dockPatternAnchor = Setting("dock.patternAnchor", PatternAnchor.CENTER, EnumCodec(PatternAnchor.entries.toTypedArray()))
+    /** Dark lines and dots in the dock's pattern instead of light ones. */
+    val dockPatternDark = Setting("dock.patternDark", false, BoolCodec)
     val dockGradientDirection = Setting("dock.gradientDirection", GradientDirection.HORIZONTAL, EnumCodec(GradientDirection.entries.toTypedArray()))
     val dockEdge = Setting("dock.edge", DockEdge.SOFT, EnumCodec(DockEdge.entries.toTypedArray()))
     /** Tooth size for Zigzag and Ribbon, or how deep Arch, Bowl and Tilt go: 0 small, 1 big. */
@@ -309,6 +312,8 @@ object S {
     val iconPatternWeight = Setting("look.iconPatternWeight", 0.5f, FloatCodec)
     /** Where an icon's rings spread from, on the icon itself. */
     val iconPatternAnchor = Setting("look.iconPatternAnchor", PatternAnchor.CENTER, EnumCodec(PatternAnchor.entries.toTypedArray()))
+    /** Dark lines and dots in an icon's pattern instead of light ones. */
+    val iconPatternDark = Setting("look.iconPatternDark", false, BoolCodec)
     val iconGradient = Setting("look.iconGradient", GradientDirection.DIAGONAL, EnumCodec(GradientDirection.entries.toTypedArray()))
     /** A lit rim around each icon, like the dock's. */
     val iconEdge = Setting("look.iconEdge", DockEdge.NONE, EnumCodec(DockEdge.entries.toTypedArray()))
