@@ -261,7 +261,7 @@ private fun IconPreview(slot: IconSlot, spec: IconRender.Spec) {
 }
 
 /**
- * Settings › Appearance › Icons. With "Match everywhere" on, one style for every icon. Off, tabs for the home
+ * Settings › Icons and badges. With "Match everywhere" on, one style for every icon. Off, tabs for the home
  * screen, dock and app drawer, each with its own pack, shape, style and background (the dock and drawer start out
  * like the home screen). Changes show in the preview right away and reach your icons when you tap Apply. Sizes
  * (below) apply straight away.
@@ -547,7 +547,7 @@ private fun slotName(slot: IconSlot) = when (slot) {
     IconSlot.DRAWER -> "App drawer"
 }
 
-/** Settings › Appearance › Notification badges: on/off (with notification access), dot or count, color steps. */
+/** Settings › Icons and badges › Notification badges: on/off (with notification access), dot or count, color steps. */
 @Composable
 fun BadgesSection(ctx: SettingsContext) {
     val store = ctx.store

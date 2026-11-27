@@ -28,7 +28,7 @@ import com.tim.launcher.ui.Q
 import com.tim.launcher.ui.QuartzTheme
 import com.tim.launcher.wizard.SetupWizard
 
-enum class Route { MAIN, HOME, DOCK, DRAWER, DRAWER_TAB, APPEARANCE, FONTS, WIDGETS, WALLPAPER, GESTURES, PRIVACY, ABOUT, WIZARD }
+enum class Route { MAIN, HOME, DOCK, DRAWER, DRAWER_TAB, APPEARANCE, THEMES, FONTS, WIDGETS, WALLPAPER, GESTURES, PRIVACY, ABOUT, WIZARD }
 
 /** Quartz settings and the setup wizard, shown as a frosted sheet over the wallpaper. */
 class SettingsActivity : ComponentActivity() {
@@ -49,6 +49,8 @@ class SettingsActivity : ComponentActivity() {
             else -> Route.entries.firstOrNull { it.name == intent.getStringExtra(EXTRA_ROUTE) } ?: Route.MAIN
         }
         val store = SettingsStore.get(this).also { it.migrateDockShape() }
+        // A fresh Settings starts with an empty search
+        if (savedInstanceState == null) SettingsSearch.last = ""
         // Opened from a widget's menu: that widget, for the preview
         val shownWidget = intent.getStringExtra(EXTRA_WIDGET)?.let { text ->
             runCatching { com.tim.launcher.WidgetJson.read(text).firstOrNull() }.getOrNull()
@@ -96,6 +98,7 @@ class SettingsActivity : ComponentActivity() {
                             Route.DRAWER -> DrawerSettings(ctx)
                             Route.DRAWER_TAB -> TabEditor(ctx)
                             Route.APPEARANCE -> AppearanceSettings(ctx)
+                            Route.THEMES -> ThemesSettings(ctx)
                             Route.WIDGETS -> WidgetSettings(ctx)
                             Route.FONTS -> FontSettings(ctx)
                             Route.WALLPAPER -> WallpaperSettings(ctx)

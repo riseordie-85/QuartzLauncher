@@ -158,7 +158,7 @@ private val LocalDockCover = compositionLocalOf { DockCover() }
 
 private val PanelShape = RoundedCornerShape(28.dp)
 
-/** How big drawer icons are (Settings › Appearance › Icon sizes). */
+/** How big drawer icons are (Settings › Icons and badges › Icon sizes). */
 private val LocalDrawerIconScale = staticCompositionLocalOf { 1f }
 
 /** Clamps a size between [min] and [max], even on a screen smaller than [min]. */

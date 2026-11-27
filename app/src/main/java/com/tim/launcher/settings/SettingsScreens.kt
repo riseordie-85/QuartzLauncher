@@ -35,6 +35,7 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.material.icons.rounded.Style
 import androidx.compose.material.icons.rounded.Swipe
 import androidx.compose.material3.AlertDialog
 import kotlinx.coroutines.launch
@@ -166,8 +167,17 @@ private fun SettingsContext.link(setting: Setting<*>): LinkState? {
 @Composable
 fun MainSettings(ctx: SettingsContext) {
     val store = ctx.store
+    var query by remember { mutableStateOf(SettingsSearch.last) }
     ScreenScaffold(ctx, showBack = true) {
         ScreenTitle("Settings", "${ctx.type.label} · everything stays on this device")
+        SettingsSearchField(query, {
+            query = it
+            SettingsSearch.last = it
+        }, Modifier.padding(top = 14.dp))
+        if (query.isNotBlank()) {
+            SettingsSearchResults(ctx, query)
+            return@ScreenScaffold
+        }
 
         // Screens diagram
         GlassPanel(Modifier.padding(top = 16.dp)) {
@@ -200,14 +210,20 @@ fun MainSettings(ctx: SettingsContext) {
             RowDivider()
             NavRow("App drawer", "Opening, view, sorting", Icons.Rounded.Apps) { ctx.go(Route.DRAWER) }
         }
-        SectionLabel("Look and behavior")
+        SectionLabel("Look")
         GlassPanel {
+            NavRow("Themes", "Ready-made looks, and saving or loading your own", Icons.Rounded.Style) { ctx.go(Route.THEMES) }
+            RowDivider()
             NavRow("Wallpaper", "Gradients, colors, photos, patterns", Icons.Rounded.Wallpaper) { ctx.go(Route.WALLPAPER) }
             RowDivider()
-            NavRow("Appearance", "Icons, badges, widgets", Icons.Rounded.Palette) { ctx.go(Route.APPEARANCE) }
+            NavRow("Icons and badges", "Icon packs, shapes, styles, sizes, badges", Icons.Rounded.Palette) { ctx.go(Route.APPEARANCE) }
+            RowDivider()
+            NavRow("Widgets", "Clocks, dates and weather: colors, font, places", Icons.Rounded.Widgets) { ctx.go(Route.WIDGETS) }
             RowDivider()
             NavRow("Fonts", "Home screen, dock, app drawer, widgets", Icons.Rounded.TextFields) { ctx.go(Route.FONTS) }
-            RowDivider()
+        }
+        SectionLabel("Behavior")
+        GlassPanel {
             NavRow("Gestures", "What each swipe and tap does", Icons.Rounded.Swipe) { ctx.go(Route.GESTURES) }
         }
         SectionLabel("Your data")
@@ -469,7 +485,7 @@ fun DockSettings(ctx: SettingsContext) {
     }
 }
 
-/** The dock screen's two tabs. Remembered while Quartz is open, so Appearance can send you straight to Style. */
+/** The dock screen's two tabs. Remembered while Quartz is open, so search can send you straight to a tab. */
 enum class DockTab(val label: String) {
     PLACEMENT("Placement"), STYLE("Style");
 
@@ -815,12 +831,6 @@ fun DrawerSettings(ctx: SettingsContext) {
 @Composable
 fun AppearanceSettings(ctx: SettingsContext) {
     val store = ctx.store
-    val context = LocalContext.current
-    var quartzWallpaper by remember { mutableStateOf(WallCache.isActive(context)) }
-    LifecycleResumeEffect(Unit) {
-        quartzWallpaper = WallCache.isActive(context)
-        onPauseOrDispose { }
-    }
     val draft = remember { IconDraft(store) }
     val apply = rememberIconApply(draft)
     // The icon preview stays at the top while you scroll through the icon settings
@@ -828,34 +838,17 @@ fun AppearanceSettings(ctx: SettingsContext) {
     DisposableEffect(draft) { onDispose { draft.saveQuietly() } }
     Box(Modifier.fillMaxSize()) {
     ScreenScaffold(ctx, pinned = { IconDraftPreview(draft, iconTab.value) }) {
-        ScreenTitle("Appearance", "Icons, badges and widgets")
-        Box(Modifier.fillMaxWidth().padding(top = 16.dp)) {
-            DevicePreview(previewLook(store, ctx.type), height = 130.dp)
-        }
-
-        SectionLabel("Glass")
-        GlassPanel {
-            NavRow("Color and glass", "Now in Dock › Style, next to the dock preview") {
-                DockTab.last = DockTab.STYLE
-                ctx.go(Route.DOCK)
-            }
-        }
+        ScreenTitle("Icons and badges", "How your app icons look everywhere, and the badges on them")
 
         IconsSection(ctx, draft, tabState = iconTab, showPreview = false)
 
         BadgesSection(ctx)
 
-        SectionLabel("Widgets")
-        GlassPanel {
-            NavRow("Clocks and weather", "Clock, flip clock, weather: colors, 24-hour time, where the weather is for", Icons.Rounded.Widgets) {
-                ctx.go(Route.WIDGETS)
-            }
-        }
-
-        SectionLabel("Wallpaper")
-        GlassPanel {
-            NavRow("Wallpaper", "Gradients, colors, photos, patterns", Icons.Rounded.Wallpaper) { ctx.go(Route.WALLPAPER) }
-        }
+        // The glass behind them is the dock's (and the drawer's and folders'), so it's set there
+        BodyText(
+            "The glass behind folders, the drawer and widgets matches your dock. Change it in Dock › Style.",
+            Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+        )
         // Room to scroll the last rows out from under the Apply bar
         if (draft.dirty) Spacer(Modifier.height(72.dp))
     }
@@ -931,30 +924,6 @@ fun PrivacySettings(ctx: SettingsContext) {
         }.onSuccess { toast(context, "Imported $it settings") }.onFailure { toast(context, "Import failed: ${it.message}") }
     }
 
-    // Themes: a name before exporting, and a look at what's coming in before it replaces yours
-    var naming by remember { mutableStateOf(false) }
-    var themeName by remember { mutableStateOf("") }
-    var incoming by remember { mutableStateOf<Pair<String, String>?>(null) } // name, file text
-    val themeScope = androidx.compose.runtime.rememberCoroutineScope()
-    val themeExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        // A photo and fonts can make the file a few megabytes: written off the main thread
-        val name = themeName
-        themeScope.launch {
-            val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(ThemeFile.export(context, name).toByteArray()) } }
-            }
-            result.onSuccess { toast(context, "Theme exported") }.onFailure { toast(context, "Export failed: ${it.message}") }
-        }
-    }
-    val themeImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        runCatching {
-            val text = context.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } ?: error("Empty file")
-            ThemeFile.nameOf(text) to text
-        }.onSuccess { incoming = it }.onFailure { toast(context, it.message ?: "That file couldn't be read") }
-    }
-
     ScreenScaffold(ctx) {
         ScreenTitle("Privacy & backup")
         GlassPanel(Modifier.padding(top = 16.dp)) {
@@ -1021,57 +990,15 @@ fun PrivacySettings(ctx: SettingsContext) {
 
         SectionLabel("Themes")
         GlassPanel {
-            SettingRow("Export theme", "Just the look: dock, icons, wallpaper (with its photo), fonts, widget colors and badges. No apps or layout.", onClick = {
-                themeName = ""
-                naming = true
-            })
-            RowDivider()
-            SettingRow("Import theme", "Use a look you saved or someone shared", onClick = {
-                themeImporter.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
-            })
+            NavRow("Themes", "Save just your look as a file, or load one") { ctx.go(Route.THEMES) }
         }
-    }
-
-    if (naming) {
-        AlertDialog(
-            onDismissRequest = { naming = false },
-            title = { Text("Name this theme") },
-            text = {
-                OutlinedTextField(value = themeName, onValueChange = { themeName = it.take(32) }, singleLine = true, placeholder = { Text("My theme") })
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    naming = false
-                    val slug = themeName.trim().lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').ifEmpty { "my-theme" }
-                    themeExporter.launch("quartz-theme-$slug.json")
-                }) { Text("Export") }
-            },
-            dismissButton = { TextButton(onClick = { naming = false }) { Text("Cancel") } },
-        )
-    }
-
-    incoming?.let { (name, text) ->
-        AlertDialog(
-            onDismissRequest = { incoming = null },
-            title = { Text("Use \"$name\"?") },
-            text = { Text("Your dock, icons, wallpaper, fonts, widget colors and badges change to this theme's. To keep your current look, export it as a theme first.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    incoming = null
-                    runCatching { ThemeFile.import(context, text) }
-                        .onSuccess { toast(context, "Theme \"$it\" applied") }
-                        .onFailure { toast(context, "Import failed: ${it.message}") }
-                }) { Text("Use theme") }
-            },
-            dismissButton = { TextButton(onClick = { incoming = null }) { Text("Cancel") } },
-        )
     }
 
     if (confirmReset) {
         AlertDialog(
             onDismissRequest = { confirmReset = false },
             title = { Text("Reset all settings?") },
-            text = { Text("Every setting goes back to its default. To run setup again, long-press the home screen and choose Run setup again.") },
+            text = { Text("Every setting goes back to its default. To run setup again, choose Restart setup in Settings.") },
             confirmButton = {
                 TextButton(onClick = {
                     store.resetAll()

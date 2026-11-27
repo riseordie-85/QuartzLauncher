@@ -34,7 +34,7 @@ import com.tim.launcher.settings.SettingsStore
 
 /**
  * How many notifications each app has, for badges. Quartz only counts them per app: it never reads, keeps or sends
- * what they say. Needs notification access, which you turn on yourself (Settings › Appearance › Badges).
+ * what they say. Needs notification access, which you turn on yourself (Settings › Icons and badges).
  */
 object Badges {
     /** Package name → number of notifications. */

@@ -115,10 +115,10 @@ import android.widget.Toast
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Style
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
@@ -941,9 +941,9 @@ fun HomeScreen(activity: Activity, homeTick: Int, vm: HomeViewModel = viewModel(
                     menuOpen = false
                     SettingsActivity.open(activity)
                 },
-                onSetup = {
+                onThemes = {
                     menuOpen = false
-                    SettingsActivity.open(activity, wizard = true)
+                    SettingsActivity.open(activity, route = Route.THEMES)
                 },
                 onWallpaper = {
                     menuOpen = false
@@ -1151,7 +1151,7 @@ private fun RemoveZone(drag: DragController, canUninstall: Boolean) {
 @Composable
 private fun HomeMenu(
     onSettings: () -> Unit,
-    onSetup: () -> Unit,
+    onThemes: () -> Unit,
     onWallpaper: () -> Unit,
     onPages: () -> Unit,
     onWidgets: () -> Unit,
@@ -1173,9 +1173,9 @@ private fun HomeMenu(
                 .padding(vertical = 8.dp),
         ) {
             MenuItem("Wallpaper", Icons.Rounded.Wallpaper, onWallpaper)
+            MenuItem("Themes", Icons.Rounded.Style, onThemes)
             MenuItem("Widgets", Icons.Rounded.Widgets, onWidgets)
             MenuItem("Quartz settings", Icons.Rounded.Settings, onSettings)
-            MenuItem("Run setup again", Icons.Rounded.AutoAwesome, onSetup)
             MenuItem("Pages", Icons.Rounded.GridView, onPages)
         }
     }

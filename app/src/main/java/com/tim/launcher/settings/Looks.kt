@@ -273,9 +273,9 @@ object HomeThemes {
     /**
      * Puts [theme] in place: its look and wallpaper straight away, the widget for when setup ends. Crystal's icons go
      * into [draft] (applied with the "Styling your icons" popup, so nothing flickers); a theme file sets them itself.
-     * [staged]: from [stage], when that was done ahead.
+     * [staged]: from [stage], when that was done ahead. [widget]: the theme's widget is set for setup's end (not from Settings).
      */
-    fun apply(context: Context, store: SettingsStore, draft: IconDraft, theme: HomeTheme, staged: ThemeFile.Staged? = null) {
+    fun apply(context: Context, store: SettingsStore, draft: IconDraft, theme: HomeTheme, staged: ThemeFile.Staged? = null, widget: Boolean = true) {
         if (theme.file != null) {
             ThemeFile.finish(context, staged ?: ThemeFile.stageAsset(context, theme.file))
             draft.discard()
@@ -295,6 +295,6 @@ object HomeThemes {
             store.set(S.widgetColor, value = theme.cards)
             store.set(S.widgetAccent, value = theme.accent)
         }
-        store.set(S.widgets, value = theme.widget.name)
+        if (widget) store.set(S.widgets, value = theme.widget.name)
     }
 }

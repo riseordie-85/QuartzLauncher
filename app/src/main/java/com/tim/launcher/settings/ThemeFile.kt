@@ -95,18 +95,27 @@ object ThemeFile {
      */
     fun import(context: Context, text: String): String {
         val name = nameOf(text)
+        finish(context, stageText(context, text))
+        return name
+    }
+
+    /** [import], with the slow part (reading the file, writing its photo and fonts) off the main thread. */
+    suspend fun importStaged(context: Context, text: String): String {
+        val name = nameOf(text)
+        val staged = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { stageText(context, text) }
+        finish(context, staged)
+        return name
+    }
+
+    private fun stageText(context: Context, text: String): Staged {
         val json = JSONObject(text)
         val images = json.optJSONObject("images")
         val fonts = json.optJSONObject("fonts")
-        finish(
-            context,
-            stage(
-                context, json,
-                images?.keys()?.asSequence()?.toList() ?: emptyList(), { Base64.decode(images!!.getString(it), Base64.DEFAULT) },
-                fonts?.keys()?.asSequence()?.toList() ?: emptyList(), { Base64.decode(fonts!!.getString(it), Base64.DEFAULT) },
-            ),
+        return stage(
+            context, json,
+            images?.keys()?.asSequence()?.toList() ?: emptyList(), { Base64.decode(images!!.getString(it), Base64.DEFAULT) },
+            fonts?.keys()?.asSequence()?.toList() ?: emptyList(), { Base64.decode(fonts!!.getString(it), Base64.DEFAULT) },
         )
-        return name
     }
 
     /** A theme with its photos and fonts written in place (the slow part, fine off the main thread), ready for [finish]. */
