@@ -283,6 +283,23 @@ object Fonts {
         return FontFamily(fonts)
     }
 
+    /**
+     * The font [id] for a theme's picture before it's used: a font the theme brings ([files], in assets/themes/files,
+     * copied out once to look at) or any other kind. Call off the main thread.
+     */
+    fun themeFamily(context: Context, id: String, files: List<String>): FontFamily {
+        if (!id.startsWith("user:")) return family(context, id)
+        val want = id.removePrefix("user:")
+        val dir = File(context.cacheDir, "theme_fonts").apply { mkdirs() }
+        val infos = files.mapNotNull { name ->
+            val f = File(dir, safe(name))
+            if (!f.exists()) runCatching { context.assets.open("themes/files/$name").use { input -> f.outputStream().use { input.copyTo(it) } } }
+            inspect(f)
+        }.filter { it.family == want }
+        // Already added (an earlier theme, or by you)
+        return fromFiles(infos) ?: family(context, id)
+    }
+
     /** A short name for [id], for settings rows. */
     fun nameOf(id: String): String = when {
         id == HOME -> "Same as home screen"

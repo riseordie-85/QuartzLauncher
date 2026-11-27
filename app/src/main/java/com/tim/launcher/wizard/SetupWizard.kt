@@ -248,7 +248,8 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
     // A theme: the function defaults, then its look. Its icons are drawn ahead with the "Styling your icons" popup,
     // then on to the practical questions
     fun useTheme() {
-        val theme = HomeThemes.all[themeIndex.coerceIn(0, HomeThemes.all.lastIndex)]
+        val themes = HomeThemes.all(context)
+        val theme = themes[themeIndex.coerceIn(0, themes.lastIndex)]
         applyRecommended(store, type)
         HomeThemes.apply(context, store, iconDraft, theme)
         path = Path.THEME
@@ -375,7 +376,7 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
             if (index > 0 && step != Step.DONE) GhostButton("Back") { back() }
             Spacer(Modifier.weight(1f))
             when (step) {
-                Step.PATH -> PrimaryButton("Use ${HomeThemes.all[themeIndex.coerceIn(0, HomeThemes.all.lastIndex)].name}") { useTheme() }
+                Step.PATH -> PrimaryButton("Use ${HomeThemes.all(context).let { it[themeIndex.coerceIn(0, it.lastIndex)].name }}") { useTheme() }
                 Step.DONE -> PrimaryButton("Go home") { finish() }
                 Step.WELCOME -> PrimaryButton("Let's go") { next() }
                 // Icon changes get applied (with the progress popup) on the way to the next step

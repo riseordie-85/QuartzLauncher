@@ -94,12 +94,51 @@ object ThemeFile {
     fun import(context: Context, text: String): String {
         val name = nameOf(text)
         val json = JSONObject(text)
+        val images = json.optJSONObject("images")
+        val fonts = json.optJSONObject("fonts")
+        apply(
+            context, json,
+            images?.keys()?.asSequence()?.toList() ?: emptyList(), { Base64.decode(images!!.getString(it), Base64.DEFAULT) },
+            fonts?.keys()?.asSequence()?.toList() ?: emptyList(), { Base64.decode(fonts!!.getString(it), Base64.DEFAULT) },
+        )
+        return name
+    }
+
+    /**
+     * A theme kept in the app (assets/themes/[file].json): the same as a theme file, with its photo and fonts stored
+     * beside it (assets/themes/files) so each is in the app once.
+     */
+    fun importAsset(context: Context, file: String): String {
+        val json = JSONObject(context.assets.open("themes/$file.json").bufferedReader().readText())
+        fun names(key: String) = json.optJSONArray(key)?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList()
+        val read: (String) -> ByteArray = { context.assets.open("themes/files/$it").use { s -> s.readBytes() } }
+        apply(context, json, names("assetImages"), read, names("assetFonts"), read)
+        return json.optString("name", file)
+    }
+
+    /** A theme's look settings as a [Look], for drawing it before it's used. */
+    fun lookOf(settings: JSONObject): Look {
+        val values = HashMap<Setting<*>, Any>()
+        settings.keys().forEach { id ->
+            val s = byId[id] ?: return@forEach
+            @Suppress("UNCHECKED_CAST")
+            (s as Setting<Any?>).codec.decode(settings.optString(id))?.let { values[s] = it }
+        }
+        return Look(values)
+    }
+
+    private fun apply(
+        context: Context,
+        json: JSONObject,
+        imageNames: List<String>,
+        image: (String) -> ByteArray,
+        fontNames: List<String>,
+        font: (String) -> ByteArray,
+    ) {
         val store = SettingsStore.get(context)
         val settings = json.optJSONObject("settings") ?: JSONObject()
         // Its fonts first, so the settings that name them find them
-        json.optJSONObject("fonts")?.let { fonts ->
-            fonts.keys().forEach { file -> runCatching { com.tim.launcher.Fonts.addFile(context, file, Base64.decode(fonts.getString(file), Base64.DEFAULT)) } }
-        }
+        fontNames.forEach { file -> runCatching { com.tim.launcher.Fonts.addFile(context, file, font(file)) } }
 
         (keys + placeKeys).forEach { s ->
             val raw = settings.optString(s.id, "")
@@ -118,11 +157,10 @@ object ThemeFile {
         settings.keys().forEach { k -> if (k !in byId) com.tim.launcher.Diag.log("Theme setting skipped: $k") }
 
         // The photo(s) come in under new names, so they never replace one you have
-        val images = json.optJSONObject("images")
         val renamed = HashMap<String, String>()
-        images?.keys()?.forEach { old ->
+        imageNames.forEach { old ->
             runCatching {
-                val bytes = Base64.decode(images.getString(old), Base64.DEFAULT)
+                val bytes = image(old)
                 val fresh = "img_${System.currentTimeMillis()}_${renamed.size}.jpg"
                 WallStore.imageFile(context, fresh).writeBytes(bytes)
                 renamed[old] = fresh
@@ -144,6 +182,5 @@ object ThemeFile {
             // One wallpaper in the theme: the cover screen shows it too
             WallStore.setMode(context, FoldMode.STRETCHED)
         }
-        return name
     }
 }

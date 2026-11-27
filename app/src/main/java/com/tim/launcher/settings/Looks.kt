@@ -15,7 +15,10 @@ import com.tim.launcher.wallpaper.WallStore
  * A ready-made set of look settings (a dock preset, an icon preset). Anything it doesn't name is at its default,
  * so picking one gives exactly what its picture shows.
  */
-class Look(private val values: Map<Setting<*>, Any>) : IconRender.Values {
+class Look(internal val values: Map<Setting<*>, Any>) : IconRender.Values {
+    /** This look with [other]'s values on top. */
+    operator fun plus(other: Look) = Look(values + other.values)
+
     @Suppress("UNCHECKED_CAST")
     override fun <T> get(setting: Setting<T>): T = (values[setting] as T?) ?: setting.default
 
@@ -199,61 +202,89 @@ object GradientPresets {
 
 // ---- Home screen themes ----
 
-/** A whole home screen to start from: a dock, icons, a wallpaper and a widget that go together. */
+/**
+ * A whole home screen to start from: its look (dock, icons, widget colors, fonts…), a wallpaper and a widget.
+ * Most are theme files kept in the app (assets/themes, made with Export theme); Crystal is built from presets.
+ */
 data class HomeTheme(
     val name: String,
     val about: String,
-    val dock: Preset,
-    val icons: Preset,
-    /** One of the wallpaper presets, by name. */
-    val wallpaper: String,
     val widget: WidgetKind,
-    /** The flip clock's cards, and the date and buttons on widgets. */
-    val cards: Int,
-    val accent: Int,
+    /** Every look setting it sets (anything else at its default). */
+    val look: Look,
+    val wallConfig: com.tim.launcher.wallpaper.WallConfig,
+    /** Its file in assets/themes, without ".json" (null: built here). */
+    val file: String? = null,
+    /** Its wallpaper photo and fonts, in assets/themes/files. */
+    val wallImage: String? = null,
+    val fontFiles: List<String> = emptyList(),
 ) {
-    val wallConfig get() = (WallPresets.all.firstOrNull { it.name == wallpaper } ?: WallPresets.all.first()).config
+    val cards: Int get() = look.get(S.widgetColor)
+    val accent: Int get() = look.get(S.widgetAccent)
 }
 
 object HomeThemes {
-    val all = listOf(
-        HomeTheme(
-            "Crystal", "Frosted icons over amethyst, with a cut-crystal dock",
-            DockPresets.crystal, IconPresets.frosted, "Amethyst", WidgetKind.FLIP, 0xFFA4509E.toInt(), 0xFFE9B8F2.toInt(),
-        ),
-        HomeTheme(
-            "Clean", "Rounded glass and your apps' own icons",
-            DockPresets.glass, IconPresets.own, "Quartz", WidgetKind.FLIP, 0xFFBF5AA6.toInt(), 0xFFBF5AA6.toInt(),
-        ),
-        HomeTheme(
-            "Midnight", "One-color icons and a neon edge on graphite",
-            DockPresets.neon, IconPresets.neon, "Graphite", WidgetKind.CLOCK, 0xFF8C6CFF.toInt(), 0xFF8C6CFF.toInt(),
-        ),
-        HomeTheme(
-            "Paper", "Light and inky, with pen-drawn lines",
-            DockPresets.paper, IconPresets.paper, "Frost", WidgetKind.FLIP, 0xFFF4F1EA.toInt(), 0xFF2A2046.toInt(),
-        ),
-        HomeTheme(
-            "Tide", "Ocean blues, a wave dock and ringed icons",
-            DockPresets.wave, IconPresets.rings, "Ocean", WidgetKind.FLIP, 0xFF0F5C7A.toInt(), 0xFF4FB3BF.toInt(),
-        ),
-    )
+    private val crystal: HomeTheme
+        get() = HomeTheme(
+            "Crystal", "Frosted icons over amethyst, with a cut-crystal dock", WidgetKind.FLIP,
+            DockPresets.crystal.look + IconPresets.frosted.look +
+                Look(mapOf<Setting<*>, Any>(S.widgetColor to 0xFFA4509E.toInt(), S.widgetAccent to 0xFFE9B8F2.toInt())),
+            (WallPresets.all.firstOrNull { it.name == "Amethyst" } ?: WallPresets.all.first()).config,
+        )
+
+    @Volatile
+    private var loaded: List<HomeTheme>? = null
+
+    /** Every theme, in the order they're shown: Crystal, then the files in assets/themes/index.json. */
+    fun all(context: Context): List<HomeTheme> = loaded ?: synchronized(this) {
+        loaded ?: (listOf(crystal) + runCatching { files(context) }.onFailure { com.tim.launcher.Diag.log("Themes: ${it.message}") }.getOrDefault(emptyList()))
+            .also { loaded = it }
+    }
+
+    private fun files(context: Context): List<HomeTheme> {
+        val index = org.json.JSONArray(context.assets.open("themes/index.json").bufferedReader().readText())
+        return (0 until index.length()).mapNotNull { i ->
+            val entry = index.getJSONObject(i)
+            val file = entry.getString("file")
+            runCatching {
+                val json = org.json.JSONObject(context.assets.open("themes/$file.json").bufferedReader().readText())
+                val main = json.optJSONObject("wallpaper")?.optJSONObject("main")
+                val wall = main?.let { com.tim.launcher.wallpaper.WallConfig.fromJson(it.toString()) } ?: WallPresets.all.first().config
+                HomeTheme(
+                    name = entry.optString("name", json.optString("name")),
+                    about = entry.optString("about"),
+                    widget = runCatching { WidgetKind.valueOf(entry.optString("widget", "FLIP")) }.getOrDefault(WidgetKind.FLIP),
+                    look = ThemeFile.lookOf(json.optJSONObject("settings") ?: org.json.JSONObject()),
+                    wallConfig = wall,
+                    file = file,
+                    wallImage = wall.image,
+                    fontFiles = json.optJSONArray("assetFonts")?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList(),
+                )
+            }.onFailure { com.tim.launcher.Diag.log("Theme $file: ${it.message}") }.getOrNull()
+        }
+    }
 
     /**
-     * Puts [theme] in place: the dock and wallpaper straight away, the widget for when setup ends, and the icons into
-     * [draft] (applied with the "Styling your icons" popup, so nothing flickers).
+     * Puts [theme] in place: its look and wallpaper straight away, the widget for when setup ends. Crystal's icons go
+     * into [draft] (applied with the "Styling your icons" popup, so nothing flickers); a theme file sets them itself.
      */
     fun apply(context: Context, store: SettingsStore, draft: IconDraft, theme: HomeTheme) {
-        store.applyLook(DockPresets.keys, theme.dock.look)
-        IconPresets.pick(draft, theme.icons)
-        val current = WallStore.load(context, WallSlot.MAIN)
-        WallStore.save(context, WallSlot.MAIN, applyPreset(current, theme.wallConfig))
-        // A fold with its own cover wallpaper gets the theme's there too
-        if (WallStore.mode(context) == FoldMode.SEPARATE) {
-            WallStore.save(context, WallSlot.COVER, applyPreset(WallStore.load(context, WallSlot.COVER), theme.wallConfig))
+        if (theme.file != null) {
+            ThemeFile.importAsset(context, theme.file)
+            draft.discard()
+        } else {
+            store.applyLook(DockPresets.keys, theme.look)
+            IconPresets.keys.forEach { k -> @Suppress("UNCHECKED_CAST") draft.set(k as Setting<Any>, theme.look.get(k) as Any) }
+            draft.set(S.iconsMatch, true)
+            val current = WallStore.load(context, WallSlot.MAIN)
+            WallStore.save(context, WallSlot.MAIN, applyPreset(current, theme.wallConfig))
+            // A fold with its own cover wallpaper gets the theme's there too
+            if (WallStore.mode(context) == FoldMode.SEPARATE) {
+                WallStore.save(context, WallSlot.COVER, applyPreset(WallStore.load(context, WallSlot.COVER), theme.wallConfig))
+            }
+            store.set(S.widgetColor, value = theme.cards)
+            store.set(S.widgetAccent, value = theme.accent)
         }
         store.set(S.widgets, value = theme.widget.name)
-        store.set(S.widgetColor, value = theme.cards)
-        store.set(S.widgetAccent, value = theme.accent)
     }
 }

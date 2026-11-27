@@ -85,7 +85,8 @@ import kotlin.math.roundToInt
  */
 @Composable
 internal fun ThemeCarousel(selected: Int, onSelect: (Int) -> Unit) {
-    val themes = HomeThemes.all
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val themes = remember { HomeThemes.all(context) }
     val config = LocalConfiguration.current
     // This screen's shape, so the pictures look like your own home screen
     val aspect = (config.screenWidthDp.toFloat() / config.screenHeightDp.coerceAtLeast(1)).coerceIn(0.35f, 1.8f)
@@ -158,11 +159,23 @@ private fun ThemeCard(theme: HomeTheme, w: Dp, h: Dp, apps: List<AppEntry>, curr
     val density = LocalDensity.current
     val pxW = with(density) { w.roundToPx() }.coerceAtLeast(1)
     val pxH = with(density) { h.roundToPx() }.coerceAtLeast(1)
-    val blur = theme.dock.look.get(S.panelBlur)
+    val blur = theme.look.get(S.panelBlur)
+    val cardContext = androidx.compose.ui.platform.LocalContext.current
     val wall by produceState<ThemeWall?>(null, theme, pxW, pxH) {
         value = withContext(Dispatchers.Default) {
             val frame = Frame(theme.wallConfig, pxW / pxH.toFloat(), 0f, 1f, ScreenKind.SINGLE, FoldMode.STRETCHED)
-            val sharp = WallRenderer.renderSmall(pxW, pxH, 0.5f, frame) { null }
+            // A theme's photo comes from the app's own copy, read small
+            val photo = theme.wallImage?.let { name ->
+                runCatching {
+                    val bytes = cardContext.assets.open("themes/files/$name").use { it.readBytes() }
+                    val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                    var sample = 1
+                    while (bounds.outWidth / (sample * 2) >= pxW && bounds.outHeight / (sample * 2) >= pxH) sample *= 2
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+                }.getOrNull()
+            }
+            val sharp = WallRenderer.renderSmall(pxW, pxH, 0.5f, frame) { if (it == theme.wallImage) photo else null }
             val blurred = if (blur < 0.03f) null else sharp.copy(Bitmap.Config.ARGB_8888, true).also {
                 WallRenderer.blur(it, (2 + blur * 12).roundToInt())
             }
@@ -171,8 +184,12 @@ private fun ThemeCard(theme: HomeTheme, w: Dp, h: Dp, apps: List<AppEntry>, curr
     }
     var at by remember { mutableStateOf(Offset.Zero) }
     val glass = wall?.blurred?.let { WallCache.Glass(it, pxW, pxH, wall?.brightness ?: 0.3f, blurred = true, left = at.x, top = at.y) }
-    val style = DockStyle.of(theme.dock.look)
-    val panel = Color(theme.dock.look.get(S.panelColor)).copy(alpha = theme.dock.look.get(S.panelOpacity).coerceIn(0.05f, 1f))
+    val style = DockStyle.of(theme.look)
+    val panel = Color(theme.look.get(S.panelColor)).copy(alpha = theme.look.get(S.panelOpacity).coerceIn(0.05f, 1f))
+    // The theme's widget font: one of its own (read from the app's copy) or a built-in one
+    val widgetFont by produceState<androidx.compose.ui.text.font.FontFamily?>(null, theme) {
+        value = withContext(Dispatchers.IO) { com.tim.launcher.Fonts.themeFamily(cardContext, theme.look.get(S.fontWidgets), theme.fontFiles) }
+    }
     val look = HomeLook(panel = panel, dock = style, onPanel = Ink.on(Ink.brightness(panel, wall?.brightness ?: 0.3f)))
     // The theme's icons with your icon pack, which picking a theme keeps
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -185,7 +202,7 @@ private fun ThemeCard(theme: HomeTheme, w: Dp, h: Dp, apps: List<AppEntry>, curr
             override fun <T> get(setting: com.tim.launcher.settings.Setting<T>): T = when (setting) {
                 S.iconPackHome -> pack as T
                 S.iconForceShape -> force as T
-                else -> theme.icons.look.get(setting)
+                else -> theme.look.get(setting)
             }
             override fun <T> place(own: com.tim.launcher.settings.Setting<T>?, home: com.tim.launcher.settings.Setting<T>): T = get(home)
         }
@@ -215,6 +232,7 @@ private fun ThemeCard(theme: HomeTheme, w: Dp, h: Dp, apps: List<AppEntry>, curr
                     sample = true,
                     cardColor = Color(theme.cards),
                     accentColor = Color(theme.accent),
+                    fontFamily = widgetFont,
                 )
                 Spacer(Modifier.weight(1f))
                 // A row of apps above the dock
@@ -226,7 +244,7 @@ private fun ThemeCard(theme: HomeTheme, w: Dp, h: Dp, apps: List<AppEntry>, curr
                     }
                 }
             }
-            MiniDock(theme.dock.look, apps, icon = icon, count = 4, spec = homeSpec)
+            MiniDock(theme.look, apps, icon = icon, count = 4, spec = homeSpec)
         }
     }
 }

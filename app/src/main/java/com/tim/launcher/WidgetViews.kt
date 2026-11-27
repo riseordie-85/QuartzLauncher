@@ -122,8 +122,9 @@ fun WidgetView(
     /** Card and accent colors to show instead of the saved ones (a theme's preview). */
     cardColor: Color? = null,
     accentColor: Color? = null,
-    /** A font to show instead of the saved one (a theme's preview), as a Fonts id. */
+    /** A font to show instead of the saved one (a theme's preview), as a Fonts id, or the font itself. */
     fontId: String? = null,
+    fontFamily: androidx.compose.ui.text.font.FontFamily? = null,
     /** A weather widget's place, other place and big icon (see [HomeWidget]). */
     place: String = "",
     place2: String = "",
@@ -133,7 +134,7 @@ fun WidgetView(
     val store = remember { SettingsStore.get(context) }
     remember { Weather.loadCache(context); true }
     val font = fontId ?: store[S.fontWidgets]
-    val family = remember(font, Fonts.version) { Fonts.family(context, font) }
+    val family = fontFamily ?: remember(font, Fonts.version) { Fonts.family(context, font) }
     val now = rememberNow()
     val ink = LocalHomeLook.current.onPanel
     val cards = cardColor ?: Color(store[S.widgetColor])

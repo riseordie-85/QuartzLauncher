@@ -1122,6 +1122,8 @@ fun AboutSettings(ctx: SettingsContext) {
             RowDivider()
             SettingRow("Outfit", "The widgets' typeface, by the Outfit Project Authors (SIL Open Font License)")
             RowDivider()
+            SettingRow("Theme fonts", "Asap Condensed, Cherry Swash, Federo, Limelight and Poetsen One, from Google Fonts (SIL Open Font License)")
+            RowDivider()
             SettingRow("Lottie", "Plays the weather icons, by Airbnb (Apache 2.0)")
         }
     }

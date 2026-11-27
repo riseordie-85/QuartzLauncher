@@ -1,0 +1,56 @@
+[
+ {
+  "file": "clean",
+  "name": "Clean",
+  "about": "Rounded glass and your apps' own icons",
+  "widget": "FLIP"
+ },
+ {
+  "file": "midnight",
+  "name": "Midnight",
+  "about": "One-color icons and a neon edge after dark",
+  "widget": "CLOCK"
+ },
+ {
+  "file": "paper",
+  "name": "Paper",
+  "about": "Light and inky, with pen-drawn lines",
+  "widget": "FLIP"
+ },
+ {
+  "file": "tide",
+  "name": "Tide",
+  "about": "Ocean blues, a wave dock and ringed icons",
+  "widget": "FLIP"
+ },
+ {
+  "file": "liberl-sky",
+  "name": "Liberl Sky",
+  "about": "Bright blue skies and round, friendly lettering",
+  "widget": "FLIP"
+ },
+ {
+  "file": "midnight-orbment",
+  "name": "Midnight Orbment",
+  "about": "Teal light through dark crystal, with a pointed dock",
+  "widget": "FLIP"
+ },
+ {
+  "file": "bracer-crimson",
+  "name": "Bracer Crimson",
+  "about": "Crimson and dark leather, square icons and a tilted dock",
+  "widget": "FLIP"
+ },
+ {
+  "file": "septium-mist",
+  "name": "Septium Mist",
+  "about": "Soft lavender mist and hexagon crystal icons",
+  "widget": "FLIP"
+ },
+ {
+  "file": "pure-septium-brass",
+  "name": "Pure Septium & Brass",
+  "about": "Warm brass, cream and curling lettering",
+  "widget": "FLIP"
+ }
+]

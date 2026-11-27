@@ -1,0 +1,3 @@
+Fonts bundled with the built-in themes, all from Google Fonts under the SIL Open Font License 1.1:
+Asap Condensed (Omnibus-Type), Cherry Swash (Nataliya Kasatkina), Federo (Jonathan Hill / Font Diner),
+Limelight (Nicole Fally / Sorkin Type), Poetsen One (Rodrigo Fuenzalida).
