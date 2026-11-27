@@ -3,6 +3,7 @@ package com.tim.launcher.settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,6 +27,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
@@ -46,12 +49,28 @@ object SettingsSearch {
     /** What was typed, kept while Settings is open, so coming back from a result finds the same list. */
     var last = ""
 
-    class Item(val title: String, val where: String, val route: Route, val words: String = "", val before: () -> Unit = {}) {
+    class Item(
+        val title: String,
+        val where: String,
+        val route: Route,
+        val words: String = "",
+        /** Whether its screen shows it on this device, as set now (some are only on a folding phone, say). */
+        val shows: (SettingsContext) -> Boolean = { true },
+        val before: () -> Unit = {},
+    ) {
         internal val text = "$title $where $words".lowercase()
     }
 
-    private fun dock(title: String, words: String = "") = Item(title, "Dock › Style", Route.DOCK, words) { DockTab.last = DockTab.STYLE }
-    private fun place(title: String, words: String = "") = Item(title, "Dock › Placement", Route.DOCK, words) { DockTab.last = DockTab.PLACEMENT }
+    private val fold: (SettingsContext) -> Boolean = { it.type == DeviceType.FOLDABLE }
+    private val tablet: (SettingsContext) -> Boolean = { it.type == DeviceType.TABLET }
+    private val notTablet: (SettingsContext) -> Boolean = { it.type != DeviceType.TABLET }
+    /** The dock's shape, color and pattern only show while it has a background. */
+    private val dockBackground: (SettingsContext) -> Boolean = { it.store[S.dockBackground] }
+
+    private fun dock(title: String, words: String = "", shows: (SettingsContext) -> Boolean = { true }) =
+        Item(title, "Dock › Style", Route.DOCK, words, shows) { DockTab.last = DockTab.STYLE }
+    private fun place(title: String, words: String = "", shows: (SettingsContext) -> Boolean = { true }) =
+        Item(title, "Dock › Placement", Route.DOCK, words, shows) { DockTab.last = DockTab.PLACEMENT }
 
     val items: List<Item> by lazy {
         listOf(
@@ -64,23 +83,23 @@ object SettingsSearch {
             Item("Columns", "Home screen › Grid", Route.HOME, "grid size layout width"),
             Item("Rows", "Home screen › Grid", Route.HOME, "grid size layout height"),
             Item("Pages", "Home screen › Grid", Route.HOME, "screens add remove"),
-            Item("Held upright", "Home screen › Grid", Route.HOME, "portrait rotation tablet fold"),
-            Item("Folding", "Home screen", Route.HOME, "fold carry over cover inner unfolded half"),
+            Item("Held upright", "Home screen › Grid", Route.HOME, "portrait rotation tablet", tablet),
+            Item("Folding", "Home screen", Route.HOME, "fold carry over cover inner unfolded half", fold),
             Item("App names", "Home screen › Icons", Route.HOME, "labels titles text under icons"),
             Item("Icon size", "Home screen › Icons", Route.HOME, "bigger smaller scale"),
-            Item("Rotation", "Home screen", Route.HOME, "landscape portrait turn rotate"),
+            Item("Rotation", "Home screen", Route.HOME, "landscape portrait turn rotate", notTablet),
             Item("Folders", "Home screen", Route.HOME, "make a folder folder icon opens as grid size"),
 
             // Dock
             place("Dock position", "bottom side left right top where"),
-            place("Swap handle", "fold swap side"),
+            place("Swap handle", "fold swap side", fold),
             dock("Dock style", "starting points preset shape"),
-            dock("Dock shape", "roundness rounded corners pill wave tooth floating edge padding"),
+            dock("Dock shape", "roundness rounded corners pill wave tooth floating edge padding", dockBackground),
             dock("Dock background", "show hide glass"),
             dock("Dock app names", "labels"),
-            dock("Color and glass", "see-through transparency opacity blur gradient fill tint frosted"),
-            dock("Dock pattern", "pattern strength size rings lines dots"),
-            dock("Edge light", "rim glow neon outline"),
+            dock("Color and glass", "see-through transparency opacity blur gradient fill tint frosted", dockBackground),
+            dock("Dock pattern", "pattern strength size rings lines dots", dockBackground),
+            dock("Edge light", "rim glow neon outline", dockBackground),
 
             // App drawer
             Item("Opening the drawer", "App drawer › Opening", Route.DRAWER, "swipe up button gesture"),
@@ -99,7 +118,7 @@ object SettingsSearch {
             Item("Wallpaper photo", "Wallpaper", Route.WALLPAPER, "picture image gallery zoom across up and down"),
             Item("Wallpaper pattern", "Wallpaper › Pattern", Route.WALLPAPER, "sparkles shuffle strength size light dark rings from"),
             Item("Darken", "Wallpaper › Readability", Route.WALLPAPER, "dim readability contrast"),
-            Item("Cover screen wallpaper", "Wallpaper › Across both screens", Route.WALLPAPER, "fold separate stretched cover unfolded"),
+            Item("Cover screen wallpaper", "Wallpaper › Across both screens", Route.WALLPAPER, "fold separate stretched cover unfolded", fold),
 
             // Icons and badges
             Item("Icons and badges", "Settings", Route.APPEARANCE, "appearance look"),
@@ -152,12 +171,12 @@ object SettingsSearch {
     }
 
     /** The items with every typed word in them, best first: the name starting with what you typed, then in the name. */
-    fun find(query: String): List<Item> {
+    fun find(query: String, ctx: SettingsContext? = null): List<Item> {
         val words = query.lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
         if (words.isEmpty()) return emptyList()
         val q = query.trim().lowercase()
         return items
-            .filter { item -> words.all { it in item.text } }
+            .filter { item -> words.all { it in item.text } && (ctx == null || item.shows(ctx)) }
             .sortedBy { item ->
                 val t = item.title.lowercase()
                 when {
@@ -173,7 +192,9 @@ object SettingsSearch {
 @Composable
 fun SettingsSearchField(query: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
     val keyboard = LocalSoftwareKeyboardController.current
+    val focus = remember { FocusRequester() }
     val shape = RoundedCornerShape(18.dp)
+    val style = TextStyle(color = Q.Text, fontSize = 16.sp)
     Row(
         modifier
             .fillMaxWidth()
@@ -181,22 +202,27 @@ fun SettingsSearchField(query: String, onChange: (String) -> Unit, modifier: Mod
             .clip(shape)
             .background(Q.Glass)
             .border(1.dp, Q.Edge, shape)
+            // Anywhere on the bar puts the cursor in it
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                focus.requestFocus()
+                keyboard?.show()
+            }
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(Icons.Rounded.Search, contentDescription = null, tint = Q.TextDim, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(10.dp))
-        Box(Modifier.weight(1f)) {
-            if (query.isEmpty()) Text("Search settings", color = Q.TextFaint, fontSize = 16.sp)
+        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+            if (query.isEmpty()) Text("Search settings", style = style.copy(color = Q.TextFaint))
             BasicTextField(
                 value = query,
                 onValueChange = onChange,
                 singleLine = true,
-                textStyle = TextStyle(color = Q.Text, fontSize = 16.sp),
+                textStyle = style,
                 cursorBrush = SolidColor(Q.Text),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus),
             )
         }
         if (query.isNotEmpty()) {
@@ -212,7 +238,7 @@ fun SettingsSearchField(query: String, onChange: (String) -> Unit, modifier: Mod
 
 @Composable
 fun SettingsSearchResults(ctx: SettingsContext, query: String) {
-    val found = remember(query) { SettingsSearch.find(query) }
+    val found = SettingsSearch.find(query, ctx)
     if (found.isEmpty()) {
         BodyText("Nothing called \"${query.trim()}\". Try another word, like grid, blur or font.", Modifier.padding(horizontal = 20.dp, vertical = 18.dp))
         return

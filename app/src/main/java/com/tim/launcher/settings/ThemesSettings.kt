@@ -1,5 +1,6 @@
 package com.tim.launcher.settings
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
@@ -30,6 +31,7 @@ import com.tim.launcher.ui.SectionLabel
 import com.tim.launcher.ui.SettingRow
 import com.tim.launcher.wizard.ThemeCarousel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -54,15 +56,28 @@ fun ThemesSettings(ctx: SettingsContext) {
     val iconApply = rememberIconApply(draft)
     DisposableEffect(Unit) { onDispose { lastTheme = index } }
 
+    // While a theme goes on, back waits for it (the "Styling your icons" popup follows straight after)
+    BackHandler(enabled = busy) {}
+
     fun use(theme: HomeTheme) {
         if (busy) return
         busy = true
-        scope.launch {
+        // Finished even if you leave the screen part way, so a theme is never half on
+        scope.launch(NonCancellable) {
             // Its photo and fonts are written first, off the main thread; then the settings
-            val staged = runCatching { withContext(Dispatchers.IO) { HomeThemes.stage(context, theme) } }.getOrNull()
-            val ok = runCatching { HomeThemes.apply(context, store, draft, theme, staged, widget = false) }
-                .onFailure { com.tim.launcher.Diag.log("Theme ${theme.name}: ${it.message}") }
-                .isSuccess
+            val staged = try {
+                withContext(Dispatchers.IO) { HomeThemes.stage(context, theme) }
+            } catch (e: Exception) {
+                com.tim.launcher.Diag.log("Theme ${theme.name}: ${e.message}")
+                null
+            }
+            val ok = try {
+                HomeThemes.apply(context, store, draft, theme, staged, widget = false)
+                true
+            } catch (e: Exception) {
+                com.tim.launcher.Diag.log("Theme ${theme.name}: ${e.message}")
+                false
+            }
             if (!ok) {
                 busy = false
                 toast(context, "${theme.name} couldn't be used")
@@ -115,12 +130,12 @@ fun ThemesSettings(ctx: SettingsContext) {
 
         SectionLabel("Your themes")
         GlassPanel {
-            SettingRow("Save your look as a theme", "Just the look: dock, icons, wallpaper (with its photo), fonts, widget colors and badges. No apps or layout.", onClick = {
+            SettingRow("Save your look as a theme", "Just the look: dock, icons, wallpaper (with its photo), fonts, widget colors and badges. No apps or layout.", enabled = !busy, onClick = {
                 themeName = ""
                 naming = true
             })
             RowDivider()
-            SettingRow("Load a theme", "Use a look you saved or someone shared", onClick = {
+            SettingRow("Load a theme", "Use a look you saved or someone shared", enabled = !busy, onClick = {
                 importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
             })
         }
@@ -176,10 +191,15 @@ fun ThemesSettings(ctx: SettingsContext) {
             confirmButton = {
                 TextButton(onClick = {
                     incoming = null
+                    if (busy) return@TextButton
                     busy = true
-                    scope.launch {
+                    scope.launch(NonCancellable) {
                         // Reading its photo and fonts takes a moment: off the main thread, then its icons drawn ahead
-                        val result = runCatching { ThemeFile.importStaged(context, text) }
+                        val result = try {
+                            Result.success(ThemeFile.importStaged(context, text))
+                        } catch (e: Exception) {
+                            Result.failure(e)
+                        }
                         result.onFailure {
                             busy = false
                             toast(context, "Loading failed: ${it.message}")

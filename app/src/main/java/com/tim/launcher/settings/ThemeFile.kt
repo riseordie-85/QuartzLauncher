@@ -101,9 +101,9 @@ object ThemeFile {
 
     /** [import], with the slow part (reading the file, writing its photo and fonts) off the main thread. */
     suspend fun importStaged(context: Context, text: String): String {
-        val name = nameOf(text)
-        val staged = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { stageText(context, text) }
-        finish(context, staged)
+        val (name, staged) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { nameOf(text) to stageText(context, text) }
+        // Settings and the wallpaper are put in place on the main thread, whoever asks
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { finish(context, staged) }
         return name
     }
 

@@ -168,6 +168,11 @@ private fun SettingsContext.link(setting: Setting<*>): LinkState? {
 fun MainSettings(ctx: SettingsContext) {
     val store = ctx.store
     var query by remember { mutableStateOf(SettingsSearch.last) }
+    // Back with a search open clears it first
+    androidx.activity.compose.BackHandler(enabled = query.isNotEmpty()) {
+        query = ""
+        SettingsSearch.last = ""
+    }
     ScreenScaffold(ctx, showBack = true) {
         ScreenTitle("Settings", "${ctx.type.label} · everything stays on this device")
         SettingsSearchField(query, {

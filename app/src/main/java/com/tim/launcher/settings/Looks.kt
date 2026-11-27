@@ -204,7 +204,7 @@ object GradientPresets {
 
 /**
  * A whole home screen to start from: its look (dock, icons, widget colors, fonts…), a wallpaper and a widget.
- * Most are theme files kept in the app (assets/themes, made with Export theme); Crystal is built from presets.
+ * Most are theme files kept in the app (assets/themes, saved with Save your look as a theme); Crystal is built from presets.
  */
 data class HomeTheme(
     val name: String,
