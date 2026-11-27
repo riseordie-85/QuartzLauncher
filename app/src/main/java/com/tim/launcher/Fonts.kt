@@ -293,8 +293,18 @@ object Fonts {
         val dir = File(context.cacheDir, "theme_fonts").apply { mkdirs() }
         val infos = files.mapNotNull { name ->
             val f = File(dir, safe(name))
-            if (!f.exists()) runCatching { context.assets.open("themes/files/$name").use { input -> f.outputStream().use { input.copyTo(it) } } }
-            inspect(f)
+            // Copied whole under another name first, so a copy cut short is never taken for the font
+            if (!f.exists() || inspect(f) == null) runCatching {
+                val part = File.createTempFile(safe(name), ".part", dir)
+                try {
+                    context.assets.open("themes/files/$name").use { input -> part.outputStream().use { input.copyTo(it) } }
+                    if (!part.renameTo(f)) part.delete()
+                } catch (e: Exception) {
+                    part.delete()
+                    throw e
+                }
+            }
+            if (f.exists()) inspect(f) else null
         }.filter { it.family == want }
         // Already added (an earlier theme, or by you)
         return fromFiles(infos) ?: family(context, id)

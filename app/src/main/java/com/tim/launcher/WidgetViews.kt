@@ -134,7 +134,8 @@ fun WidgetView(
     val store = remember { SettingsStore.get(context) }
     remember { Weather.loadCache(context); true }
     val font = fontId ?: store[S.fontWidgets]
-    val family = fontFamily ?: remember(font, Fonts.version) { Fonts.family(context, font) }
+    val chosen = remember(font, Fonts.version) { Fonts.family(context, font) }
+    val family = fontFamily ?: chosen
     val now = rememberNow()
     val ink = LocalHomeLook.current.onPanel
     val cards = cardColor ?: Color(store[S.widgetColor])

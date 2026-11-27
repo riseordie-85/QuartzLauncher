@@ -17,8 +17,10 @@ import org.json.JSONObject
  * { "format": "quartz-launcher-theme", "version": 1, "name": "Crystal",
  *   "settings": { "dock.radius": "20", ... },          // setting id → value, as Settings stores it
  *   "wallpaper": { "main": {…}, "cover": {…}, "mode": "separate" },   // cover and mode only for a separate cover
- *   "images": { "img_1.jpg": "<base64 JPEG>" } }        // the wallpaper's photo, if it has one
+ *   "images": { "img_1.jpg": "<base64 JPEG>" },         // the wallpaper's photo, if it has one
+ *   "fonts": { "Outfit-Bold.ttf": "<base64>" } }         // fonts you added, if the theme uses any
  * ```
+ * A theme kept in the app names its photo and fonts instead ("assetImages", "assetFonts": files in assets/themes/files).
  */
 object ThemeFile {
     const val FORMAT = "quartz-launcher-theme"
@@ -96,24 +98,37 @@ object ThemeFile {
         val json = JSONObject(text)
         val images = json.optJSONObject("images")
         val fonts = json.optJSONObject("fonts")
-        apply(
-            context, json,
-            images?.keys()?.asSequence()?.toList() ?: emptyList(), { Base64.decode(images!!.getString(it), Base64.DEFAULT) },
-            fonts?.keys()?.asSequence()?.toList() ?: emptyList(), { Base64.decode(fonts!!.getString(it), Base64.DEFAULT) },
+        finish(
+            context,
+            stage(
+                context, json,
+                images?.keys()?.asSequence()?.toList() ?: emptyList(), { Base64.decode(images!!.getString(it), Base64.DEFAULT) },
+                fonts?.keys()?.asSequence()?.toList() ?: emptyList(), { Base64.decode(fonts!!.getString(it), Base64.DEFAULT) },
+            ),
         )
         return name
     }
 
+    /** A theme with its photos and fonts written in place (the slow part, fine off the main thread), ready for [finish]. */
+    class Staged internal constructor(internal val json: JSONObject, internal val renamed: Map<String, String>)
+
     /**
      * A theme kept in the app (assets/themes/[file].json): the same as a theme file, with its photo and fonts stored
-     * beside it (assets/themes/files) so each is in the app once.
+     * beside it (assets/themes/files) so each is in the app once. Reads and writes files: best off the main thread.
      */
-    fun importAsset(context: Context, file: String): String {
+    fun stageAsset(context: Context, file: String): Staged {
         val json = JSONObject(context.assets.open("themes/$file.json").bufferedReader().readText())
         fun names(key: String) = json.optJSONArray(key)?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList()
         val read: (String) -> ByteArray = { context.assets.open("themes/files/$it").use { s -> s.readBytes() } }
-        apply(context, json, names("assetImages"), read, names("assetFonts"), read)
-        return json.optString("name", file)
+        return stage(context, json, names("assetImages"), read, names("assetFonts"), read)
+    }
+
+    /**
+     * Every look setting a theme carries that [look] doesn't name, apart from [skip], back to its default: so a theme
+     * built here (not from a file) leaves nothing of one used before it, the way a theme file doesn't.
+     */
+    fun clearRest(store: SettingsStore, look: Look, skip: Collection<Setting<*>>) {
+        (keys + placeKeys).forEach { s -> if (s !in skip && s !in look.values) store.clear(s) }
     }
 
     /** A theme's look settings as a [Look], for drawing it before it's used. */
@@ -127,18 +142,35 @@ object ThemeFile {
         return Look(values)
     }
 
-    private fun apply(
+    private fun stage(
         context: Context,
         json: JSONObject,
         imageNames: List<String>,
         image: (String) -> ByteArray,
         fontNames: List<String>,
         font: (String) -> ByteArray,
-    ) {
-        val store = SettingsStore.get(context)
-        val settings = json.optJSONObject("settings") ?: JSONObject()
+    ): Staged {
         // Its fonts first, so the settings that name them find them
         fontNames.forEach { file -> runCatching { com.tim.launcher.Fonts.addFile(context, file, font(file)) } }
+        // The photo(s) come in under new names, so they never replace one you have
+        val renamed = HashMap<String, String>()
+        imageNames.forEach { old ->
+            runCatching {
+                val bytes = image(old)
+                val fresh = "img_${System.currentTimeMillis()}_${renamed.size}.jpg"
+                WallStore.imageFile(context, fresh).writeBytes(bytes)
+                renamed[old] = fresh
+            }
+        }
+        return Staged(json, renamed)
+    }
+
+    /** Puts a [stage]d theme's settings and wallpaper in place. */
+    fun finish(context: Context, staged: Staged) {
+        val json = staged.json
+        val renamed = staged.renamed
+        val store = SettingsStore.get(context)
+        val settings = json.optJSONObject("settings") ?: JSONObject()
 
         (keys + placeKeys).forEach { s ->
             val raw = settings.optString(s.id, "")
@@ -156,16 +188,6 @@ object ThemeFile {
         // (Keys from a newer Quartz that this one doesn't know are skipped)
         settings.keys().forEach { k -> if (k !in byId) com.tim.launcher.Diag.log("Theme setting skipped: $k") }
 
-        // The photo(s) come in under new names, so they never replace one you have
-        val renamed = HashMap<String, String>()
-        imageNames.forEach { old ->
-            runCatching {
-                val bytes = image(old)
-                val fresh = "img_${System.currentTimeMillis()}_${renamed.size}.jpg"
-                WallStore.imageFile(context, fresh).writeBytes(bytes)
-                renamed[old] = fresh
-            }
-        }
         fun wall(key: String): WallConfig? {
             val obj = json.optJSONObject("wallpaper")?.optJSONObject(key) ?: return null
             val config = WallConfig.fromJson(obj.toString()) ?: return null

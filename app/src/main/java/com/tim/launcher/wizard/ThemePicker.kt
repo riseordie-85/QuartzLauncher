@@ -167,12 +167,17 @@ private fun ThemeCard(theme: HomeTheme, w: Dp, h: Dp, apps: List<AppEntry>, curr
             // A theme's photo comes from the app's own copy, read small
             val photo = theme.wallImage?.let { name ->
                 runCatching {
-                    val bytes = cardContext.assets.open("themes/files/$name").use { it.readBytes() }
+                    val path = "themes/files/$name"
                     val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                    cardContext.assets.open(path).use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
+                    // The card's picture is drawn at half size, so the photo only needs to be that big
+                    val needW = (pxW / 2).coerceAtLeast(1)
+                    val needH = (pxH / 2).coerceAtLeast(1)
                     var sample = 1
-                    while (bounds.outWidth / (sample * 2) >= pxW && bounds.outHeight / (sample * 2) >= pxH) sample *= 2
-                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+                    while (bounds.outWidth / (sample * 2) >= needW && bounds.outHeight / (sample * 2) >= needH) sample *= 2
+                    cardContext.assets.open(path).use {
+                        android.graphics.BitmapFactory.decodeStream(it, null, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+                    }
                 }.getOrNull()
             }
             val sharp = WallRenderer.renderSmall(pxW, pxH, 0.5f, frame) { if (it == theme.wallImage) photo else null }
@@ -232,6 +237,8 @@ private fun ThemeCard(theme: HomeTheme, w: Dp, h: Dp, apps: List<AppEntry>, curr
                     sample = true,
                     cardColor = Color(theme.cards),
                     accentColor = Color(theme.accent),
+                    // (Its font id too, so a built-in one shows at once while a theme's own loads)
+                    fontId = theme.look.get(S.fontWidgets),
                     fontFamily = widgetFont,
                 )
                 Spacer(Modifier.weight(1f))

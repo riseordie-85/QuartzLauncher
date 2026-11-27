@@ -38,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -119,6 +120,9 @@ import com.tim.launcher.ui.SwatchRow
 import com.tim.launcher.ui.Toggle
 import com.tim.launcher.ui.previewLook
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** A ready-made home screen (then a few practical questions), every question from scratch, or a backup. */
 private enum class Path { THEME, WIZARD, IMPORT }
@@ -178,6 +182,8 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
     val iconDraft = remember { IconDraft(store) }
     val iconTab = remember { mutableStateOf(IconSlot.HOME) }
     val iconApply = rememberIconApply(iconDraft)
+    val scope = rememberCoroutineScope()
+    var themeBusy by remember { mutableStateOf(false) }
 
     val steps = buildList {
         add(Step.WELCOME)
@@ -248,15 +254,24 @@ fun SetupWizard(store: SettingsStore, type: DeviceType, onFinish: () -> Unit) {
     // A theme: the function defaults, then its look. Its icons are drawn ahead with the "Styling your icons" popup,
     // then on to the practical questions
     fun useTheme() {
+        if (themeBusy) return
         val themes = HomeThemes.all(context)
         val theme = themes[themeIndex.coerceIn(0, themes.lastIndex)]
-        applyRecommended(store, type)
-        HomeThemes.apply(context, store, iconDraft, theme)
-        path = Path.THEME
-        val first = if (foldable) Step.CARRY_OVER else Step.COVER_GRID
-        iconApply.run {
-            forward = true
-            step = first
+        themeBusy = true
+        scope.launch {
+            // Its photo and fonts are written first, off the main thread; then the settings
+            val staged = runCatching { withContext(Dispatchers.IO) { HomeThemes.stage(context, theme) } }
+                .onFailure { com.tim.launcher.Diag.log("Theme ${theme.name}: ${it.message}") }.getOrNull()
+            applyRecommended(store, type)
+            runCatching { HomeThemes.apply(context, store, iconDraft, theme, staged) }
+                .onFailure { com.tim.launcher.Diag.log("Theme ${theme.name}: ${it.message}") }
+            themeBusy = false
+            path = Path.THEME
+            val first = if (foldable) Step.CARRY_OVER else Step.COVER_GRID
+            iconApply.run {
+                forward = true
+                step = first
+            }
         }
     }
 

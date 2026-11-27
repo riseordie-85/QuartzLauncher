@@ -237,15 +237,18 @@ object HomeThemes {
 
     /** Every theme, in the order they're shown: Crystal, then the files in assets/themes/index.json. */
     fun all(context: Context): List<HomeTheme> = loaded ?: synchronized(this) {
-        loaded ?: (listOf(crystal) + runCatching { files(context) }.onFailure { com.tim.launcher.Diag.log("Themes: ${it.message}") }.getOrDefault(emptyList()))
-            .also { loaded = it }
+        loaded ?: runCatching { files(context) }
+            .onFailure { com.tim.launcher.Diag.log("Themes: ${it.message}") }
+            // (Not kept when the list couldn't be read, so it's tried again)
+            .fold({ (listOf(crystal) + it).also { list -> loaded = list } }, { listOf(crystal) })
     }
 
     private fun files(context: Context): List<HomeTheme> {
         val index = org.json.JSONArray(context.assets.open("themes/index.json").bufferedReader().readText())
         return (0 until index.length()).mapNotNull { i ->
-            val entry = index.getJSONObject(i)
-            val file = entry.getString("file")
+            val entry = index.optJSONObject(i)
+            val file = entry?.optString("file").orEmpty()
+            if (entry == null || file.isEmpty()) return@mapNotNull null
             runCatching {
                 val json = org.json.JSONObject(context.assets.open("themes/$file.json").bufferedReader().readText())
                 val main = json.optJSONObject("wallpaper")?.optJSONObject("main")
@@ -264,15 +267,22 @@ object HomeThemes {
         }
     }
 
+    /** A theme file's photo and fonts written ahead (off the main thread), for [apply]; null for Crystal. */
+    fun stage(context: Context, theme: HomeTheme): ThemeFile.Staged? = theme.file?.let { ThemeFile.stageAsset(context, it) }
+
     /**
      * Puts [theme] in place: its look and wallpaper straight away, the widget for when setup ends. Crystal's icons go
      * into [draft] (applied with the "Styling your icons" popup, so nothing flickers); a theme file sets them itself.
+     * [staged]: from [stage], when that was done ahead.
      */
-    fun apply(context: Context, store: SettingsStore, draft: IconDraft, theme: HomeTheme) {
+    fun apply(context: Context, store: SettingsStore, draft: IconDraft, theme: HomeTheme, staged: ThemeFile.Staged? = null) {
         if (theme.file != null) {
-            ThemeFile.importAsset(context, theme.file)
+            ThemeFile.finish(context, staged ?: ThemeFile.stageAsset(context, theme.file))
             draft.discard()
         } else {
+            // Nothing left over from a theme used before this one (fonts, weather icons, badges, the dock's and
+            // drawer's own icons): what Crystal doesn't set goes back to its default
+            ThemeFile.clearRest(store, theme.look, DockPresets.keys + IconPresets.keys + S.iconsMatch)
             store.applyLook(DockPresets.keys, theme.look)
             IconPresets.keys.forEach { k -> @Suppress("UNCHECKED_CAST") draft.set(k as Setting<Any>, theme.look.get(k) as Any) }
             draft.set(S.iconsMatch, true)
