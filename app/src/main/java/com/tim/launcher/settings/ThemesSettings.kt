@@ -3,7 +3,14 @@ package com.tim.launcher.settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Box
+import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
@@ -20,16 +27,23 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import com.tim.launcher.ui.BodyText
 import com.tim.launcher.ui.GlassPanel
 import com.tim.launcher.ui.PrimaryButton
+import com.tim.launcher.ui.Q
 import com.tim.launcher.ui.RowDivider
 import com.tim.launcher.ui.ScreenTitle
 import com.tim.launcher.ui.SectionLabel
 import com.tim.launcher.ui.SettingRow
-import com.tim.launcher.wizard.ThemeCarousel
+import com.tim.launcher.wizard.ThemeCard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
@@ -39,7 +53,8 @@ import kotlinx.coroutines.withContext
 private var lastTheme = 0
 
 /**
- * Settings › Themes: the ready-made home screens (the same carousel as setup), and saving or loading a theme file.
+ * Settings › Themes: the chosen theme pinned at the top with its Use button, every ready-made one in a grid below
+ * (tap to look), and saving or loading a theme file.
  * Using one changes the look only (dock, icons, wallpaper, fonts, widget colors, badges): apps, layout and widgets stay.
  */
 @Composable
@@ -118,14 +133,71 @@ fun ThemesSettings(ctx: SettingsContext) {
         }
     }
 
-    ScreenScaffold(ctx) {
+    val apps = rememberSampleApps(8)
+    val config = LocalConfiguration.current
+    // This screen's shape, so the pictures look like your own home screen
+    val aspect = (config.screenWidthDp.toFloat() / config.screenHeightDp.coerceAtLeast(1)).coerceIn(0.35f, 1.8f)
+    val theme = themes[index.coerceIn(0, themes.lastIndex)]
+
+    // The chosen theme stays in view at the top while the grid of them all scrolls underneath
+    ScreenScaffold(ctx, pinned = {
         ScreenTitle("Themes", "A whole look in one go. Your apps, layout and widgets stay where they are.")
-        Box(Modifier.fillMaxWidth().padding(top = 18.dp)) {
-            ThemeCarousel(index) { index = it }
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            // A wide screen's picture is kept to just over half the width, so the name and button have room
+            val fullW = maxWidth
+            val bigW = minOf((config.screenHeightDp * 0.3f).coerceIn(150f, 340f).dp * aspect, fullW * 0.58f)
+            val bigH = bigW / aspect
+            Row(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Crossfade(theme, label = "theme") { t -> ThemeCard(t, bigW, bigH, apps, current = false) }
+                Column(Modifier.weight(1f).padding(start = 16.dp)) {
+                    Text(theme.name, color = Q.Text, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                    Text(theme.about, color = Q.TextDim, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
+                    PrimaryButton(
+                        if (busy) "Putting it on…" else "Use theme",
+                        Modifier.padding(top = 14.dp),
+                        enabled = !busy,
+                    ) { confirm = theme }
+                }
+            }
         }
-        Box(Modifier.fillMaxWidth().padding(top = 18.dp), contentAlignment = Alignment.Center) {
-            val theme = themes[index.coerceIn(0, themes.lastIndex)]
-            PrimaryButton(if (busy) "Putting it on…" else "Use ${theme.name}", enabled = !busy) { confirm = theme }
+    }) {
+        SectionLabel("All themes")
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            // Read here: inside the Column below, maxWidth can't be reached
+            val fullW = maxWidth
+            val cols = when {
+                fullW >= 640.dp -> 5
+                fullW >= 440.dp -> 4
+                else -> 3
+            }
+            val gap = 10.dp
+            val tileW = (fullW - gap * (cols - 1)) / cols
+            val tileH = tileW / aspect
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                themes.chunked(cols).forEachIndexed { r, row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                        row.forEachIndexed { c, t ->
+                            val i = r * cols + c
+                            Column(
+                                Modifier.width(tileW).clip(RoundedCornerShape(12.dp)).clickable { index = i },
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                ThemeCard(t, tileW, tileH, apps, current = i == index)
+                                Text(
+                                    t.name,
+                                    color = if (i == index) Q.Text else Q.TextDim,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (i == index) FontWeight.SemiBold else FontWeight.Normal,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         SectionLabel("Your themes")

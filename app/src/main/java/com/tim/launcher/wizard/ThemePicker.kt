@@ -153,9 +153,9 @@ internal fun ThemeCarousel(selected: Int, onSelect: (Int) -> Unit) {
 /** The theme's wallpaper at a card's size, and a blurred copy for its glass (none when the theme has no blur). */
 private class ThemeWall(val sharp: Bitmap, val blurred: Bitmap?, val brightness: Float)
 
-/** One theme as a small home screen: a widget at the top, a row of apps, and the dock. */
+/** One theme as a small home screen: a widget at the top, a row of apps, and the dock. Also Settings › Themes. */
 @Composable
-private fun ThemeCard(theme: HomeTheme, w: Dp, h: Dp, apps: List<AppEntry>, current: Boolean) {
+internal fun ThemeCard(theme: HomeTheme, w: Dp, h: Dp, apps: List<AppEntry>, current: Boolean) {
     val density = LocalDensity.current
     val pxW = with(density) { w.roundToPx() }.coerceAtLeast(1)
     val pxH = with(density) { h.roundToPx() }.coerceAtLeast(1)
@@ -213,11 +213,12 @@ private fun ThemeCard(theme: HomeTheme, w: Dp, h: Dp, apps: List<AppEntry>, curr
         }
         IconRender.specFor(values, IconSlot.HOME)
     }
-    val shape = RoundedCornerShape(22.dp)
     // Sizes from the narrower of the card's width and a phone-shaped share of its height, so a wide tablet card
     // doesn't get giant icons
     val unit = min(w.value, h.value * 0.6f)
     val icon = (unit * 0.14f).roundToInt()
+    // Rounder on a big card, less so on a small one, like a real screen's corners
+    val shape = RoundedCornerShape((unit * 0.09f).coerceIn(10f, 22f).dp)
 
     Box(
         Modifier
