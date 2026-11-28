@@ -3,6 +3,7 @@ package com.tim.launcher.settings
 import android.content.Context
 import android.util.Base64
 import com.tim.launcher.wallpaper.FoldMode
+import com.tim.launcher.wallpaper.WallKind
 import com.tim.launcher.wallpaper.WallConfig
 import com.tim.launcher.wallpaper.WallSlot
 import com.tim.launcher.wallpaper.WallStore
@@ -48,13 +49,17 @@ object ThemeFile {
         val wallpaper = JSONObject()
         val images = JSONObject()
         fun addWall(slot: WallSlot, key: String) {
-            val config = WallStore.load(context, slot)
+            // A gradient or color wallpaper still remembers the photo it had before (so switching back finds it):
+            // a theme leaves that photo out, since it isn't shown
+            val config = WallStore.load(context, slot).let { if (it.kind != WallKind.IMAGE) it.copy(image = null) else it }
             wallpaper.put(key, JSONObject(config.toJson()))
             config.image?.let { img ->
                 val file = WallStore.imageFile(context, img)
                 if (file.exists() && !images.has(img)) images.put(img, Base64.encodeToString(file.readBytes(), Base64.NO_WRAP))
             }
         }
+        // The unfolded (and only) screen's wallpaper; the cover screen's only while it has its own. A phone or tablet
+        // shows "main"; a folding phone set to a shared wallpaper shows "main" on both screens.
         addWall(WallSlot.MAIN, "main")
         if (WallStore.mode(context) == FoldMode.SEPARATE) {
             addWall(WallSlot.COVER, "cover")
